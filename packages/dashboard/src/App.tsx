@@ -1,35 +1,41 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useEffect, useState } from "react";
+import { Layout } from "./components/Layout";
+import { LiveFeed } from "./components/LiveFeed";
+import { DeveloperCards } from "./components/DeveloperCards";
+import { SessionTimeline } from "./components/SessionTimeline";
+import { useGroundcontrolSocket } from "./hooks/useWebSocket";
+import { useActivityStore } from "./stores/activityStore";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [activeView, setActiveView] = useState("feed");
+  useGroundcontrolSocket();
+
+  const { setDevelopers, setActiveSessions, setEvents } = useActivityStore();
+
+  useEffect(() => {
+    fetch("/api/developers")
+      .then((r) => r.json())
+      .then(setDevelopers)
+      .catch(() => {});
+
+    fetch("/api/sessions/active")
+      .then((r) => r.json())
+      .then(setActiveSessions)
+      .catch(() => {});
+
+    fetch("/api/events/recent?limit=50")
+      .then((r) => r.json())
+      .then(setEvents)
+      .catch(() => {});
+  }, [setDevelopers, setActiveSessions, setEvents]);
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <Layout activeView={activeView} onViewChange={setActiveView}>
+      {activeView === "feed" && <LiveFeed />}
+      {activeView === "developers" && <DeveloperCards />}
+      {activeView === "history" && <SessionTimeline />}
+    </Layout>
+  );
 }
 
-export default App
+export default App;
