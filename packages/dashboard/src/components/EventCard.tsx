@@ -35,7 +35,7 @@ function getInitials(name: string): string {
 }
 
 function getEventSummary(event: GroundcontrolEvent): string {
-  const p = event.payload as Record<string, unknown>;
+  const p = event.payload as unknown as Record<string, unknown>;
   switch (event.eventType) {
     case "tool.start":
     case "tool.complete":

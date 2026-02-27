@@ -3,7 +3,7 @@ import { useActivityStore } from "../stores/activityStore";
 
 export function useGroundcontrolSocket() {
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { addEvent, setConnected, updateSession } = useActivityStore();
 
   useEffect(() => {
