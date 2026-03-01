@@ -1011,7 +1011,7 @@ export async function generateDigest(
   const id = crypto.randomUUID();
   await sql`
     INSERT INTO digests (id, digest_type, period_start, period_end, summary, generated_at)
-    VALUES (${id}, ${digestType}, ${periodStart}::TIMESTAMPTZ, ${periodEnd}::TIMESTAMPTZ, ${JSON.stringify(summary)}::JSONB, NOW())`;
+    VALUES (${id}, ${digestType}, ${periodStart}::TIMESTAMPTZ, ${periodEnd}::TIMESTAMPTZ, ${JSON.stringify(summary)}, NOW())`;
 
   const [digest] = await sql`SELECT * FROM digests WHERE id = ${id}`;
   return digest as any as DigestEntry;
