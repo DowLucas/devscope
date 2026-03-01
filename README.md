@@ -32,7 +32,11 @@ Real-time monitoring dashboard for Claude Code developer sessions. A Claude Code
 ### 1. Install the Plugin
 
 ```bash
-claude plugin install github:DowLucas/devscope-plugin
+# Add the marketplace (one-time)
+claude plugin marketplace add DowLucas/devscope-plugin
+
+# Install the plugin
+claude plugin install devscope
 ```
 
 Then run the setup script to configure your server URL:
