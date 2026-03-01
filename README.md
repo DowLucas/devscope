@@ -39,11 +39,7 @@ claude plugin marketplace add DowLucas/devscope-plugin
 claude plugin install devscope
 ```
 
-Then run the setup script to configure your server URL:
-
-```bash
-~/.claude/plugins/devscope/scripts/setup.sh
-```
+Then configure your server URL by typing `/devscope:setup` in Claude Code, or manually create `~/.config/devscope/config`.
 
 ### 2. Run the Server
 
