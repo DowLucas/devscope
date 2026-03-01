@@ -1,39 +1,65 @@
-import { useEffect, useState } from "react";
-import { Layout } from "./components/Layout";
-import { LiveFeed } from "./components/LiveFeed";
-import { DeveloperCards } from "./components/DeveloperCards";
-import { SessionTimeline } from "./components/SessionTimeline";
-import { useGroundcontrolSocket } from "./hooks/useWebSocket";
-import { useActivityStore } from "./stores/activityStore";
+import { useEffect } from "react";
+import { Switch, Route } from "wouter";
+import { Layout } from "@/components/Layout";
+import { LiveFeed } from "@/components/LiveFeed";
+import { DeveloperCards } from "@/components/DeveloperCards";
+import { SessionTimeline } from "@/components/SessionTimeline";
+import { FlowView } from "@/components/flow/FlowView";
+import { InsightsView } from "@/components/insights/InsightsView";
+import { SessionDetail } from "@/components/session/SessionDetail";
+import { FailuresView } from "@/components/failures/FailuresView";
+import { HealthView } from "@/components/health/HealthView";
+import { ProjectsView } from "@/components/projects/ProjectsView";
+import { AiView } from "@/components/ai/AiView";
+import { useDevscopeSocket } from "@/hooks/useWebSocket";
+import { useActivityStore } from "@/stores/activityStore";
+import { apiFetch } from "@/lib/api";
 
 function App() {
-  const [activeView, setActiveView] = useState("feed");
-  useGroundcontrolSocket();
+  useDevscopeSocket();
 
-  const { setDevelopers, setActiveSessions, setEvents } = useActivityStore();
+  const { setDevelopers, setActiveSessions, setActiveAgents, setEvents } = useActivityStore();
+  const fetchGeneration = useActivityStore((s) => s.fetchGeneration);
 
   useEffect(() => {
-    fetch("/api/developers")
+    if (fetchGeneration === 0) return;
+
+    apiFetch("/api/developers")
       .then((r) => r.json())
       .then(setDevelopers)
-      .catch(() => {});
+      .catch(console.error);
 
-    fetch("/api/sessions/active")
+    apiFetch("/api/sessions/active")
       .then((r) => r.json())
-      .then(setActiveSessions)
-      .catch(() => {});
+      .then((sessions: any[]) => {
+        const agents = sessions.flatMap((s) => s.activeAgents ?? []);
+        setActiveAgents(agents);
+        setActiveSessions(sessions);
+      })
+      .catch(console.error);
 
-    fetch("/api/events/recent?limit=50")
+    apiFetch("/api/events/recent?limit=50")
       .then((r) => r.json())
       .then(setEvents)
-      .catch(() => {});
-  }, [setDevelopers, setActiveSessions, setEvents]);
+      .catch(console.error);
+  }, [fetchGeneration, setDevelopers, setActiveSessions, setActiveAgents, setEvents]);
 
   return (
-    <Layout activeView={activeView} onViewChange={setActiveView}>
-      {activeView === "feed" && <LiveFeed />}
-      {activeView === "developers" && <DeveloperCards />}
-      {activeView === "history" && <SessionTimeline />}
+    <Layout>
+      <Switch>
+        <Route path="/developers" component={DeveloperCards} />
+        <Route path="/history" component={SessionTimeline} />
+        <Route path="/flowmap" component={FlowView} />
+        <Route path="/insights/*?" component={InsightsView} />
+        <Route path="/session/:id">
+          {(params) => <SessionDetail sessionId={params.id} />}
+        </Route>
+        <Route path="/failures" component={FailuresView} />
+        <Route path="/health" component={HealthView} />
+        <Route path="/projects/*?" component={ProjectsView} />
+        <Route path="/ai/*?" component={AiView} />
+        <Route component={LiveFeed} />
+      </Switch>
     </Layout>
   );
 }

@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
-import type { GroundcontrolEvent } from "@groundcontrol/shared";
+import type { DevscopeEvent } from "@devscope/shared";
+import { timeAgo } from "@/lib/utils";
 
 const EVENT_COLORS: Record<string, string> = {
   "session.start": "border-emerald-500/50 bg-emerald-500/5",
@@ -11,6 +12,13 @@ const EVENT_COLORS: Record<string, string> = {
   "agent.start": "border-purple-500/50 bg-purple-500/5",
   "agent.stop": "border-purple-500/30 bg-purple-500/5",
   "response.complete": "border-cyan-500/50 bg-cyan-500/5",
+  "notification": "border-yellow-500/50 bg-yellow-500/5",
+  "compact.pending": "border-orange-500/50 bg-orange-500/5",
+  "task.completed": "border-teal-500/50 bg-teal-500/5",
+  "permission.request": "border-rose-500/50 bg-rose-500/5",
+  "worktree.create": "border-indigo-500/50 bg-indigo-500/5",
+  "worktree.remove": "border-indigo-500/30 bg-indigo-500/5",
+  "config.change": "border-slate-500/50 bg-slate-500/5",
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -23,6 +31,13 @@ const EVENT_LABELS: Record<string, string> = {
   "agent.start": "Agent Spawned",
   "agent.stop": "Agent Finished",
   "response.complete": "Response Complete",
+  "notification": "Notification",
+  "compact.pending": "Compacting Context",
+  "task.completed": "Task Completed",
+  "permission.request": "Permission Request",
+  "worktree.create": "Worktree Created",
+  "worktree.remove": "Worktree Removed",
+  "config.change": "Config Changed",
 };
 
 function getInitials(name: string): string {
@@ -34,17 +49,15 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-function getEventSummary(event: GroundcontrolEvent): string {
+function getEventSummary(event: DevscopeEvent): string {
   const p = event.payload as unknown as Record<string, unknown>;
   switch (event.eventType) {
     case "tool.start":
     case "tool.complete":
     case "tool.fail":
       return String(p.toolName ?? "Unknown tool");
-    case "prompt.submit": {
-      const content = String(p.promptContent ?? "");
-      return content.slice(0, 80) + (content.length > 80 ? "..." : "");
-    }
+    case "prompt.submit":
+      return `Prompt (${p.promptLength ?? 0} chars)`;
     case "session.start":
       return "Started (" + (p.startType ?? "startup") + ")";
     case "session.end":
@@ -52,22 +65,26 @@ function getEventSummary(event: GroundcontrolEvent): string {
     case "agent.start":
     case "agent.stop":
       return String(p.agentType ?? "Agent");
+    case "notification":
+      return String(p.title ?? "Notification");
+    case "compact.pending":
+      return "Trigger: " + String(p.trigger ?? "auto");
+    case "task.completed":
+      return String(p.taskSubject ?? "Task");
+    case "permission.request":
+      return String(p.toolName ?? "Unknown tool");
+    case "worktree.create":
+      return String(p.worktreeName ?? "worktree");
+    case "worktree.remove":
+      return String(p.worktreePath ?? "worktree");
+    case "config.change":
+      return String(p.filePath ?? p.source ?? "config");
     default:
       return event.eventType;
   }
 }
 
-function timeAgo(timestamp: string): string {
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return seconds + "s ago";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return minutes + "m ago";
-  const hours = Math.floor(minutes / 60);
-  return hours + "h ago";
-}
-
-export function EventCard({ event }: { event: GroundcontrolEvent }) {
+export function EventCard({ event }: { event: DevscopeEvent }) {
   const colorClass = EVENT_COLORS[event.eventType] ?? "border-gray-500/50 bg-gray-500/5";
 
   return (

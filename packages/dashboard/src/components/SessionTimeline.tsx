@@ -1,14 +1,20 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { navigate } from "wouter/use-browser-location";
+import { Badge } from "@/components/ui/badge";
+import { ExportButton } from "@/components/ui/export-button";
+import { parseUTC } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 
 interface SessionRow {
   id: string;
-  developer_name: string;
-  project_name: string;
-  started_at: string;
-  ended_at: string | null;
+  developerName: string;
+  projectName: string;
+  startedAt: string;
+  endedAt: string | null;
   status: string;
-  event_count: number;
+  eventCount: number;
+  contextClearCount: number;
 }
 
 export function SessionTimeline() {
@@ -16,7 +22,7 @@ export function SessionTimeline() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/sessions?limit=50")
+    apiFetch("/api/sessions?limit=50")
       .then((r) => r.json())
       .then((data) => {
         setSessions(data);
@@ -26,14 +32,25 @@ export function SessionTimeline() {
   }, []);
 
   if (loading) {
-    return <div className="text-gray-500 text-center py-12">Loading sessions...</div>;
+    return (
+      <div className="text-muted-foreground text-center py-12 text-sm">
+        Loading sessions...
+      </div>
+    );
   }
 
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-4">Session History</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-foreground">
+          Session History
+        </h2>
+        <ExportButton dataType="sessions" />
+      </div>
       {sessions.length === 0 ? (
-        <div className="text-gray-500 text-center py-12">No sessions recorded yet.</div>
+        <div className="text-muted-foreground text-center py-12 text-sm">
+          No sessions recorded yet.
+        </div>
       ) : (
         <div className="space-y-2">
           <AnimatePresence>
@@ -43,36 +60,54 @@ export function SessionTimeline() {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className={"border rounded-lg p-4 " +
+                onClick={() => {
+                  navigate(`/session/${session.id}`);
+                }}
+                className={
+                  "border rounded-lg p-4 cursor-pointer transition-colors hover:bg-accent/30 " +
                   (session.status === "active"
                     ? "border-emerald-500/30 bg-emerald-500/5"
-                    : "border-gray-800 bg-gray-900/50"
-                  )
+                    : "border-border bg-card")
                 }
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="font-medium">{session.developer_name}</span>
-                    <span className="text-gray-500 mx-2">in</span>
-                    <span className="font-mono text-sm text-gray-300">{session.project_name}</span>
+                    <span className="font-medium text-foreground">
+                      {session.developerName}
+                    </span>
+                    <span className="text-muted-foreground mx-2">in</span>
+                    <span className="font-mono text-sm text-muted-foreground">
+                      {session.projectName}
+                    </span>
                   </div>
                   <div className="flex items-center gap-3 text-sm">
-                    <span className="text-gray-500">{session.event_count} events</span>
-                    <span
-                      className={"px-2 py-0.5 rounded-full text-xs " +
-                        (session.status === "active"
-                          ? "bg-emerald-500/20 text-emerald-400"
-                          : "bg-gray-800 text-gray-400"
-                        )
+                    <span className="text-muted-foreground">
+                      {session.eventCount} events
+                    </span>
+                    {session.contextClearCount > 0 && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0 border-amber-500/30 text-amber-400"
+                      >
+                        {session.contextClearCount} context clear{session.contextClearCount !== 1 ? "s" : ""}
+                      </Badge>
+                    )}
+                    <Badge
+                      variant={
+                        session.status === "active" ? "default" : "secondary"
+                      }
+                      className={
+                        session.status === "active" ? "bg-emerald-600" : ""
                       }
                     >
                       {session.status}
-                    </span>
+                    </Badge>
                   </div>
                 </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  Started {new Date(session.started_at).toLocaleString()}
-                  {session.ended_at && (" - Ended " + new Date(session.ended_at).toLocaleString())}
+                <div className="text-xs text-muted-foreground mt-1">
+                  Started {parseUTC(session.startedAt).toLocaleString()}
+                  {session.endedAt &&
+                    " - Ended " + parseUTC(session.endedAt).toLocaleString()}
                 </div>
               </motion.div>
             ))}
