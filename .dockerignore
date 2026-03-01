@@ -1,0 +1,33 @@
+# Dependencies (installed fresh in containers)
+node_modules
+packages/*/node_modules
+
+# Build outputs
+packages/dashboard/dist
+packages/backend/dist
+packages/shared/dist
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Git and IDE
+.git
+.gitignore
+.claude
+.vscode
+.idea
+
+# Plugin (runs on host, not containerized)
+packages/plugin
+
+# Docker files
+docker-compose*.yml
+.dockerignore
+
+# Docs and misc
+docs
+scripts
+CLAUDE.md
+README.md
