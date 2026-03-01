@@ -1,5 +1,5 @@
 {
-  "name": "@groundcontrol/backend",
+  "name": "@devscope/backend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,8 +7,13 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@devscope/shared": "workspace:*",
+    "@google/genai": "^1",
+    "@hono/zod-validator": "^0.4",
+    "@langchain/core": "^0.3",
+    "@langchain/langgraph": "^0.2",
     "hono": "^4",
-    "@groundcontrol/shared": "workspace:*"
+    "zod": "^3"
   },
   "devDependencies": {
     "@types/bun": "latest"
