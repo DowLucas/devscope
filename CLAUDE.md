@@ -71,19 +71,19 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 ## Docker
 
 ```bash
-# Production (nginx on :8080, backend internal)
+# Production (Caddy with auto-TLS on :80/:443)
 docker compose -f docker-compose.yml up --build
 
 # Development (Vite HMR on :5173, backend on :3001, override auto-merges)
 docker compose up --build
 ```
 
-**Files**: `docker/backend.Dockerfile`, `docker/dashboard.Dockerfile`, `docker/nginx/nginx.conf`, `docker-compose.yml`, `docker-compose.override.yml`.
+**Files**: `docker/backend.Dockerfile`, `docker/caddy.Dockerfile`, `docker/Caddyfile`, `docker/dashboard.Dockerfile` (dev only), `docker/nginx/nginx.conf` (legacy/dev), `docker-compose.yml`, `docker-compose.override.yml`.
 
-**Production**: nginx serves dashboard static files and reverse-proxies `/api` + `/ws` to backend:3001. PostgreSQL data persists in named volume `gc-pgdata`.
+**Production**: Caddy serves dashboard static files, reverse-proxies `/api` + `/ws` to backend:3001, and handles TLS via Let's Encrypt automatically. Set `DOMAIN` env var for your domain. PostgreSQL data persists in named volume `gc-pgdata`. Caddy TLS certs persist in `caddy-data`.
 
-**Development**: Vite dev server + backend hot reload with source bind-mounts. PostgreSQL exposed on port 5432 for local tooling.
+**Development**: Vite dev server + backend hot reload with source bind-mounts. Caddy is disabled via profiles. PostgreSQL exposed on port 5432 for local tooling.
 
-**Docker env vars**: `DATABASE_URL` (PostgreSQL connection string, set automatically by compose), `POSTGRES_PASSWORD` (defaults to `devscope`), `VITE_PROXY_TARGET` (proxy target for Vite dev server, defaults to `localhost:3001`).
+**Docker env vars**: `DATABASE_URL` (PostgreSQL connection string, set automatically by compose), `POSTGRES_PASSWORD` (defaults to `devscope`), `DOMAIN` (for Caddy auto-TLS, defaults to `localhost`), `GC_API_KEY` (optional auth), `GC_CORS_ORIGIN` (allowed CORS origins), `VITE_PROXY_TARGET` (proxy target for Vite dev server, defaults to `localhost:3001`).
 
 **Pitfall**: Both Dockerfiles must COPY all workspace `package.json` files (shared, backend, dashboard) or `bun install --frozen-lockfile` fails — Bun validates the lockfile against the full workspace graph.

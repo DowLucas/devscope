@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/_helpers.sh"
 INPUT=$(cat)
 
 # Extract all fields in a single jq call
@@ -18,7 +20,7 @@ TOOL_NAME_SAFE=$(echo "$TOOL_NAME" | tr -cd 'a-zA-Z0-9_-')
 # Write start timestamp for duration calculation
 TIMING_DIR="/tmp/devscope-tool-times"
 mkdir -p -m 0700 "$TIMING_DIR"
-echo "$(date +%s%N)" > "${TIMING_DIR}/${SESSION_ID_SAFE}_${TOOL_NAME_SAFE}"
+echo "$(_ds_now_ns)" > "${TIMING_DIR}/${SESSION_ID_SAFE}_${TOOL_NAME_SAFE}"
 
 PAYLOAD=$(jq -n \
   --arg tn "$TOOL_NAME" \

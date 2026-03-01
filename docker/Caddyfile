@@ -1,0 +1,35 @@
+{$DOMAIN:localhost} {
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
+    # Encode responses (gzip + zstd)
+    encode zstd gzip
+
+    # API reverse proxy
+    handle /api/* {
+        reverse_proxy backend:3001
+    }
+
+    # WebSocket reverse proxy
+    handle /ws {
+        reverse_proxy backend:3001
+    }
+
+    # Static asset caching (Vite content-hashed filenames)
+    handle /assets/* {
+        header Cache-Control "public, max-age=31536000, immutable"
+        root * /srv/dashboard
+        file_server
+    }
+
+    # SPA: serve dashboard, fallback to index.html
+    handle {
+        root * /srv/dashboard
+        try_files {path} /index.html
+        file_server
+    }
+}

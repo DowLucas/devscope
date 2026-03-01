@@ -22,8 +22,9 @@ services:
     environment:
       PORT: "3001"
       DATABASE_URL: postgres://devscope:${POSTGRES_PASSWORD:-devscope}@postgres:5432/devscope
-      STALE_SESSION_TIMEOUT_MINUTES: "5"
+      STALE_SESSION_TIMEOUT_MINUTES: "${STALE_SESSION_TIMEOUT_MINUTES:-5}"
       GC_API_KEY: ${GC_API_KEY:-}
+      GC_CORS_ORIGIN: ${GC_CORS_ORIGIN:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       AI_DAILY_TOKEN_BUDGET: ${AI_DAILY_TOKEN_BUDGET:-1000000}
     depends_on:
@@ -31,13 +32,19 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  dashboard:
+  caddy:
     build:
       context: .
-      dockerfile: docker/dashboard.Dockerfile
+      dockerfile: docker/caddy.Dockerfile
       target: production
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
     ports:
-      - "8080:8080"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
     depends_on:
       backend:
         condition: service_healthy
@@ -45,4 +52,8 @@ services:
 
 volumes:
   gc-pgdata:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
     driver: local

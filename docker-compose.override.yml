@@ -25,6 +25,10 @@ services:
       - "3001:3001"
     restart: unless-stopped
 
+  # Disable caddy in dev mode — dashboard runs via Vite dev server instead
+  caddy:
+    profiles: ["production"]
+
   dashboard:
     build:
       context: .

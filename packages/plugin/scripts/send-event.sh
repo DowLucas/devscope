@@ -3,7 +3,10 @@
 # Usage: echo '{"hook_input":"..."}' | send-event.sh <event_type> '<payload_json>'
 set -euo pipefail
 
-DEVSCOPE_URL="${DEVSCOPE_URL:-http://localhost:3001}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/_helpers.sh"
+
 EVENT_TYPE="$1"
 INPUT=$(cat)
 
@@ -15,7 +18,7 @@ PROJECT_NAME=$(basename "$CWD" 2>/dev/null || echo "unknown")
 # PPID identifies the Claude Code process, keeping concurrent sessions separate
 if [ -n "$CWD" ]; then
   _GC_DEV_EMAIL=$(git -C "$CWD" config user.email 2>/dev/null || echo "${USER}@local")
-  _GC_HASH=$(echo -n "${_GC_DEV_EMAIL}:${CWD}:${PPID}" | sha256sum | cut -d' ' -f1)
+  _GC_HASH=$(_ds_sha256 "${_GC_DEV_EMAIL}:${CWD}:${PPID}")
   _GC_STATE="${HOME}/.cache/devscope/${_GC_HASH}.session"
   if [ -f "$_GC_STATE" ]; then
     _GC_SID=$(cat "$_GC_STATE")
@@ -25,13 +28,13 @@ fi
 
 DEV_NAME=$(git -C "$CWD" config user.name 2>/dev/null || echo "$USER")
 DEV_EMAIL=$(git -C "$CWD" config user.email 2>/dev/null || echo "${USER}@local")
-DEV_ID=$(echo -n "$DEV_EMAIL" | sha256sum | cut -d' ' -f1)
+DEV_ID=$(_ds_sha256 "$DEV_EMAIL")
 
 PAYLOAD="${2:-$(echo "$INPUT" | jq -c '{raw: .}')}"
 
-EVENT_ID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || echo "evt-$(date +%s%N)")
+EVENT_ID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || echo "evt-$(_ds_now_ns)")
 
-TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
+TIMESTAMP=$(_ds_timestamp)
 
 EVENT=$(jq -n \
   --arg id "$EVENT_ID" \

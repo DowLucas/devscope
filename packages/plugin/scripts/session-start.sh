@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/_helpers.sh"
 INPUT=$(cat)
 
 START_TYPE=$(echo "$INPUT" | jq -r '.source // "startup"')
@@ -17,7 +19,7 @@ if [ -n "$CWD" ] && [ -n "$CC_SESSION_ID" ]; then
   DEV_EMAIL=$(git -C "$CWD" config user.email 2>/dev/null || echo "${USER}@local")
   # Include PPID so concurrent sessions in the same project get separate state files.
   # PPID = Claude Code process PID, consistent across context clears but unique per instance.
-  PROJECT_HASH=$(echo -n "${DEV_EMAIL}:${CWD}:${PPID}" | sha256sum | cut -d' ' -f1)
+  PROJECT_HASH=$(_ds_sha256 "${DEV_EMAIL}:${CWD}:${PPID}")
   STATE_FILE="${GC_CACHE_DIR}/${PROJECT_HASH}.session"
 
   if [ "$START_TYPE" = "startup" ]; then
