@@ -1,10 +1,10 @@
 {
-  "name": "groundcontrol",
+  "name": "devscope",
   "private": true,
   "workspaces": ["packages/*"],
   "scripts": {
     "dev:backend": "bun run --hot packages/backend/src/index.ts",
     "dev:dashboard": "bun run --filter dashboard dev",
-    "dev": "bun run dev:backend & bun run dev:dashboard"
+    "dev": "bun run scripts/dev.ts"
   }
 }
