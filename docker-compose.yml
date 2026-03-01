@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: devscope
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devscope}
+      POSTGRES_DB: devscope
+    volumes:
+      - gc-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devscope"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      target: production
+    environment:
+      PORT: "3001"
+      DATABASE_URL: postgres://devscope:${POSTGRES_PASSWORD:-devscope}@postgres:5432/devscope
+      STALE_SESSION_TIMEOUT_MINUTES: "5"
+      GC_API_KEY: ${GC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      AI_DAILY_TOKEN_BUDGET: ${AI_DAILY_TOKEN_BUDGET:-1000000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard.Dockerfile
+      target: production
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  gc-pgdata:
+    driver: local

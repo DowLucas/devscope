@@ -1,0 +1,51 @@
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      target: deps
+    command: ["bun", "run", "--hot", "packages/backend/src/index.ts"]
+    environment:
+      PORT: "3001"
+      DATABASE_URL: postgres://devscope:${POSTGRES_PASSWORD:-devscope}@postgres:5432/devscope
+      STALE_SESSION_TIMEOUT_MINUTES: "5"
+      GC_API_KEY: ${GC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      AI_DAILY_TOKEN_BUDGET: ${AI_DAILY_TOKEN_BUDGET:-1000000}
+      GC_CORS_ORIGIN: ${GC_CORS_ORIGIN:-http://localhost:5173,http://localhost:3001}
+    volumes:
+      - ./packages/backend/src:/app/packages/backend/src
+      - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/backend/tsconfig.json:/app/packages/backend/tsconfig.json
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard.Dockerfile
+      target: deps
+    command: ["bun", "run", "--filter", "dashboard", "dev", "--", "--host", "0.0.0.0"]
+    environment:
+      VITE_PROXY_TARGET: backend:3001
+      VITE_WS_URL: ws://localhost:3001/ws
+      VITE_GC_API_KEY: ${GC_API_KEY:-}
+    volumes:
+      - ./packages/dashboard/src:/app/packages/dashboard/src
+      - ./packages/dashboard/index.html:/app/packages/dashboard/index.html
+      - ./packages/dashboard/vite.config.ts:/app/packages/dashboard/vite.config.ts
+      - ./packages/dashboard/tsconfig.json:/app/packages/dashboard/tsconfig.json
+      - ./packages/dashboard/tsconfig.app.json:/app/packages/dashboard/tsconfig.app.json
+      - ./packages/dashboard/tsconfig.node.json:/app/packages/dashboard/tsconfig.node.json
+      - ./packages/dashboard/components.json:/app/packages/dashboard/components.json
+      - ./packages/shared/src:/app/packages/shared/src
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
