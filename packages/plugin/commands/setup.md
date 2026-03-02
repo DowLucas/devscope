@@ -10,7 +10,7 @@ Help the user configure the DevScope plugin by writing a config file to `~/.conf
 Ask the user two questions using AskUserQuestion:
 
 1. **Server URL**: What is the DevScope server URL?
-   - Options: "http://localhost:6767" (local development), "Custom URL" (enter their own)
+   - Options: "https://devscope.sh" (cloud — hosted for you), "http://localhost:6767" (local development), "Custom URL" (enter their own)
 
 2. **API key**: Do you have a DevScope API key? (Generate one from Dashboard → Settings → API Keys)
    - Options: "No API key", "Enter API key"

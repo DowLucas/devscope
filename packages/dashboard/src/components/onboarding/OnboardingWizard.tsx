@@ -12,12 +12,14 @@ import { InviteDialog } from "@/components/team/InviteDialog";
 const INSTALL_COMMAND =
   "curl -fsSL https://raw.githubusercontent.com/DowLucas/devscope-plugin/main/install.sh | bash";
 
+const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
+
 const sectionVariants = {
   hidden: { opacity: 0, y: 24 },
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { duration: 0.5, delay: 0.15 * i, ease: [0.25, 0.46, 0.45, 0.94] },
+    transition: { duration: 0.5, delay: 0.15 * i, ease: EASE_CURVE },
   }),
 };
 
@@ -26,7 +28,7 @@ const revealVariants = {
   visible: {
     opacity: 1,
     height: "auto",
-    transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] },
+    transition: { duration: 0.4, ease: EASE_CURVE },
   },
 };
 

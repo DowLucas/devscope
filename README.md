@@ -1,10 +1,13 @@
 # DevScope
 
 [![License: PolyForm Shield](https://img.shields.io/badge/License-PolyForm%20Shield-purple.svg)](LICENSE)
+[![Cloud](https://img.shields.io/badge/Cloud-devscope.sh-blueviolet)](https://devscope.sh)
 [![GitHub stars](https://img.shields.io/github/stars/DowLucas/devscope)](https://github.com/DowLucas/devscope/stargazers)
 [![Bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun)](https://bun.sh/)
 
 Real-time monitoring dashboard for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) developer sessions. Track what your team is building, catch stuck sessions, and understand how AI-assisted development is being used across your organization.
+
+**[devscope.sh](https://devscope.sh)** — try the hosted version, no setup required.
 
 <!-- TODO: Replace with actual screenshot -->
 <!-- ![DevScope Dashboard](docs/images/dashboard-screenshot.png) -->
@@ -17,15 +20,29 @@ Real-time monitoring dashboard for [Claude Code](https://docs.anthropic.com/en/d
 - **Stuck session alerts** — get notified when a session stalls or loops
 - **AI-powered reports** — executive summaries for engineering leads (CEO, CTO, manager views)
 - **Multi-tenant** — org-scoped teams with invite-based onboarding
-- **Self-hostable** — deploy with Docker + Caddy (auto-TLS) in minutes
+- **Cloud or self-hosted** — use [devscope.sh](https://devscope.sh) or deploy with Docker
 
 ## Getting Started
 
-### Prerequisites
+### Option 1: Cloud (recommended)
 
-- [Docker](https://www.docker.com/) (recommended) or [Bun](https://bun.sh/) v1.0+ with PostgreSQL
+The fastest way to get started — no server to manage.
 
-### Self-Hosting with Docker
+1. **Sign up** at [devscope.sh](https://devscope.sh)
+2. **Create a team** and generate an API key
+3. **Install the plugin:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DowLucas/devscope-plugin/main/install.sh | bash
+```
+
+Select `https://devscope.sh` when prompted and enter your API key. That's it.
+
+### Option 2: Self-Hosting with Docker
+
+For teams that want full control over their data.
+
+**Prerequisites:** [Docker](https://www.docker.com/) (recommended) or [Bun](https://bun.sh/) v1.0+ with PostgreSQL
 
 ```bash
 git clone https://github.com/DowLucas/devscope.git
@@ -43,22 +60,18 @@ See [`.env.production.example`](.env.production.example) for all available confi
 
 ### Install the Plugin
 
-Once your server is running, install the Claude Code plugin:
-
-**One-liner:**
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DowLucas/devscope-plugin/main/install.sh | bash
 ```
 
-**Or via the marketplace:**
+Or via the marketplace:
 
 ```bash
 claude plugin marketplace add DowLucas/devscope-plugin
 claude plugin install devscope
 ```
 
-Then run `/devscope:setup` inside Claude Code to point it at your server.
+Then run `/devscope:setup` inside Claude Code to configure your server URL and API key.
 
 ### Local Development
 

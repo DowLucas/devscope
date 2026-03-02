@@ -7,7 +7,7 @@ import { useTeamInit } from "@/hooks/useTeam";
 
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { data: session, isPending } = authClient.useSession();
-  const { data: apiKeys, isPending: keysLoading, refetch } = useListApiKeys();
+  const { refetch } = useListApiKeys();
   const { currentTeam, loading: teamLoading } = useTeamStore();
   const [location, setLocation] = useLocation();
 
