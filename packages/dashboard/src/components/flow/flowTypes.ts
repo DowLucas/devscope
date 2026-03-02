@@ -35,4 +35,5 @@ export interface AgentNodeData {
   latestEvent: DevscopeEvent | null;
   isToolRunning: boolean;
   currentToolName: string | null;
+  isStopped: boolean;
 }

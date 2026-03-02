@@ -4,6 +4,7 @@ import type { ProjectDetail } from "@devscope/shared";
 import { useInsightsData } from "@/hooks/useInsightsData";
 import { useDateRange } from "@/hooks/useDateRange";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { PageHeader } from "@/components/ui/page-header";
 import { ProjectCard } from "./ProjectCard";
 import { ProjectDrillDown } from "./ProjectDrillDown";
 
@@ -15,11 +16,11 @@ export function ProjectsView() {
   const selectedProject = params?.name ? decodeURIComponent(params.name) : null;
 
   const selectProject = useCallback((name: string) => {
-    navigate(`/projects/detail/${encodeURIComponent(name)}`);
+    navigate(`/dashboard/projects/detail/${encodeURIComponent(name)}`);
   }, [navigate]);
 
   const goBack = useCallback(() => {
-    navigate("/projects");
+    navigate("/dashboard/projects");
   }, [navigate]);
 
   if (selectedProject) {
@@ -28,10 +29,9 @@ export function ProjectsView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Projects</h2>
+      <PageHeader title="Projects">
         <DateRangePicker />
-      </div>
+      </PageHeader>
 
       {overview.loading ? (
         <div className="text-muted-foreground text-center py-12 text-sm">

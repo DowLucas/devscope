@@ -3,7 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
-const proxyTarget = process.env.VITE_PROXY_TARGET ?? "localhost:3001";
+const proxyTarget = process.env.VITE_PROXY_TARGET ?? "localhost:6767";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],

@@ -17,6 +17,7 @@ import {
   getProjectContributors,
   getProjectToolUsage,
   getProjectActivityOverTime,
+  getActivityPerMinute,
 } from "../db";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
@@ -67,6 +68,11 @@ export function insightsRoutes(sql: SQL) {
     const developerId = c.req.query("developerId") || undefined;
     const days = clampInt(c.req.query("days"), 30, 365);
     return c.json(await getHourlyDistribution(sql, developerId, days));
+  });
+
+  app.get("/activity-per-minute", async (c) => {
+    const hours = clampInt(c.req.query("hours"), 24, 2160);
+    return c.json(await getActivityPerMinute(sql, hours));
   });
 
   // --- Period Comparison ---

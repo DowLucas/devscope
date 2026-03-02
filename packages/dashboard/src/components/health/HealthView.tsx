@@ -1,5 +1,6 @@
 import { useTeamHealth } from "@/hooks/useTeamHealth";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/ui/page-header";
 import { DeveloperHeatmap } from "./DeveloperHeatmap";
 import { WorkloadChart } from "./WorkloadChart";
 import { VelocityCards } from "./VelocityCards";
@@ -11,7 +12,7 @@ export function HealthView() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h2 className="text-lg font-semibold">Team Health</h2>
+        <PageHeader title="Team Health" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -28,7 +29,7 @@ export function HealthView() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold">Team Health</h2>
+      <PageHeader title="Team Health" />
 
       <VelocityCards velocity={data.velocity} />
 

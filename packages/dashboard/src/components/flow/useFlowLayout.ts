@@ -259,6 +259,7 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
           latestEvent: null,
           isToolRunning: false,
           currentToolName: null,
+          isStopped: agent.stopped,
         };
 
         nodes.push({

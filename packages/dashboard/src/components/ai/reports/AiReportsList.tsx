@@ -15,7 +15,7 @@ export function AiReportsList() {
     setShowTypeMenu(false);
     const report = await generateReport(type);
     if (report) {
-      navigate(`/ai/reports/${report.id}`);
+      navigate(`/dashboard/assistant/reports/${report.id}`);
     }
   };
 

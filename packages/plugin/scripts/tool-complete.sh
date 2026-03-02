@@ -5,15 +5,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/_helpers.sh"
 INPUT=$(cat)
 
-# Extract all fields in a single jq call
+# Extract fields — TOOL_INPUT extracted separately to preserve JSON quoting
 eval "$(echo "$INPUT" | jq -r '
   @sh "TOOL_NAME=\(.tool_name // "unknown")",
   @sh "HOOK_EVENT=\(.hook_event_name // "PostToolUse")",
   @sh "SESSION_ID=\(.session_id // "")",
   @sh "AGENT_ID=\(.agent_id // "")",
-  "TOOL_INPUT=\(.tool_input // null | tojson)",
   @sh "ERROR_MSG=\(.error // "" | tostring | .[:100])"
 ' | tr ',' '\n')"
+TOOL_INPUT=$(echo "$INPUT" | jq -c '.tool_input // null')
 
 # Sanitize for safe temp file paths
 SESSION_ID_SAFE=$(echo "$SESSION_ID" | tr -cd 'a-zA-Z0-9_-')

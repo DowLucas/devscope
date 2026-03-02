@@ -1,6 +1,6 @@
 # DevScope
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: PolyForm Shield](https://img.shields.io/badge/License-PolyForm%20Shield-purple.svg)](LICENSE)
 
 Real-time monitoring dashboard for Claude Code developer sessions. A Claude Code plugin (bash hooks) sends events to a backend API, which broadcasts them via WebSocket to a React dashboard.
 
@@ -31,6 +31,14 @@ Real-time monitoring dashboard for Claude Code developer sessions. A Claude Code
 
 ### 1. Install the Plugin
 
+**One-liner (recommended):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DowLucas/devscope-plugin/main/install.sh | bash
+```
+
+**Manual install:**
+
 ```bash
 # Add the marketplace (one-time)
 claude plugin marketplace add DowLucas/devscope-plugin
@@ -55,7 +63,7 @@ cp .env.production.example .env
 # Production (Caddy with auto-TLS on ports 80/443)
 docker compose -f docker-compose.yml up --build
 
-# Development (Vite HMR on :5173, backend on :3001)
+# Development (Vite HMR on :5173, backend on :6767)
 docker compose up --build
 ```
 
@@ -81,7 +89,7 @@ The plugin reads configuration from (in priority order):
 
 1. Environment variables: `DEVSCOPE_URL`, `DEVSCOPE_API_KEY`
 2. Config file: `~/.config/devscope/config`
-3. Defaults: `http://localhost:3001`
+3. Defaults: `http://localhost:6767`
 
 ### Server
 
@@ -91,7 +99,6 @@ See [`.env.production.example`](.env.production.example) for all available envir
 |---|---|---|
 | `DOMAIN` | Domain for Caddy auto-TLS | `localhost` |
 | `POSTGRES_PASSWORD` | PostgreSQL password | `devscope` |
-| `GC_API_KEY` | API key for auth (optional) | — |
 | `GC_CORS_ORIGIN` | Allowed CORS origins | `http://localhost:5173` |
 | `STALE_SESSION_TIMEOUT_MINUTES` | Auto-close stale sessions | `5` |
 | `GEMINI_API_KEY` | Google Gemini for AI insights (optional) | — |
@@ -125,4 +132,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-[MIT](LICENSE)
+[PolyForm Shield 1.0.0](LICENSE)

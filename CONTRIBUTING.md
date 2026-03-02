@@ -63,10 +63,44 @@ packages/
 
 The plugin at `packages/plugin/` is a local development copy. The installable standalone version lives at [github.com/DowLucas/devscope-plugin](https://github.com/DowLucas/devscope-plugin). If you're making plugin changes, update both locations.
 
+### Testing locally
+
+```bash
+# Run Claude Code with the local plugin (no marketplace install needed)
+claude --plugin-dir packages/plugin
+```
+
+### Publishing changes
+
+Claude Code caches plugins by version, so **you must bump the version** for users to receive updates:
+
+1. Bump `version` in the standalone repo's `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`
+2. Keep `packages/plugin/.claude-plugin/plugin.json` in sync
+3. Push to `main` on `DowLucas/devscope-plugin`
+4. Users run `claude plugin update devscope` and restart Claude Code
+
+### Plugin structure
+
+```
+.claude-plugin/
+  plugin.json          # Plugin manifest (name, version)
+  marketplace.json     # Makes the repo a marketplace source
+hooks/
+  hooks.json           # Hook event → script mappings (uses ${CLAUDE_PLUGIN_ROOT})
+commands/
+  setup.md             # /devscope:setup slash command
+scripts/
+  _helpers.sh          # Cross-platform helpers
+  send-event.sh        # Core event sender
+  *.sh                 # Individual hook scripts
+```
+
+See the [devscope-plugin CLAUDE.md](https://github.com/DowLucas/devscope-plugin/blob/main/CLAUDE.md) for full plugin architecture details.
+
 ## Reporting Issues
 
 Use [GitHub Issues](https://github.com/DowLucas/devscope/issues) with the provided templates.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the project's existing licenses — see [LICENSE](LICENSE) for details.

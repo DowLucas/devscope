@@ -1,26 +1,33 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { bearerAuth } from "hono/bearer-auth";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
 import { upgradeWebSocket, websocket } from "hono/bun";
+import { serveStatic } from "hono/bun";
 import { initializeDatabase } from "./db";
+import { auth } from "./auth";
+import { seedDefaultAdmin } from "./auth/seedAdmin";
 import { eventsRoutes } from "./routes/events";
 import { sessionsRoutes } from "./routes/sessions";
 import { developersRoutes } from "./routes/developers";
 import { insightsRoutes } from "./routes/insights";
 import { alertsRoutes } from "./routes/alerts";
 import { exportRoutes } from "./routes/export";
+import { teamsRoutes } from "./routes/teams";
 import { addClient, removeClient, getClientCount } from "./ws/handler";
 import { startStaleSessionCleanup } from "./jobs/cleanupStaleSessions";
 import { startDigestGeneration } from "./jobs/digestGeneration";
-import { startAiInsightGeneration } from "./jobs/aiInsights";
 import { aiRoutes } from "./routes/ai";
+import { reportsRoutes } from "./routes/reports";
+import { orgScopeMiddleware } from "./middleware/orgScope";
+import { rateLimitMiddleware } from "./middleware/rateLimit";
+import { getPublicStats } from "./db/queries";
+import type { Context, Next } from "hono";
 
 const sql = await initializeDatabase();
+await seedDefaultAdmin(sql);
 startStaleSessionCleanup(sql);
 startDigestGeneration(sql);
-startAiInsightGeneration(sql);
 
 // Seed a default alert rule if none exist
 const [existingRules] = await sql`SELECT COUNT(*)::INT as cnt FROM alert_rules`;
@@ -42,25 +49,90 @@ app.use(
   cors({
     origin: (origin) => (allowedOrigins.includes(origin) ? origin : allowedOrigins[0]),
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "x-api-key"],
+    credentials: true,
   })
 );
 
 // --- Secure headers ---
 app.use("/api/*", secureHeaders());
 
-// --- Body size limit (256 KB) ---
-app.use("/api/*", bodyLimit({ maxSize: 256 * 1024 }));
+// --- Body size limit (256 KB) — skip auth routes (better-auth reads body directly) ---
+app.use("/api/*", async (c, next) => {
+  if (c.req.path.startsWith("/api/auth/")) return next();
+  return bodyLimit({ maxSize: 256 * 1024 })(c, next);
+});
 
-// --- Bearer auth (conditional: only when GC_API_KEY is set) ---
-const GC_API_KEY = process.env.GC_API_KEY;
-if (GC_API_KEY) {
-  app.use("/api/*", async (c, next) => {
-    // Skip auth for health check
-    if (c.req.path === "/api/health") return next();
-    return bearerAuth({ token: GC_API_KEY })(c, next);
-  });
-  console.log("[devscope] API key authentication enabled");
+// --- Public routes (no auth, rate-limited) ---
+app.use("/api/public/*", rateLimitMiddleware({ maxRequests: 30, windowMs: 60_000 }));
+
+let cachedStats: { data: unknown; expiresAt: number } | null = null;
+
+app.get("/api/public/stats", async (c) => {
+  const now = Date.now();
+  if (!cachedStats || cachedStats.expiresAt <= now) {
+    cachedStats = { data: await getPublicStats(sql), expiresAt: now + 30_000 };
+  }
+  return c.json(cachedStats.data);
+});
+
+// --- better-auth handler (pass raw Request untouched) ---
+app.all("/api/auth/*", (c) => auth.handler(c.req.raw));
+
+// --- Auth middleware helpers ---
+async function requireSession(c: Context, next: Next) {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  c.set("user" as never, session.user as never);
+  c.set("session" as never, session.session as never);
+  return next();
 }
+
+async function requireApiKeyOrSession(c: Context, next: Next) {
+  const apiKeyHeader = c.req.header("x-api-key");
+  if (apiKeyHeader) {
+    try {
+      const result = await auth.api.verifyApiKey({ body: { key: apiKeyHeader } });
+      if (result?.valid) {
+        // Resolve the API key owner's userId for auto-linking developers to their org
+        const key = (result as any).key;
+        if (key?.referenceId) {
+          c.set("apiKeyUserId" as never, key.referenceId as never);
+        }
+        return next();
+      }
+    } catch {
+      // Fall through to session check
+    }
+  }
+  // Fall back to session cookie
+  return requireSession(c, next);
+}
+
+// --- Protected routes ---
+// Event ingestion accepts API keys or session cookies
+app.use("/api/events/*", requireApiKeyOrSession);
+app.use("/api/events", requireApiKeyOrSession);
+
+// All other API routes require a session (skip health, auth, and events — events use apikey middleware above)
+app.use("/api/*", async (c, next) => {
+  const path = c.req.path;
+  if (path === "/api/health" || path === "/api/verify-connection" || path.startsWith("/api/auth/") || path.startsWith("/api/events") || path.startsWith("/api/public/")) {
+    return next();
+  }
+  return requireSession(c, next);
+});
+
+// Org scope middleware — resolves active org's developer IDs onto context
+app.use("/api/events/recent", orgScopeMiddleware(sql));
+app.use("/api/sessions/*", orgScopeMiddleware(sql));
+app.use("/api/sessions", orgScopeMiddleware(sql));
+app.use("/api/developers/*", orgScopeMiddleware(sql));
+app.use("/api/developers", orgScopeMiddleware(sql));
+app.use("/api/insights/*", orgScopeMiddleware(sql));
+app.use("/api/insights", orgScopeMiddleware(sql));
 
 app.route("/api/events", eventsRoutes(sql));
 app.route("/api/sessions", sessionsRoutes(sql));
@@ -69,26 +141,42 @@ app.route("/api/insights", insightsRoutes(sql));
 app.route("/api/alerts", alertsRoutes(sql));
 app.route("/api/export", exportRoutes(sql));
 app.route("/api/ai", aiRoutes(sql));
+app.route("/api/reports", reportsRoutes(sql));
+app.route("/api/teams", teamsRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })
 );
 
+app.post("/api/verify-connection", async (c) => {
+  const key = c.req.header("x-api-key");
+  if (!key) {
+    return c.json({ valid: false, error: "Missing x-api-key header" }, 400);
+  }
+  try {
+    const result = await auth.api.verifyApiKey({ body: { key } });
+    if (result?.valid) {
+      return c.json({ valid: true });
+    }
+    return c.json({ valid: false, error: "Invalid API key" });
+  } catch {
+    return c.json({ valid: false, error: "Invalid API key" });
+  }
+});
+
 const MAX_WS_CLIENTS = 100;
 
 app.get(
   "/ws",
-  (c, next) => {
+  async (c, next) => {
     // Connection limit
     if (getClientCount() >= MAX_WS_CLIENTS) {
       return c.text("Too many connections", 503);
     }
-    // Token auth for WebSocket (if API key is set)
-    if (GC_API_KEY) {
-      const token = new URL(c.req.url).searchParams.get("token");
-      if (token !== GC_API_KEY) {
-        return c.text("Unauthorized", 401);
-      }
+    // Verify session cookie for WebSocket
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session) {
+      return c.text("Unauthorized", 401);
     }
     return next();
   },
@@ -118,7 +206,16 @@ app.get(
   }))
 );
 
-const PORT = Number(process.env.PORT ?? 3001);
+// --- Static file serving (Railway / single-container production) ---
+if (process.env.SERVE_STATIC === "true") {
+  const staticRoot = process.env.STATIC_ROOT || "./packages/backend/dist";
+  app.use("/assets/*", serveStatic({ root: staticRoot }));
+  app.use("*", serveStatic({ root: staticRoot }));
+  app.use("*", serveStatic({ root: staticRoot, path: "index.html" }));
+  console.log(`[devscope] Serving static dashboard from ${staticRoot}`);
+}
+
+const PORT = Number(process.env.PORT ?? 6767);
 
 // Graceful shutdown
 function shutdown(signal: string) {

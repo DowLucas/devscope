@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 import { Switch, Route } from "wouter";
+import { AuthProvider } from "@/components/AuthProvider";
+import { AuthGuard } from "@/components/AuthGuard";
 import { Layout } from "@/components/Layout";
 import { LiveFeed } from "@/components/LiveFeed";
 import { DeveloperCards } from "@/components/DeveloperCards";
@@ -11,11 +13,20 @@ import { FailuresView } from "@/components/failures/FailuresView";
 import { HealthView } from "@/components/health/HealthView";
 import { ProjectsView } from "@/components/projects/ProjectsView";
 import { AiView } from "@/components/ai/AiView";
+import { ReportsView } from "@/components/reports/ReportsView";
+import { AuthPage } from "@/components/auth/AuthPage";
+import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
+import { SettingsPage } from "@/components/settings/SettingsPage";
+import { LandingPage } from "@/components/landing/LandingPage";
+import { TermsPage } from "@/components/landing/TermsPage";
+import { PrivacyPage } from "@/components/landing/PrivacyPage";
+import { TeamView } from "@/components/team/TeamView";
+import { InviteAcceptPage } from "@/components/team/InviteAcceptPage";
 import { useDevscopeSocket } from "@/hooks/useWebSocket";
 import { useActivityStore } from "@/stores/activityStore";
 import { apiFetch } from "@/lib/api";
 
-function App() {
+function AppContent() {
   useDevscopeSocket();
 
   const { setDevelopers, setActiveSessions, setActiveAgents, setEvents } = useActivityStore();
@@ -47,20 +58,61 @@ function App() {
   return (
     <Layout>
       <Switch>
-        <Route path="/developers" component={DeveloperCards} />
-        <Route path="/history" component={SessionTimeline} />
-        <Route path="/flowmap" component={FlowView} />
-        <Route path="/insights/*?" component={InsightsView} />
-        <Route path="/session/:id">
+        <Route path="/dashboard/developers" component={DeveloperCards} />
+        <Route path="/dashboard/sessions/:id">
           {(params) => <SessionDetail sessionId={params.id} />}
         </Route>
-        <Route path="/failures" component={FailuresView} />
-        <Route path="/health" component={HealthView} />
-        <Route path="/projects/*?" component={ProjectsView} />
-        <Route path="/ai/*?" component={AiView} />
+        <Route path="/dashboard/sessions" component={SessionTimeline} />
+        <Route path="/dashboard/topology" component={FlowView} />
+        <Route path="/dashboard/metrics/*?" component={InsightsView} />
+        <Route path="/dashboard/incidents" component={FailuresView} />
+        <Route path="/dashboard/team-health" component={HealthView} />
+        <Route path="/dashboard/projects/*?" component={ProjectsView} />
+        <Route path="/dashboard/assistant/*?" component={AiView} />
+        <Route path="/dashboard/briefings/*?" component={ReportsView} />
+        <Route path="/dashboard/team/*?" component={TeamView} />
+        <Route path="/dashboard/account/*?" component={SettingsPage} />
+        {/* Default dashboard view — Activity feed */}
         <Route component={LiveFeed} />
       </Switch>
     </Layout>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <Switch>
+        {/* Public landing page at root — no auth required */}
+        <Route path="/" component={LandingPage} />
+        <Route path="/terms" component={TermsPage} />
+        <Route path="/privacy" component={PrivacyPage} />
+
+        {/* Auth pages — public */}
+        <Route path="/auth/:view">
+          {(params) => <AuthPage view={params.view} />}
+        </Route>
+
+        {/* Invite accept — needs auth check but outside dashboard layout */}
+        <Route path="/invite/:token">
+          {(params) => <InviteAcceptPage token={params.token} />}
+        </Route>
+
+        {/* All dashboard routes go through AuthGuard */}
+        <Route path="/dashboard/*?">
+          <AuthGuard>
+            <AppContent />
+          </AuthGuard>
+        </Route>
+
+        {/* Onboarding — authed but outside dashboard layout */}
+        <Route path="/onboarding">
+          <AuthGuard>
+            <OnboardingWizard />
+          </AuthGuard>
+        </Route>
+      </Switch>
+    </AuthProvider>
   );
 }
 

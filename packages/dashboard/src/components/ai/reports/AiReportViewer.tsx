@@ -42,7 +42,7 @@ export function AiReportViewer({ reportId }: AiReportViewerProps) {
       <div className="flex items-center gap-3">
         <button
           onClick={() => {
-            navigate("/ai/reports");
+            navigate("/dashboard/assistant/reports");
           }}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >

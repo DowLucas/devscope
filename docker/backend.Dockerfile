@@ -26,12 +26,12 @@ COPY package.json tsconfig.base.json ./
 COPY packages/shared/ ./packages/shared/
 COPY packages/backend/ ./packages/backend/
 
-ENV PORT=3001
+ENV PORT=6767
 ENV DATABASE_URL=
 
-EXPOSE 3001
+EXPOSE 6767
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD bun -e "fetch('http://localhost:3001/api/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+  CMD bun -e "fetch('http://localhost:6767/api/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
 
 CMD ["bun", "run", "packages/backend/src/index.ts"]

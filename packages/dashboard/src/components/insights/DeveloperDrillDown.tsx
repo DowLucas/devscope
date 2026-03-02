@@ -53,7 +53,7 @@ export function DeveloperDrillDown({
           </button>
           {developer && (
             <div className="border-l border-border pl-3">
-              <h2 className="text-lg font-semibold">{developer.name}</h2>
+              <h2 className="text-xl font-semibold">{developer.name}</h2>
               <p className="text-xs text-muted-foreground">{developer.email}</p>
             </div>
           )}

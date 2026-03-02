@@ -1,10 +1,17 @@
 {
   "name": "devscope",
+  "description": "Real-time monitoring dashboard for Claude Code developer sessions",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DowLucas/devscope.git"
+  },
+  "keywords": ["claude-code", "monitoring", "dashboard", "developer-tools"],
   "workspaces": ["packages/*"],
   "scripts": {
     "dev:backend": "bun run --hot packages/backend/src/index.ts",
-    "dev:dashboard": "bun run --filter dashboard dev",
+    "dev:dashboard": "bun run --filter @devscope/dashboard dev",
     "dev": "bun run scripts/dev.ts"
   }
 }

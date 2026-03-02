@@ -12,18 +12,22 @@ const SYSTEM_PROMPT = `You are DevScope AI, an intelligent assistant for a devel
 You have access to tools that query a PostgreSQL database containing developer session data, tool usage metrics, and project activity.
 
 Guidelines:
+- ALWAYS make reasonable assumptions and query data immediately. NEVER ask clarifying questions unless the query is truly impossible to answer.
+- When the time period is unspecified, default to the last 30 days.
+- When the scope is vague (e.g., "who's doing the most?", "what's happening?"), assume the broadest useful interpretation and use the most relevant tool (leaderboard, team health, activity overview, etc.).
 - When the user mentions a developer by name, first use getAllDevelopers to resolve their name to an ID, then use that ID in subsequent queries.
 - Always ground your answers in actual data from the tools. Never make up statistics.
 - Present numbers clearly: use commas for thousands, percentages with 1 decimal place, durations in human-friendly format.
 - When comparing periods, highlight significant changes (>20% delta).
 - If the data is empty or insufficient, say so honestly rather than speculating.
 - Keep responses concise but thorough. Use bullet points for lists of metrics.
-- When asked about trends, include both the direction and magnitude of change.`;
+- When asked about trends, include both the direction and magnitude of change.
+- Prefer showing data and letting the user refine, rather than asking upfront what they want.`;
 
 const QueryState = Annotation.Root({
   question: Annotation<string>,
   conversationHistory: Annotation<Content[]>,
-  intent: Annotation<"needs_data" | "clarification" | "general">,
+  intent: Annotation<"needs_data" | "general">,
   toolCallsQueue: Annotation<Array<{ name: string; args: Record<string, unknown> }>>,
   toolResults: Annotation<Array<{ name: string; result: string }>>,
   iterationCount: Annotation<number>,
@@ -71,16 +75,9 @@ async function classifyIntent(
     };
   }
 
-  // No tool calls — either a general answer or clarification
-  const text = response.text.toLowerCase();
-  const isClarification =
-    text.includes("could you") ||
-    text.includes("can you clarify") ||
-    text.includes("what do you mean") ||
-    text.includes("which developer");
-
+  // No tool calls — general answer
   return {
-    intent: isClarification ? "clarification" : "general",
+    intent: "general",
     answer: response.text,
     inputTokens: state.inputTokens + response.inputTokens,
     outputTokens: state.outputTokens + response.outputTokens,

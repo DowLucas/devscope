@@ -61,7 +61,7 @@ export function SessionTimeline() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.05 }}
                 onClick={() => {
-                  navigate(`/session/${session.id}`);
+                  navigate(`/dashboard/sessions/${session.id}`);
                 }}
                 className={
                   "border rounded-lg p-4 cursor-pointer transition-colors hover:bg-accent/30 " +

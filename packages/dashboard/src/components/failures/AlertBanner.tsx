@@ -28,7 +28,7 @@ export function AlertBanner() {
               {alert.failure_count} times in session{" "}
               <button
                 onClick={() => {
-                  navigate(`/session/${alert.session_id}`);
+                  navigate(`/dashboard/sessions/${alert.session_id}`);
                 }}
                 className="underline hover:no-underline"
               >

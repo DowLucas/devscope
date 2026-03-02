@@ -10,19 +10,19 @@ services:
       target: deps
     command: ["bun", "run", "--hot", "packages/backend/src/index.ts"]
     environment:
-      PORT: "3001"
+      PORT: "6767"
       DATABASE_URL: postgres://devscope:${POSTGRES_PASSWORD:-devscope}@postgres:5432/devscope
       STALE_SESSION_TIMEOUT_MINUTES: "5"
-      GC_API_KEY: ${GC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       AI_DAILY_TOKEN_BUDGET: ${AI_DAILY_TOKEN_BUDGET:-1000000}
-      GC_CORS_ORIGIN: ${GC_CORS_ORIGIN:-http://localhost:5173,http://localhost:3001}
+      GC_CORS_ORIGIN: ${GC_CORS_ORIGIN:-http://localhost:5173,http://localhost:6767}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:5173}
     volumes:
       - ./packages/backend/src:/app/packages/backend/src
       - ./packages/shared/src:/app/packages/shared/src
       - ./packages/backend/tsconfig.json:/app/packages/backend/tsconfig.json
     ports:
-      - "3001:3001"
+      - "6767:6767"
     restart: unless-stopped
 
   # Disable caddy in dev mode — dashboard runs via Vite dev server instead
@@ -36,9 +36,8 @@ services:
       target: deps
     command: ["bun", "run", "--filter", "dashboard", "dev", "--", "--host", "0.0.0.0"]
     environment:
-      VITE_PROXY_TARGET: backend:3001
-      VITE_WS_URL: ws://localhost:3001/ws
-      VITE_GC_API_KEY: ${GC_API_KEY:-}
+      VITE_PROXY_TARGET: backend:6767
+      VITE_WS_URL: ws://localhost:6767/ws
     volumes:
       - ./packages/dashboard/src:/app/packages/dashboard/src
       - ./packages/dashboard/index.html:/app/packages/dashboard/index.html

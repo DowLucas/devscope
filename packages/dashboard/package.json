@@ -1,7 +1,14 @@
 {
-  "name": "dashboard",
+  "name": "@devscope/dashboard",
   "private": true,
   "version": "0.0.0",
+  "description": "React monitoring dashboard for DevScope",
+  "license": "PolyForm-Shield-1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DowLucas/devscope.git",
+    "directory": "packages/dashboard"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,9 +17,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@better-auth/api-key": "^1.5.0",
     "@dagrejs/dagre": "^2.0.4",
+    "@daveyplate/better-auth-ui": "^3.3.15",
     "@devscope/shared": "workspace:*",
     "@xyflow/react": "^12.10.1",
+    "better-auth": "^1.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.575.0",
@@ -22,6 +32,7 @@
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
     "recharts": "^3.7.0",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "wouter": "^3.9.0",
     "zustand": "^5.0.11"

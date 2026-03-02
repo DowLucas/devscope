@@ -34,7 +34,7 @@ export function FailureClustersTable({ data, loading }: FailureClustersTableProp
               key={i}
               className="cursor-pointer hover:bg-accent/50"
               onClick={() => {
-                navigate(`/session/${cluster.session_id}`);
+                navigate(`/dashboard/sessions/${cluster.session_id}`);
               }}
             >
               <TableCell className="font-mono text-sm">{cluster.tool_name}</TableCell>

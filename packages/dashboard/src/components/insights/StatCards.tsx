@@ -1,5 +1,5 @@
 import type { SessionStatsSummary } from "@devscope/shared";
-import { Card, CardContent } from "@/components/ui/card";
+import { MetricCard } from "@/components/ui/metric-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Clock, Calendar, Users, Layers } from "lucide-react";
 
@@ -18,28 +18,18 @@ const STATS = [
 export function StatCards({ data, loading }: StatCardsProps) {
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-      {STATS.map((stat) => {
-        const Icon = stat.icon;
-        return (
-          <Card key={stat.key}>
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="rounded-lg bg-accent p-2">
-                <Icon className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">{stat.label}</p>
-                {loading ? (
-                  <Skeleton className="mt-1 h-6 w-16" />
-                ) : (
-                  <p className="text-lg font-semibold">
-                    {data ? stat.format(data[stat.key]) : "—"}
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+      {STATS.map((stat) => (
+        loading ? (
+          <Skeleton key={stat.key} className="h-[88px] w-full rounded-xl" />
+        ) : (
+          <MetricCard
+            key={stat.key}
+            label={stat.label}
+            value={data ? stat.format(data[stat.key]) : "—"}
+            icon={stat.icon}
+          />
+        )
+      ))}
     </div>
   );
 }

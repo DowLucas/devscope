@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import { sql as Sql } from "bun";
 import type { DevscopeEvent } from "@devscope/shared";
 import type {
   ActivityDataPoint,
@@ -22,7 +23,20 @@ import type {
   ProjectContributor,
   DigestSummary,
   DigestEntry,
+  BurnoutRiskEntry,
+  MinuteActivityPoint,
 } from "@devscope/shared";
+
+/**
+ * Build a safe SQL fragment for WHERE column IN (...) with string IDs.
+ * Bun.sql's `IN (${array})` silently fails — it serializes the JS array
+ * as a single comma-separated string parameter, matching zero rows.
+ * This helper uses Sql.unsafe with proper single-quote escaping.
+ */
+function inList(ids: string[]): ReturnType<typeof Sql.unsafe> {
+  const escaped = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(",");
+  return Sql.unsafe(escaped);
+}
 
 export async function upsertDeveloper(
   sql: SQL,
@@ -61,13 +75,10 @@ export async function endSession(sql: SQL, id: string) {
 }
 
 export async function insertEvent(sql: SQL, event: DevscopeEvent) {
-  // Pass stringified JSON without ::jsonb cast — Bun.sql handles the
-  // parameterisation and PostgreSQL will accept a text value for a jsonb column.
-  // Previously JSON.stringify + ::jsonb double-encoded the payload as a JSONB string.
-  const payloadJson = JSON.stringify(event.payload ?? {});
+  const payload = event.payload ?? {};
   await sql`
     INSERT INTO events (id, session_id, event_type, payload, created_at)
-    VALUES (${event.id}, ${event.sessionId}, ${event.eventType}, ${payloadJson}, ${event.timestamp}::timestamptz)`;
+    VALUES (${event.id}, ${event.sessionId}, ${event.eventType}, ${payload}::jsonb, ${event.timestamp}::timestamptz)`;
 }
 
 export async function getActiveAgents(sql: SQL) {
@@ -91,7 +102,15 @@ export async function getActiveAgents(sql: SQL) {
     ORDER BY e.created_at ASC`;
 }
 
-export async function getActiveSessions(sql: SQL) {
+export async function getActiveSessions(sql: SQL, developerIds?: string[]) {
+  if (developerIds && developerIds.length > 0) {
+    return await sql`
+      SELECT s.*, d.name as developer_name, d.email as developer_email
+      FROM sessions s
+      JOIN developers d ON s.developer_id = d.id
+      WHERE s.status = 'active' AND s.developer_id IN (${inList(developerIds)})
+      ORDER BY s.started_at DESC`;
+  }
   return await sql`
     SELECT s.*, d.name as developer_name, d.email as developer_email
     FROM sessions s
@@ -100,7 +119,15 @@ export async function getActiveSessions(sql: SQL) {
     ORDER BY s.started_at DESC`;
 }
 
-export async function getAllDevelopers(sql: SQL) {
+export async function getAllDevelopers(sql: SQL, developerIds?: string[]) {
+  if (developerIds && developerIds.length > 0) {
+    return await sql`
+      SELECT d.*,
+        (SELECT COUNT(*)::INT FROM sessions WHERE developer_id = d.id AND status = 'active') as active_sessions
+      FROM developers d
+      WHERE d.id IN (${inList(developerIds)})
+      ORDER BY d.last_seen DESC`;
+  }
   return await sql`
     SELECT d.*,
       (SELECT COUNT(*)::INT FROM sessions WHERE developer_id = d.id AND status = 'active') as active_sessions
@@ -108,7 +135,18 @@ export async function getAllDevelopers(sql: SQL) {
     ORDER BY d.last_seen DESC`;
 }
 
-export async function getRecentEvents(sql: SQL, limit: number = 50) {
+export async function getRecentEvents(sql: SQL, limit: number = 50, developerIds?: string[]) {
+  if (developerIds && developerIds.length > 0) {
+    return await sql`
+      SELECT e.*, s.developer_id, s.project_path, s.project_name,
+             d.name as developer_name, d.email as developer_email
+      FROM events e
+      JOIN sessions s ON e.session_id = s.id
+      JOIN developers d ON s.developer_id = d.id
+      WHERE s.developer_id IN (${inList(developerIds)})
+      ORDER BY e.created_at DESC
+      LIMIT ${limit}`;
+  }
   return await sql`
     SELECT e.*, s.developer_id, s.project_path, s.project_name,
            d.name as developer_name, d.email as developer_email
@@ -136,7 +174,21 @@ export async function getStaleActiveSessions(sql: SQL, thresholdMinutes: number)
       ) < NOW() - make_interval(mins => ${thresholdMinutes})`;
 }
 
-export async function getAllSessions(sql: SQL, limit: number = 50) {
+export async function getAllSessions(sql: SQL, limit: number = 50, developerIds?: string[]) {
+  if (developerIds && developerIds.length > 0) {
+    return await sql`
+      SELECT s.*, d.name as developer_name, d.email as developer_email,
+        (SELECT COUNT(*)::INT FROM events WHERE session_id = s.id) as event_count,
+        (SELECT COUNT(*)::INT FROM events
+         WHERE session_id = s.id
+           AND event_type = 'session.start'
+           AND (payload->>'continued')::boolean = true) as context_clear_count
+      FROM sessions s
+      JOIN developers d ON s.developer_id = d.id
+      WHERE s.developer_id IN (${inList(developerIds)})
+      ORDER BY s.started_at DESC
+      LIMIT ${limit}`;
+  }
   return await sql`
     SELECT s.*, d.name as developer_name, d.email as developer_email,
       (SELECT COUNT(*)::INT FROM events WHERE session_id = s.id) as event_count,
@@ -433,6 +485,36 @@ export async function getHourlyDistribution(
     ORDER BY hour ASC`) as HourlyDistributionPoint[];
 }
 
+// --- Minute-level Activity (24h) ---
+
+export async function getActivityPerMinute(
+  sql: SQL,
+  hours: number = 24
+): Promise<MinuteActivityPoint[]> {
+  // Pick a granularity that keeps the data point count reasonable
+  // Use Sql.unsafe for the interval literal since Bun.sql can't parameterize interval values
+  const interval = hours <= 6 ? "1 minute" : hours <= 24 ? "1 minute" : hours <= 168 ? "5 minutes" : hours <= 336 ? "15 minutes" : "1 hour";
+  const ivl = Sql.unsafe(`'${interval}'::INTERVAL`);
+
+  return (await sql`
+    SELECT
+      m.minute::TEXT as minute,
+      COALESCE(COUNT(e.id), 0)::INT as event_count,
+      SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
+      SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls,
+      COUNT(DISTINCT e.session_id)::INT as sessions
+    FROM generate_series(
+      date_trunc('minute', NOW() - make_interval(hours => ${hours})),
+      date_trunc('minute', NOW()),
+      ${ivl}
+    ) AS m(minute)
+    LEFT JOIN events e
+      ON date_trunc('minute', e.created_at) >= m.minute
+      AND date_trunc('minute', e.created_at) < m.minute + ${ivl}
+    GROUP BY m.minute
+    ORDER BY m.minute ASC`) as MinuteActivityPoint[];
+}
+
 // --- Period Comparison ---
 
 export async function getPeriodComparison(
@@ -526,7 +608,7 @@ export async function getDeveloperComparison(
     LEFT JOIN sessions s ON s.developer_id = d.id
       AND s.started_at >= NOW() - make_interval(days => ${days})
     LEFT JOIN events e ON e.session_id = s.id
-    WHERE d.id = ANY(${developerIds})
+    WHERE d.id IN (${inList(developerIds)})
     GROUP BY d.id`) as DeveloperComparisonEntry[];
 }
 
@@ -996,6 +1078,20 @@ export async function generateDigest(
       AND e.created_at >= ${periodStart}::TIMESTAMPTZ AND e.created_at < ${periodEnd}::TIMESTAMPTZ
     GROUP BY tool_name ORDER BY count DESC LIMIT 5`;
 
+  // Compute period in days for burnout/ROI queries
+  const periodDays = Math.max(
+    1,
+    Math.ceil((new Date(periodEnd).getTime() - new Date(periodStart).getTime()) / (1000 * 60 * 60 * 24))
+  );
+
+  const [burnoutRisks, roiEfficiency, projectActivity] = await Promise.all([
+    getBurnoutRiskSignals(sql, periodDays),
+    getAiRoiEfficiency(sql, periodDays),
+    getProjectActivity(sql, undefined, periodDays),
+  ]);
+
+  const totalProjectSessions = projectActivity.reduce((sum, p) => sum + p.session_count, 0);
+
   const summary: DigestSummary = {
     total_sessions: (metrics as any)?.total_sessions ?? 0,
     total_prompts: (metrics as any)?.total_prompts ?? 0,
@@ -1006,12 +1102,25 @@ export async function generateDigest(
     top_developers: (topDevs as any[]).map((d) => ({ name: d.name, prompts: d.prompts })),
     top_projects: (topProjects as any[]).map((p) => ({ name: p.name, events: p.events })),
     notable_failures: (notableFailures as any[]).map((f) => ({ tool_name: f.tool_name, count: f.count })),
+    burnout_risks: burnoutRisks
+      .filter((b) => b.risk_level !== "low")
+      .slice(0, 5)
+      .map((b) => ({ developer_name: b.developer_name, risk_level: b.risk_level, off_hours_ratio: b.off_hours_ratio })),
+    roi: {
+      prompts_per_session: roiEfficiency.prompts_per_session,
+      tool_calls_per_session: roiEfficiency.tool_calls_per_session,
+      sessions_per_developer: roiEfficiency.sessions_per_developer,
+    },
+    project_allocation: projectActivity.slice(0, 5).map((p) => ({
+      project_name: p.project_name,
+      percentage: totalProjectSessions > 0 ? Math.round((p.session_count / totalProjectSessions) * 100) : 0,
+    })),
   };
 
   const id = crypto.randomUUID();
   await sql`
     INSERT INTO digests (id, digest_type, period_start, period_end, summary, generated_at)
-    VALUES (${id}, ${digestType}, ${periodStart}::TIMESTAMPTZ, ${periodEnd}::TIMESTAMPTZ, ${JSON.stringify(summary)}, NOW())`;
+    VALUES (${id}, ${digestType}, ${periodStart}::TIMESTAMPTZ, ${periodEnd}::TIMESTAMPTZ, ${summary}::jsonb, NOW())`;
 
   const [digest] = await sql`SELECT * FROM digests WHERE id = ${id}`;
   return digest as any as DigestEntry;
@@ -1047,4 +1156,155 @@ export async function getExportData(
     default:
       return [];
   }
+}
+
+// --- Burnout Risk Signals ---
+
+export async function getBurnoutRiskSignals(
+  sql: SQL,
+  days: number = 30
+): Promise<BurnoutRiskEntry[]> {
+  const rows = await sql`
+    WITH dev_events AS (
+      SELECT
+        s.developer_id,
+        d.name as developer_name,
+        e.created_at,
+        EXTRACT(DOW FROM e.created_at) as dow,
+        EXTRACT(HOUR FROM e.created_at) as hour
+      FROM events e
+      JOIN sessions s ON e.session_id = s.id
+      JOIN developers d ON s.developer_id = d.id
+      WHERE e.created_at >= NOW() - make_interval(days => ${days})
+    ),
+    dev_stats AS (
+      SELECT
+        developer_id,
+        developer_name,
+        COUNT(*) as total_events,
+        SUM(CASE
+          WHEN dow IN (0, 6) THEN 1
+          ELSE 0
+        END)::INT as weekend_events,
+        SUM(CASE
+          WHEN dow NOT IN (0, 6) AND (hour < 9 OR hour >= 18) THEN 1
+          ELSE 0
+        END)::FLOAT / GREATEST(
+          SUM(CASE WHEN dow NOT IN (0, 6) THEN 1 ELSE 0 END), 1
+        ) as off_hours_ratio,
+        COUNT(DISTINCT created_at::DATE)::FLOAT as active_days
+      FROM dev_events
+      GROUP BY developer_id, developer_name
+    ),
+    prev_stats AS (
+      SELECT
+        s.developer_id,
+        COUNT(DISTINCT s.id)::FLOAT as prev_sessions
+      FROM sessions s
+      WHERE s.started_at >= NOW() - make_interval(days => ${days * 2})
+        AND s.started_at < NOW() - make_interval(days => ${days})
+      GROUP BY s.developer_id
+    ),
+    curr_stats AS (
+      SELECT
+        s.developer_id,
+        COUNT(DISTINCT s.id)::FLOAT as curr_sessions
+      FROM sessions s
+      WHERE s.started_at >= NOW() - make_interval(days => ${days})
+      GROUP BY s.developer_id
+    )
+    SELECT
+      ds.developer_id,
+      ds.developer_name,
+      ROUND(ds.off_hours_ratio::NUMERIC, 3)::FLOAT as off_hours_ratio,
+      ds.weekend_events,
+      ROUND((COALESCE(cs.curr_sessions, 0) / GREATEST(COALESCE(ps.prev_sessions, 1), 1))::NUMERIC, 2)::FLOAT as session_frequency_spike
+    FROM dev_stats ds
+    LEFT JOIN prev_stats ps ON ds.developer_id = ps.developer_id
+    LEFT JOIN curr_stats cs ON ds.developer_id = cs.developer_id
+    WHERE ds.total_events > 0
+    ORDER BY ds.off_hours_ratio DESC`;
+
+  return (rows as any[]).map((r) => {
+    let risk_level: "high" | "medium" | "low" = "low";
+    if (r.off_hours_ratio > 0.4 || r.session_frequency_spike >= 3) {
+      risk_level = "high";
+    } else if (r.off_hours_ratio > 0.25) {
+      risk_level = "medium";
+    }
+
+    return {
+      developer_id: r.developer_id,
+      developer_name: r.developer_name,
+      off_hours_ratio: r.off_hours_ratio,
+      weekend_events: r.weekend_events,
+      session_frequency_spike: r.session_frequency_spike,
+      risk_level,
+    };
+  });
+}
+
+// --- AI ROI Efficiency ---
+
+export async function getAiRoiEfficiency(
+  sql: SQL,
+  days: number = 30
+): Promise<{
+  prompts_per_session: number;
+  tool_calls_per_session: number;
+  sessions_per_developer: number;
+  active_days_per_developer: number;
+  total_sessions: number;
+  total_developers: number;
+}> {
+  const [row] = await sql`
+    SELECT
+      COUNT(DISTINCT s.id)::INT as total_sessions,
+      COUNT(DISTINCT s.developer_id)::INT as total_developers,
+      ROUND(
+        (SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::FLOAT /
+        GREATEST(COUNT(DISTINCT s.id), 1))::NUMERIC, 2
+      )::FLOAT as prompts_per_session,
+      ROUND(
+        (SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::FLOAT /
+        GREATEST(COUNT(DISTINCT s.id), 1))::NUMERIC, 2
+      )::FLOAT as tool_calls_per_session,
+      ROUND(
+        (COUNT(DISTINCT s.id)::FLOAT /
+        GREATEST(COUNT(DISTINCT s.developer_id), 1))::NUMERIC, 2
+      )::FLOAT as sessions_per_developer,
+      ROUND(
+        (COUNT(DISTINCT s.started_at::DATE)::FLOAT /
+        GREATEST(COUNT(DISTINCT s.developer_id), 1))::NUMERIC, 2
+      )::FLOAT as active_days_per_developer
+    FROM sessions s
+    LEFT JOIN events e ON e.session_id = s.id
+    WHERE s.started_at >= NOW() - make_interval(days => ${days})`;
+
+  return {
+    prompts_per_session: (row as any)?.prompts_per_session ?? 0,
+    tool_calls_per_session: (row as any)?.tool_calls_per_session ?? 0,
+    sessions_per_developer: (row as any)?.sessions_per_developer ?? 0,
+    active_days_per_developer: (row as any)?.active_days_per_developer ?? 0,
+    total_sessions: (row as any)?.total_sessions ?? 0,
+    total_developers: (row as any)?.total_developers ?? 0,
+  };
+}
+
+// --- Public Stats (no auth required) ---
+
+export async function getPublicStats(sql: SQL) {
+  const [row] = await sql`
+    SELECT
+      (SELECT COUNT(*)::int FROM developers) AS total_developers,
+      (SELECT COUNT(*)::int FROM sessions) AS total_sessions,
+      (SELECT COUNT(*)::int FROM events) AS total_events,
+      (SELECT COUNT(*)::int FROM sessions WHERE status = 'active') AS active_sessions
+  `;
+  return {
+    totalDevelopers: (row as any)?.total_developers ?? 0,
+    totalSessions: (row as any)?.total_sessions ?? 0,
+    totalEvents: (row as any)?.total_events ?? 0,
+    activeSessions: (row as any)?.active_sessions ?? 0,
+  };
 }

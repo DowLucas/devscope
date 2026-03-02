@@ -34,7 +34,7 @@ export function StuckSessionAlerts({ sessions, loading }: StuckSessionAlertsProp
               key={s.session_id}
               className="cursor-pointer hover:bg-accent/50"
               onClick={() => {
-                navigate(`/session/${s.session_id}`);
+                navigate(`/dashboard/sessions/${s.session_id}`);
               }}
             >
               <TableCell>{s.developer_name}</TableCell>

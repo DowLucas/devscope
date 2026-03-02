@@ -197,6 +197,14 @@ export interface ProjectContributor {
   last_active: string;
 }
 
+export interface MinuteActivityPoint {
+  minute: string; // ISO timestamp truncated to minute
+  event_count: number;
+  prompts: number;
+  tool_calls: number;
+  sessions: number;
+}
+
 export interface DigestEntry {
   id: string;
   digest_type: string;
@@ -216,4 +224,8 @@ export interface DigestSummary {
   top_developers: { name: string; prompts: number }[];
   top_projects: { name: string; events: number }[];
   notable_failures: { tool_name: string; count: number }[];
+  burnout_risks?: { developer_name: string; risk_level: string; off_hours_ratio: number }[];
+  scorecard?: { label: string; value: number; delta_percent: number; status: string }[];
+  roi?: { prompts_per_session: number; tool_calls_per_session: number; sessions_per_developer: number };
+  project_allocation?: { project_name: string; percentage: number }[];
 }

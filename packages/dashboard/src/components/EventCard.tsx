@@ -57,7 +57,7 @@ function getEventSummary(event: DevscopeEvent): string {
     case "tool.fail":
       return String(p.toolName ?? "Unknown tool");
     case "prompt.submit":
-      return `Prompt (${p.promptLength ?? 0} chars)`;
+      return (p.promptText as string) || `Prompt (${p.promptLength ?? 0} chars)`;
     case "session.start":
       return "Started (" + (p.startType ?? "startup") + ")";
     case "session.end":

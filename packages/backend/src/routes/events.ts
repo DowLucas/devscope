@@ -12,6 +12,7 @@ import {
   checkAlertThresholds,
 } from "../db";
 import { broadcast } from "../ws/handler";
+import { autoLinkDeveloperToOrg } from "../services/developerLink";
 
 const eventSchema = z.object({
   id: z.string().min(1).max(200),
@@ -45,6 +46,12 @@ export function eventsRoutes(sql: SQL) {
     const event = c.req.valid("json") as unknown as DevscopeEvent;
 
     await upsertDeveloper(sql, event.developerId, event.developerName, event.developerEmail ?? "");
+
+    // Auto-link plugin developer to the API key owner's org
+    const apiKeyUserId = c.get("apiKeyUserId" as never) as string | undefined;
+    if (apiKeyUserId) {
+      await autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId);
+    }
 
     // Check if this event is reactivating an ended session (e.g. after backend restart)
     const [existingSession] = await sql`SELECT status FROM sessions WHERE id = ${event.sessionId}`;
@@ -108,7 +115,8 @@ export function eventsRoutes(sql: SQL) {
 
   app.get("/recent", async (c) => {
     const limit = clampInt(c.req.query("limit"), 50, 500);
-    const rows = await getRecentEvents(sql, limit);
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    const rows = await getRecentEvents(sql, limit, devIds);
     const events = (rows as any[]).map((row: any) => ({
       id: row.id,
       timestamp: row.created_at,

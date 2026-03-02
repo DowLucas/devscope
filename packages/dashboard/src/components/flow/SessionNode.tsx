@@ -4,6 +4,7 @@ import { navigate } from "wouter/use-browser-location";
 import type { SessionNodeData } from "./flowTypes";
 import type { SessionActivityState } from "./flowTypes";
 import type { PromptEventPayload, AgentEventPayload } from "@devscope/shared";
+import { ShieldOff } from "lucide-react";
 import { ActivityBadge } from "./ActivityBadge";
 import { useDebouncedToolState } from "@/hooks/useDebouncedToolState";
 import { timeAgo } from "@/lib/utils";
@@ -18,6 +19,13 @@ const EVENT_LABELS: Record<string, string> = {
   "agent.start": "Agent spawned",
   "agent.stop": "Agent stopped",
   "response.complete": "Response complete",
+  "notification": "Notification",
+  "compact.pending": "Compacting Context",
+  "task.completed": "Task Completed",
+  "permission.request": "Permission Request",
+  "worktree.create": "Worktree Created",
+  "worktree.remove": "Worktree Removed",
+  "config.change": "Config Changed",
 };
 
 const EVENT_COLORS: Record<string, string> = {
@@ -30,6 +38,13 @@ const EVENT_COLORS: Record<string, string> = {
   "session.start": "text-emerald-400 bg-emerald-500/15",
   "session.end": "text-gray-400 bg-gray-500/15",
   "response.complete": "text-gray-400 bg-gray-500/15",
+  "notification": "text-yellow-400 bg-yellow-500/15",
+  "compact.pending": "text-orange-400 bg-orange-500/15",
+  "task.completed": "text-teal-400 bg-teal-500/15",
+  "permission.request": "text-rose-400 bg-rose-500/15",
+  "worktree.create": "text-indigo-400 bg-indigo-500/15",
+  "worktree.remove": "text-indigo-400 bg-indigo-500/15",
+  "config.change": "text-slate-400 bg-slate-500/15",
 };
 
 const STATE_CONFIG: Record<SessionActivityState, {
@@ -87,6 +102,7 @@ export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
   const { session, developerName, latestEvent, isToolRunning, currentToolName, activityState } = data;
   const projectName = session.projectName ?? "";
   const startedAt = session.startedAt ?? "";
+  const isDangerousMode = session.permissionMode === "dangerously-skip-permissions";
 
   const debounced = useDebouncedToolState(isToolRunning, currentToolName, latestEvent);
 
@@ -108,7 +124,7 @@ export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
       activityColor = EVENT_COLORS["tool.start"];
     } else if (eventType === "prompt.submit") {
       const payload = debounced.displayEvent.payload as PromptEventPayload;
-      activityLabel = `Prompt (${payload.promptLength ?? 0} chars)`;
+      activityLabel = payload.promptText || `Prompt (${payload.promptLength ?? 0} chars)`;
     } else if (eventType === "agent.start" || eventType === "agent.stop") {
       const payload = debounced.displayEvent.payload as AgentEventPayload;
       activityLabel = payload.agentType ?? "agent";
@@ -119,7 +135,7 @@ export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
 
   return (
     <motion.div
-      onClick={() => { navigate(`/session/${session.id}`); }}
+      onClick={() => { navigate(`/dashboard/sessions/${session.id}`); }}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0, borderColor: stateConfig.borderColor }}
       transition={{ type: "spring", stiffness: 500, damping: 35 }}
@@ -130,8 +146,13 @@ export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
 
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-gray-100">
-            {projectName}
+          <div className="flex items-center gap-1 text-sm font-medium text-gray-100">
+            <span className="truncate">{projectName}</span>
+            {isDangerousMode && (
+              <span title="Permissions skipped">
+                <ShieldOff className="h-3.5 w-3.5 shrink-0 text-red-400" />
+              </span>
+            )}
           </div>
           <div className="truncate text-xs text-gray-500">
             {developerName}

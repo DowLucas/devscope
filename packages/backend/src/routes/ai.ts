@@ -227,10 +227,11 @@ export function aiRoutes(sql: SQL) {
     title: z.string().optional(),
     period_start: z.string().optional(),
     period_end: z.string().optional(),
+    persona: z.enum(["manager", "cto", "ceo"]).optional(),
   });
 
   app.post("/reports/generate", requireAi(), zValidator("json", reportSchema), async (c) => {
-    const { report_type, title, period_start, period_end } =
+    const { report_type, title, period_start, period_end, persona } =
       c.req.valid("json");
 
     // Run async — respond immediately with report ID
@@ -239,7 +240,8 @@ export function aiRoutes(sql: SQL) {
       report_type as ReportType,
       title,
       period_start,
-      period_end
+      period_end,
+      persona
     );
 
     broadcast({ type: "ai.report.completed" , data: report });

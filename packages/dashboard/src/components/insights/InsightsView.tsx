@@ -5,15 +5,15 @@ import { DeveloperDrillDown } from "./DeveloperDrillDown";
 
 export function InsightsView() {
   const [, navigate] = useLocation();
-  const [, params] = useRoute("/insights/developer/:id");
+  const [, params] = useRoute("/metrics/developer/:id");
   const selectedDeveloperId = params?.id ?? null;
 
   const selectDeveloper = useCallback((id: string) => {
-    navigate(`/insights/developer/${id}`);
+    navigate(`/dashboard/metrics/developer/${id}`);
   }, [navigate]);
 
   const goBack = useCallback(() => {
-    navigate("/insights");
+    navigate("/dashboard/metrics");
   }, [navigate]);
 
   if (selectedDeveloperId) {

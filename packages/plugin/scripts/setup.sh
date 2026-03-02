@@ -11,8 +11,8 @@ echo "====================="
 echo ""
 
 # Server URL
-read -rp "Server URL [http://localhost:3001]: " url
-url="${url:-http://localhost:3001}"
+read -rp "Server URL [http://localhost:6767]: " url
+url="${url:-http://localhost:6767}"
 # Strip trailing slash
 url="${url%/}"
 

@@ -8,12 +8,12 @@ import { AiReportViewer } from "./reports/AiReportViewer";
 type AiTab = "chat" | "insights" | "reports";
 
 function getTabFromPath(pathname: string): { tab: AiTab; reportId?: string } {
-  if (pathname.startsWith("/ai/insights")) return { tab: "insights" };
-  if (pathname.startsWith("/ai/reports/")) {
-    const reportId = pathname.replace("/ai/reports/", "");
+  if (pathname.startsWith("/assistant/insights")) return { tab: "insights" };
+  if (pathname.startsWith("/assistant/reports/")) {
+    const reportId = pathname.replace("/assistant/reports/", "");
     return { tab: "reports", reportId };
   }
-  if (pathname.startsWith("/ai/reports")) return { tab: "reports" };
+  if (pathname.startsWith("/assistant/reports")) return { tab: "reports" };
   return { tab: "chat" };
 }
 
@@ -28,14 +28,14 @@ export function AiView() {
   const { tab: activeTab, reportId } = getTabFromPath(location);
 
   const handleTabChange = (tab: AiTab) => {
-    const path = tab === "chat" ? "/ai" : `/ai/${tab}`;
+    const path = tab === "chat" ? "/assistant" : `/assistant/${tab}`;
     navigate(path);
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
-        <h2 className="text-lg font-semibold">AI Intelligence</h2>
+        <h2 className="text-lg font-semibold">AI Assistant</h2>
         <div className="flex gap-1 rounded-lg border border-border p-1">
           {TABS.map((tab) => {
             const Icon = tab.icon;

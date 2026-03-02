@@ -17,7 +17,8 @@ export function developersRoutes(sql: SQL) {
   const app = new Hono();
 
   app.get("/", async (c) => {
-    const rows = await getAllDevelopers(sql);
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    const rows = await getAllDevelopers(sql, devIds);
     return c.json((rows as any[]).map(mapDeveloper));
   });
 

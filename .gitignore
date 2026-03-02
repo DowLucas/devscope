@@ -2,6 +2,16 @@ node_modules/
 dist/
 *.db
 .DS_Store
+Thumbs.db
+
+# Environment
 .env
 .env.*
 !.env.production.example
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

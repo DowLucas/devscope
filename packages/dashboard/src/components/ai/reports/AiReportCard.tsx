@@ -30,7 +30,7 @@ export function AiReportCard({ report }: AiReportCardProps) {
         className="hover:bg-accent/5 transition-colors cursor-pointer"
         onClick={() => {
           if (report.status === "completed") {
-            navigate(`/ai/reports/${report.id}`);
+            navigate(`/dashboard/assistant/reports/${report.id}`);
           }
         }}
       >

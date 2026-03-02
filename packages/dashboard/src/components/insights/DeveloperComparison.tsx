@@ -3,6 +3,7 @@ import type { DeveloperComparisonEntry, DeveloperLeaderboardEntry } from "@devsc
 import { useInsightsData } from "@/hooks/useInsightsData";
 import { useDateRange } from "@/hooks/useDateRange";
 import { apiFetch } from "@/lib/api";
+import { ButtonGroupItem } from "@/components/ui/button-group";
 import {
   BarChart,
   Bar,
@@ -51,17 +52,13 @@ export function DeveloperComparison() {
         <p className="text-xs text-muted-foreground mb-2">Select 2+ developers to compare:</p>
         <div className="flex flex-wrap gap-1">
           {(leaderboard.data ?? []).map((dev) => (
-            <button
+            <ButtonGroupItem
               key={dev.id}
+              active={selectedIds.includes(dev.id)}
               onClick={() => toggleDev(dev.id)}
-              className={`px-2 py-1 rounded text-xs transition-colors ${
-                selectedIds.includes(dev.id)
-                  ? "bg-accent text-accent-foreground"
-                  : "bg-muted/50 text-muted-foreground hover:bg-muted"
-              }`}
             >
               {dev.name}
-            </button>
+            </ButtonGroupItem>
           ))}
         </div>
       </div>

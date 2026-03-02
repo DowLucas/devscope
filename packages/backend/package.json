@@ -1,21 +1,33 @@
 {
   "name": "@devscope/backend",
   "version": "0.1.0",
+  "description": "Hono/Bun REST API and WebSocket server for DevScope",
+  "license": "PolyForm-Shield-1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DowLucas/devscope.git",
+    "directory": "packages/backend"
+  },
   "private": true,
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "test": "bun test"
   },
   "dependencies": {
+    "@better-auth/api-key": "^1.5.0",
     "@devscope/shared": "workspace:*",
     "@google/genai": "^1",
     "@hono/zod-validator": "^0.4",
     "@langchain/core": "^0.3",
     "@langchain/langgraph": "^0.2",
+    "better-auth": "^1.5.0",
     "hono": "^4",
+    "resend": "^4",
+    "pg": "^8.19.0",
     "zod": "^3"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/pg": "^8.18.0"
   }
 }

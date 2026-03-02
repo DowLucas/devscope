@@ -22,6 +22,7 @@ const ReportState = Annotation.Root({
   title: Annotation<string>,
   periodStart: Annotation<string | null>,
   periodEnd: Annotation<string | null>,
+  persona: Annotation<string | null>,
   data: Annotation<Record<string, unknown>>,
   outline: Annotation<string>,
   content: Annotation<string>,
@@ -94,6 +95,10 @@ async function generateOutline(
 ): Promise<Partial<ReportStateType>> {
   const dataStr = JSON.stringify(state.data, null, 2).slice(0, 25_000);
 
+  const personaGuidance = state.persona
+    ? `\n\nAudience: ${state.persona === "ceo" ? "CEO — focus on 3-4 top-level KPIs, traffic light status, and one-sentence explanations. Keep it extremely concise." : state.persona === "cto" ? "CTO — include ROI metrics, project allocation, adoption and efficiency data. Board-ready language." : "Engineering Manager — operational focus with team velocity, burnout risk signals, stuck sessions, and failure clusters."}`
+    : "";
+
   const response = await callGemini(
     [
       {
@@ -102,7 +107,7 @@ async function generateOutline(
           {
             text: `You are creating an executive report for DevScope, a developer activity monitoring platform.
 Report type: ${state.reportType}
-Title: ${state.title}
+Title: ${state.title}${personaGuidance}
 
 Based on this data, create a detailed outline for the report. Include section headings, key points for each section, and the most important metrics to highlight.
 
@@ -131,6 +136,10 @@ async function writeReport(
 ): Promise<Partial<ReportStateType>> {
   const dataStr = JSON.stringify(state.data, null, 2).slice(0, 25_000);
 
+  const personaRequirements = state.persona
+    ? `\n- Tailored for ${state.persona === "ceo" ? "a CEO audience: ultra-concise, 3-4 KPIs with status indicators, no technical jargon" : state.persona === "cto" ? "a CTO audience: include AI ROI metrics, project allocation, adoption vs efficiency data, board-ready language" : "an Engineering Manager audience: operational focus, team velocity trends, burnout risk signals, stuck sessions, failure patterns"}`
+    : "";
+
   const response = await callGemini(
     [
       {
@@ -156,7 +165,7 @@ Requirements:
 - End with Action Items
 - Keep the tone professional but accessible
 - Highlight both wins and areas for improvement
-- Total length: 500-1500 words`,
+- Total length: 500-1500 words${personaRequirements}`,
           },
         ],
       },
@@ -197,7 +206,8 @@ export async function runReportWorkflow(
   reportType: ReportType,
   title?: string,
   periodStart?: string,
-  periodEnd?: string
+  periodEnd?: string,
+  persona?: string
 ): Promise<AiReport> {
   const reportTitle =
     title ??
@@ -210,6 +220,7 @@ export async function runReportWorkflow(
     title: reportTitle,
     periodStart: periodStart ?? null,
     periodEnd: periodEnd ?? null,
+    persona: persona ?? null,
     data: {},
     outline: "",
     content: "",

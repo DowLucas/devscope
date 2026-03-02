@@ -30,12 +30,14 @@ export function sessionsRoutes(sql: SQL) {
 
   app.get("/", async (c) => {
     const limit = clampInt(c.req.query("limit"), 50, 500);
-    const rows = await getAllSessions(sql, limit);
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    const rows = await getAllSessions(sql, limit, devIds);
     return c.json((rows as any[]).map(mapSession));
   });
 
   app.get("/active", async (c) => {
-    const sessionsRaw = await getActiveSessions(sql);
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    const sessionsRaw = await getActiveSessions(sql, devIds);
     const sessions = (sessionsRaw as any[]).map(mapSession);
     const agentsRaw = await getActiveAgents(sql);
     const agents = (agentsRaw as any[]).map((row) => ({

@@ -11,12 +11,12 @@
 
     # API reverse proxy
     handle /api/* {
-        reverse_proxy backend:3001
+        reverse_proxy backend:6767
     }
 
     # WebSocket reverse proxy
     handle /ws {
-        reverse_proxy backend:3001
+        reverse_proxy backend:6767
     }
 
     # Static asset caching (Vite content-hashed filenames)

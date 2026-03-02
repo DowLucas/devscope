@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useActivityStore } from "@/stores/activityStore";
-import { apiFetch, wsUrl as buildWsUrl } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 const RECONNECT_BASE_MS = 3000;
 const RECONNECT_MAX_MS = 30000;
@@ -22,8 +22,8 @@ export function useDevscopeSocket() {
       if (isStale()) return;
       const envWsUrl = import.meta.env.VITE_WS_URL;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const baseWsUrl = envWsUrl || protocol + "//" + window.location.host + "/ws";
-      const ws = new WebSocket(buildWsUrl(baseWsUrl));
+      const wsUrl = envWsUrl || protocol + "//" + window.location.host + "/ws";
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {

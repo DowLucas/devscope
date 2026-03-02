@@ -65,7 +65,7 @@ CURL_ARGS=(-s -X POST "${DEVSCOPE_URL}/api/events"
   -o /dev/null)
 
 if [ -n "${DEVSCOPE_API_KEY:-}" ]; then
-  CURL_ARGS+=(-H "Authorization: Bearer ${DEVSCOPE_API_KEY}")
+  CURL_ARGS+=(-H "x-api-key: ${DEVSCOPE_API_KEY}")
 fi
 
 curl "${CURL_ARGS[@]}" 2>/dev/null || true

@@ -10,7 +10,7 @@ if [ -z "${DEVSCOPE_URL:-}" ]; then
     . "$_DS_CONFIG"
   fi
 fi
-DEVSCOPE_URL="${DEVSCOPE_URL:-http://localhost:3001}"
+DEVSCOPE_URL="${DEVSCOPE_URL:-http://localhost:6767}"
 
 # SHA256 hash — works on Linux, macOS, and BSDs
 _ds_sha256() {

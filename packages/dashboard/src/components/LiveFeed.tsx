@@ -18,9 +18,12 @@ import {
   RefreshCw,
   ExternalLink,
 } from "lucide-react";
+import { Link } from "wouter";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { useActivityStore } from "@/stores/activityStore";
+import { useListApiKeys } from "@/components/AuthProvider";
 import { timeAgo } from "@/lib/utils";
 import type { DevscopeEvent } from "@devscope/shared";
 
@@ -216,7 +219,8 @@ function PromptItem({
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
-  const label = `Prompt (${p.promptLength ?? 0} chars)`;
+  const promptText = p.promptText as string | undefined;
+  const label = promptText || `Prompt (${p.promptLength ?? 0} chars)`;
 
   return (
     <TimelineNode
@@ -237,7 +241,7 @@ function PromptItem({
           {event.projectName}
         </Badge>
         <button
-          onClick={() => { navigate(`/session/${event.sessionId}`); }}
+          onClick={() => { navigate(`/dashboard/sessions/${event.sessionId}`); }}
           className="text-muted-foreground hover:text-foreground transition-colors"
           title="View session"
         >
@@ -247,7 +251,7 @@ function PromptItem({
           {timeAgo(event.timestamp)}
         </span>
       </div>
-      <p className="text-sm text-muted-foreground leading-relaxed mt-1 rounded-lg bg-muted/50 border border-border px-3 py-2">
+      <p className="text-sm text-muted-foreground leading-relaxed mt-1 rounded-lg bg-muted/50 border border-border px-3 py-2 line-clamp-3">
         {label}
       </p>
     </TimelineNode>
@@ -634,15 +638,37 @@ function ConfigItem({
 export function LiveFeed() {
   const events = useActivityStore((s) => s.events);
   const feedItems = useMemo(() => buildFeedItems(events), [events]);
+  const { data: apiKeys, isPending: keysLoading } = useListApiKeys();
+
+  const hasApiKeys = keysLoading || (apiKeys && apiKeys.length > 0);
 
   return (
     <div>
       <h2 className="text-lg font-semibold mb-6 text-foreground">Activity</h2>
       {feedItems.length === 0 ? (
-        <div className="text-muted-foreground text-center py-12 text-sm">
-          No activity yet. Start a Claude Code session with the DevScope
-          plugin.
-        </div>
+        !hasApiKeys ? (
+          <Card className="max-w-md mx-auto">
+            <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
+              <Badge variant="outline" className="text-amber-500 border-amber-500/30">
+                Setup Not Complete
+              </Badge>
+              <p className="text-sm text-muted-foreground">
+                Connect the DevScope plugin to start monitoring your Claude Code sessions.
+              </p>
+              <Link
+                href="/onboarding"
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Complete Setup
+              </Link>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="text-muted-foreground text-center py-12 text-sm">
+            No activity yet. Start a Claude Code session with the DevScope
+            plugin.
+          </div>
+        )
       ) : (
         <AnimatePresence mode="popLayout">
           {feedItems.map((item, i) => {
