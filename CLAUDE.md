@@ -98,9 +98,11 @@ Or the one-liner: `bash <(curl -fsSL https://raw.githubusercontent.com/DowLucas/
 **Version bumps are required** for users to get updates. Claude Code caches plugins by version at `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`.
 
 To release:
-1. Bump `version` in the standalone repo's `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`
+1. Bump `version` in **both** `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` (versions must match)
 2. Push to `main`
 3. Users run `claude plugin update devscope` (restart required)
+
+**Both files must be bumped** — `plugin.json` defines the plugin version and `marketplace.json` advertises it. If only one is bumped, `claude plugin update` won't pick up the new code.
 
 ### Useful CLI Commands
 

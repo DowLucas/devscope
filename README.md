@@ -1,9 +1,17 @@
-# DevScope
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="packages/dashboard/public/logo-full.png">
+    <source media="(prefers-color-scheme: light)" srcset="packages/dashboard/public/logo-full.png">
+    <img alt="DevScope" src="packages/dashboard/public/logo-full.png" width="400">
+  </picture>
+</p>
 
-[![License: PolyForm Shield](https://img.shields.io/badge/License-PolyForm%20Shield-purple.svg)](LICENSE)
-[![Cloud](https://img.shields.io/badge/Cloud-devscope.sh-blueviolet)](https://devscope.sh)
-[![GitHub stars](https://img.shields.io/github/stars/DowLucas/devscope)](https://github.com/DowLucas/devscope/stargazers)
-[![Bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun)](https://bun.sh/)
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Shield-purple.svg" alt="License: PolyForm Shield"></a>
+  <a href="https://devscope.sh"><img src="https://img.shields.io/badge/Cloud-devscope.sh-blueviolet" alt="Cloud"></a>
+  <a href="https://github.com/DowLucas/devscope/stargazers"><img src="https://img.shields.io/github/stars/DowLucas/devscope" alt="GitHub stars"></a>
+  <a href="https://bun.sh/"><img src="https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun" alt="Bun"></a>
+</p>
 
 Real-time monitoring dashboard for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) developer sessions. Track what your team is building, catch stuck sessions, and understand how AI-assisted development is being used across your organization.
 

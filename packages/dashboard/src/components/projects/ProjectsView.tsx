@@ -12,7 +12,7 @@ export function ProjectsView() {
   const { days } = useDateRange();
   const overview = useInsightsData<ProjectDetail[]>("projects/overview", undefined, days);
   const [, navigate] = useLocation();
-  const [, params] = useRoute("/projects/detail/:name");
+  const [, params] = useRoute("/detail/:name");
   const selectedProject = params?.name ? decodeURIComponent(params.name) : null;
 
   const selectProject = useCallback((name: string) => {
