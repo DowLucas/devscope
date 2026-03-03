@@ -45,13 +45,15 @@ export async function createSession(
   developerId: string,
   projectPath: string,
   projectName: string,
-  permissionMode: string | null
+  permissionMode: string | null,
+  privacyMode: string | null = null
 ) {
   await sql`
-    INSERT INTO sessions (id, developer_id, project_path, project_name, permission_mode)
-    VALUES (${id}, ${developerId}, ${projectPath}, ${projectName}, ${permissionMode})
+    INSERT INTO sessions (id, developer_id, project_path, project_name, permission_mode, privacy_mode)
+    VALUES (${id}, ${developerId}, ${projectPath}, ${projectName}, ${permissionMode}, ${privacyMode})
     ON CONFLICT(id) DO UPDATE SET
       permission_mode = COALESCE(EXCLUDED.permission_mode, sessions.permission_mode),
+      privacy_mode = COALESCE(EXCLUDED.privacy_mode, sessions.privacy_mode),
       status = 'active',
       ended_at = NULL`;
 }

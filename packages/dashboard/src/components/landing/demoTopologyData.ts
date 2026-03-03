@@ -92,13 +92,13 @@ interface SessionDef {
 }
 
 const sessionDefs: SessionDef[] = [
-  { session: { id: "s1", developerId: "alice", projectPath: "/app/frontend", projectName: "frontend", startedAt: minutesAgo(45), endedAt: null, status: "active", permissionMode: null }, devId: "alice", devName: "Alice Chen" },
-  { session: { id: "s2", developerId: "alice", projectPath: "/app/api", projectName: "api-service", startedAt: minutesAgo(20), endedAt: null, status: "active", permissionMode: null }, devId: "alice", devName: "Alice Chen" },
-  { session: { id: "s3", developerId: "bob", projectPath: "/app/backend", projectName: "backend", startedAt: minutesAgo(30), endedAt: null, status: "active", permissionMode: null }, devId: "bob", devName: "Bob Martinez" },
-  { session: { id: "s4", developerId: "carol", projectPath: "/app/ml", projectName: "ml-pipeline", startedAt: minutesAgo(60), endedAt: null, status: "active", permissionMode: null }, devId: "carol", devName: "Carol Singh" },
-  { session: { id: "s5", developerId: "carol", projectPath: "/app/infra", projectName: "infra", startedAt: minutesAgo(15), endedAt: null, status: "active", permissionMode: null }, devId: "carol", devName: "Carol Singh" },
-  { session: { id: "s6", developerId: "carol", projectPath: "/app/docs", projectName: "docs", startedAt: minutesAgo(8), endedAt: null, status: "active", permissionMode: null }, devId: "carol", devName: "Carol Singh" },
-  { session: { id: "s7", developerId: "dave", projectPath: "/app/mobile", projectName: "mobile-app", startedAt: minutesAgo(25), endedAt: null, status: "active", permissionMode: null }, devId: "dave", devName: "Dave Kim" },
+  { session: { id: "s1", developerId: "alice", projectPath: "/app/frontend", projectName: "frontend", startedAt: minutesAgo(45), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "alice", devName: "Alice Chen" },
+  { session: { id: "s2", developerId: "alice", projectPath: "/app/api", projectName: "api-service", startedAt: minutesAgo(20), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "alice", devName: "Alice Chen" },
+  { session: { id: "s3", developerId: "bob", projectPath: "/app/backend", projectName: "backend", startedAt: minutesAgo(30), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "bob", devName: "Bob Martinez" },
+  { session: { id: "s4", developerId: "carol", projectPath: "/app/ml", projectName: "ml-pipeline", startedAt: minutesAgo(60), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "carol", devName: "Carol Singh" },
+  { session: { id: "s5", developerId: "carol", projectPath: "/app/infra", projectName: "infra", startedAt: minutesAgo(15), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "carol", devName: "Carol Singh" },
+  { session: { id: "s6", developerId: "carol", projectPath: "/app/docs", projectName: "docs", startedAt: minutesAgo(8), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "carol", devName: "Carol Singh" },
+  { session: { id: "s7", developerId: "dave", projectPath: "/app/mobile", projectName: "mobile-app", startedAt: minutesAgo(25), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "dave", devName: "Dave Kim" },
 ];
 
 const agentDefs = [

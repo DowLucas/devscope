@@ -15,6 +15,7 @@ export interface Session {
   endedAt: string | null;
   status: "active" | "ended";
   permissionMode: string | null;
+  privacyMode: string | null;
   currentTitle?: string | null;
 }
 

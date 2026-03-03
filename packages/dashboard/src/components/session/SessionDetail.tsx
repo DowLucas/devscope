@@ -87,12 +87,20 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
                   {session.developerName}
                 </div>
               </div>
-              <Badge
-                variant={session.status === "active" ? "default" : "secondary"}
-                className={session.status === "active" ? "bg-emerald-600" : ""}
-              >
-                {session.status}
-              </Badge>
+              <div className="flex items-center gap-2">
+                {(session as any).privacyMode === "redacted" && (
+                  <Badge variant="outline" className="gap-1 text-amber-400 border-amber-400/30">
+                    <Lock className="h-3 w-3" />
+                    Redacted
+                  </Badge>
+                )}
+                <Badge
+                  variant={session.status === "active" ? "default" : "secondary"}
+                  className={session.status === "active" ? "bg-emerald-600" : ""}
+                >
+                  {session.status}
+                </Badge>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -144,8 +152,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
 
       {titles.length === 0 && data && (data as any).session?.status === "active" && (
         <div className="flex items-center gap-2 rounded-lg bg-muted/30 border border-border px-3 py-2 text-xs text-muted-foreground">
-          <Lock className="h-3.5 w-3.5" />
-          Privacy mode — session title unavailable
+          Session title generating...
         </div>
       )}
 

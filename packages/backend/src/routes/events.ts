@@ -63,9 +63,12 @@ export function eventsRoutes(sql: SQL) {
     const permissionMode = event.eventType === "session.start"
       ? (event.payload as { permissionMode?: string }).permissionMode ?? null
       : null;
+    const privacyMode = event.eventType === "session.start"
+      ? (event.payload as { privacyMode?: string }).privacyMode ?? null
+      : null;
     const shouldCreateOrReactivate = !existingSession || wasEnded || event.eventType === "session.start";
     if (shouldCreateOrReactivate) {
-      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode);
+      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode);
     }
 
     // Track what to broadcast — we emit AFTER insertEvent so that

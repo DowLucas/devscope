@@ -47,6 +47,7 @@ export type EventPayload =
 export interface SessionStartPayload {
   startType: string;
   permissionMode: string;
+  privacyMode?: string;
   continued?: boolean;
   claudeSessionId?: string;
 }
