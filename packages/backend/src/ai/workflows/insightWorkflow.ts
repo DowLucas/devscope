@@ -111,6 +111,7 @@ async function detectAnomalies(
     { temperature: TEMPERATURE.insight }
   );
 
+  const VALID_TYPES = new Set(["anomaly", "trend", "comparison", "recommendation", "coaching"]);
   let insights: DetectedInsight[] = [];
   try {
     const cleaned = response.text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
@@ -118,7 +119,7 @@ async function detectAnomalies(
     if (Array.isArray(parsed)) {
       insights = parsed.filter(
         (i: any) =>
-          i.type && i.severity && i.title && i.narrative
+          i.type && VALID_TYPES.has(i.type) && i.severity && i.title && i.narrative
       );
     }
   } catch {

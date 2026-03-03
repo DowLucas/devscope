@@ -13,13 +13,8 @@ export function csrfMiddleware() {
     }
 
     const path = c.req.path;
-    // Skip for auth routes (Better Auth handles CSRF) and event ingestion (API key auth)
-    if (path.startsWith("/api/auth/") || path.startsWith("/api/events")) {
-      return next();
-    }
-
-    // Skip if request has API key (plugin requests)
-    if (c.req.header("x-api-key")) {
+    // Skip for auth routes (Better Auth handles CSRF) and exact event ingestion endpoint (API key auth)
+    if (path.startsWith("/api/auth/") || path === "/api/events") {
       return next();
     }
 

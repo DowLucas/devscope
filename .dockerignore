@@ -23,6 +23,11 @@ packages/shared/dist
 docker-compose*.yml
 .dockerignore
 
+# Environment files (contain secrets)
+.env
+.env.*
+!.env.production.example
+
 # Docs and misc
 docs
 scripts

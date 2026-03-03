@@ -128,7 +128,7 @@ const FEATURES: Record<Persona, FeaturesContent> = {
       },
       {
         icon: Briefcase,
-        title: "Team Learning Briefings",
+        title: "Team Learning Reports",
         description:
           "AI-generated summaries highlighting team patterns to adopt, anti-patterns to avoid, and skills to develop next.",
       },

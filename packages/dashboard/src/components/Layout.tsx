@@ -1,6 +1,6 @@
 import { type ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Activity, Users, GitBranch, BarChart3, AlertTriangle, FolderOpen, Sparkles, LayoutDashboard, Clock, Settings, LogOut, UsersRound, Mail, Cog, TrendingUp, BookOpen } from "lucide-react";
+import { Activity, Users, GitBranch, BarChart3, AlertTriangle, FolderOpen, Sparkles, Clock, Settings, LogOut, UsersRound, Mail, Cog, TrendingUp, BookOpen } from "lucide-react";
 import { useActivityStore } from "@/stores/activityStore";
 import { authClient } from "@/lib/auth-client";
 import { useTeamStore } from "@/stores/teamStore";
@@ -99,7 +99,6 @@ const BASE_NAV_GROUPS = [
     group: "Intelligence",
     items: [
       { path: "/dashboard/assistant", label: "AI Assistant", icon: Sparkles },
-      { path: "/dashboard/briefings", label: "Briefings", icon: LayoutDashboard },
       { path: "/dashboard/skills", label: "Team Skills", icon: TrendingUp },
       { path: "/dashboard/playbooks", label: "Playbooks", icon: BookOpen },
     ],
@@ -111,7 +110,7 @@ function isActive(location: string, path: string): boolean {
   return location === path || location.startsWith(path + "/");
 }
 
-const WIDE_VIEWS = ["/dashboard/topology", "/dashboard/metrics", "/dashboard/projects", "/dashboard/incidents", "/dashboard/assistant", "/dashboard/briefings", "/dashboard/skills", "/dashboard/playbooks", "/dashboard/account", "/dashboard/team"];
+const WIDE_VIEWS = ["/dashboard/topology", "/dashboard/metrics", "/dashboard/projects", "/dashboard/incidents", "/dashboard/assistant", "/dashboard/skills", "/dashboard/playbooks", "/dashboard/account", "/dashboard/team"];
 
 function useNavGroups() {
   const admin = useTeamStore((s) => s.isAdmin());

@@ -60,7 +60,7 @@ const DEFAULT_FEATURES: readonly Feature[] = [
     icon: Sparkles,
     title: "Shareable Learnings",
     description:
-      "Generate team briefings that highlight what's working, what isn't, and which patterns to adopt or avoid.",
+      "AI-generated reports that highlight what's working, what isn't, and which patterns to adopt or avoid.",
   },
   {
     icon: Terminal,

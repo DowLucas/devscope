@@ -7,13 +7,22 @@ export async function seedDefaultAdmin(sql: SQL): Promise<void> {
   if ((row as any)?.cnt > 0) return;
 
   const email = process.env.DEVSCOPE_ADMIN_EMAIL ?? "admin@devscope.local";
-  const password = process.env.DEVSCOPE_ADMIN_PASSWORD ?? "changeme123!";
   const name = process.env.DEVSCOPE_ADMIN_NAME ?? "Admin";
+  const isProduction = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
+  const password = process.env.DEVSCOPE_ADMIN_PASSWORD;
+  if (!password && isProduction) {
+    console.error("[devscope] FATAL: DEVSCOPE_ADMIN_PASSWORD env var is required in production. Generate one with: openssl rand -base64 32");
+    process.exit(1);
+  }
+  if (!password) {
+    console.warn("[devscope] WARNING: DEVSCOPE_ADMIN_PASSWORD not set — using insecure default. Do NOT use this in production.");
+  }
+  const adminPassword = password ?? "changeme123!";
   const orgName = process.env.DEVSCOPE_ORG_NAME ?? "DevScope";
 
   try {
     // Create admin user via better-auth API
-    const signupRes = await auth.api.signUpEmail({ body: { email, password, name } });
+    const signupRes = await auth.api.signUpEmail({ body: { email, password: adminPassword, name } });
     const userId = signupRes?.user?.id;
     if (!userId) throw new Error("No user ID returned from signup");
     console.log(`[devscope] Default admin seeded (${email})`);

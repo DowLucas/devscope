@@ -155,6 +155,50 @@ export interface Playbook {
   updated_at: string;
 }
 
+// --- Team Skills Types ---
+
+export type TeamSkillStatus = "draft" | "approved" | "active" | "archived";
+
+export interface TeamSkill {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string;
+  trigger_phrases: string[];
+  skill_body: string;
+  source_pattern_ids: string[];
+  source_anti_pattern_ids: string[];
+  version: number;
+  previous_version_id: string | null;
+  generation_context: Record<string, unknown>;
+  status: TeamSkillStatus;
+  approved_by: string | null;
+  approved_at: string | null;
+  effectiveness_score: number | null;
+  adoption_count: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamSkillPatternLink {
+  id: string;
+  skill_id: string;
+  pattern_id: string | null;
+  anti_pattern_id: string | null;
+  link_type: "source_pattern" | "anti_pattern_solution";
+  created_at: string;
+}
+
+export interface TeamSkillStats {
+  total: number;
+  draft: number;
+  approved: number;
+  active: number;
+  archived: number;
+  avg_effectiveness: number | null;
+}
+
 // --- WebSocket message types ---
 
 export type AiWsMessageType =
@@ -162,4 +206,6 @@ export type AiWsMessageType =
   | "ai.report.completed"
   | "ai.pattern.new"
   | "ai.antipattern.new"
-  | "ai.playbook.new";
+  | "ai.playbook.new"
+  | "ai.skill.new"
+  | "ai.skill.updated";

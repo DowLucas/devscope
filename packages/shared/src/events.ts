@@ -79,6 +79,7 @@ export interface AgentEventPayload {
 export interface ResponsePayload {
   responseLength?: number;
   toolsUsed?: string[];
+  responseText?: string;
 }
 
 export interface NotificationPayload {

@@ -3,6 +3,9 @@ import { isAiAvailable } from "../ai/gemini";
 import { runPatternWorkflow } from "../ai/workflows/patternWorkflow";
 import { runAntiPatternWorkflow } from "../ai/workflows/antiPatternWorkflow";
 import { runPlaybookWorkflow } from "../ai/workflows/playbookWorkflow";
+import { runSkillGenerationWorkflow } from "../ai/workflows/skillGenerationWorkflow";
+import { runSkillRefinementWorkflow } from "../ai/workflows/skillRefinementWorkflow";
+import { getTeamSkills } from "../db/teamSkillQueries";
 import { broadcast } from "../ws/handler";
 
 const CHECK_INTERVAL_MS = 60_000;
@@ -80,12 +83,55 @@ export function startPatternAnalysis(sql: SQL) {
         } catch (err) {
           console.error("[pattern-analysis] Playbook generation failed:", err);
         }
+
+        // 4. Weekly team skill generation + refinement
+        try {
+          console.log("[pattern-analysis] Running weekly team skill generation...");
+
+          // Get all organization IDs that have developers
+          const orgs = await sql`
+            SELECT DISTINCT organization_id FROM organization_developer
+            WHERE organization_id IS NOT NULL`;
+
+          for (const org of orgs) {
+            const orgId = (org as any).organization_id;
+            try {
+              // Generate new skills
+              const skills = await runSkillGenerationWorkflow(sql, orgId);
+              console.log(`[pattern-analysis] Generated ${skills.length} skills for org ${orgId}`);
+
+              for (const skill of skills) {
+                broadcast({ type: "ai.skill.new", data: skill });
+              }
+
+              // Refine existing active/approved skills
+              const existingSkills = await getTeamSkills(sql, orgId, { status: "active" });
+              const approvedSkills = await getTeamSkills(sql, orgId, { status: "approved" });
+              const toRefine = [...existingSkills, ...approvedSkills];
+
+              for (const skill of toRefine) {
+                try {
+                  const refined = await runSkillRefinementWorkflow(sql, skill.id, orgId);
+                  if (refined && refined.id !== skill.id) {
+                    broadcast({ type: "ai.skill.updated", data: refined });
+                  }
+                } catch (err) {
+                  console.error(`[pattern-analysis] Skill refinement failed for ${skill.id}:`, err);
+                }
+              }
+            } catch (err) {
+              console.error(`[pattern-analysis] Skill generation failed for org ${orgId}:`, err);
+            }
+          }
+        } catch (err) {
+          console.error("[pattern-analysis] Team skill generation failed:", err);
+        }
       }
     }
   }
 
   g.__gc_pattern_analysis_interval = setInterval(check, CHECK_INTERVAL_MS);
   console.log(
-    `[pattern-analysis] Scheduled daily at hour ${scheduleHour} (patterns + anti-patterns), weekly playbooks on Mondays`
+    `[pattern-analysis] Scheduled daily at hour ${scheduleHour} (patterns + anti-patterns), weekly playbooks + skills on Mondays`
   );
 }

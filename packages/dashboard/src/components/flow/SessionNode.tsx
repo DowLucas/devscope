@@ -4,7 +4,7 @@ import { navigate } from "wouter/use-browser-location";
 import type { SessionNodeData } from "./flowTypes";
 import type { SessionActivityState } from "./flowTypes";
 import type { PromptEventPayload, AgentEventPayload } from "@devscope/shared";
-import { ShieldOff } from "lucide-react";
+import { ShieldOff, Lock } from "lucide-react";
 import { ActivityBadge } from "./ActivityBadge";
 import { useDebouncedToolState } from "@/hooks/useDebouncedToolState";
 import { timeAgo } from "@/lib/utils";
@@ -154,6 +154,16 @@ export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
               </span>
             )}
           </div>
+          {session.currentTitle ? (
+            <div className="truncate text-xs italic text-gray-400">
+              {session.currentTitle}
+            </div>
+          ) : session.status === "active" && !session.currentTitle ? (
+            <div className="flex items-center gap-1 truncate text-xs text-gray-600">
+              <Lock className="h-3 w-3" />
+              <span>Privacy mode</span>
+            </div>
+          ) : null}
           <div className="truncate text-xs text-gray-500">
             {developerName}
           </div>

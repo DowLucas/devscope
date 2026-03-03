@@ -1,8 +1,14 @@
 import { Hono } from "hono";
+import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
 import type { SQL } from "bun";
 import { requireOrgMember, requireOrgAdmin } from "../middleware/orgScope";
 import { getOrgDeveloperStatuses } from "../services/developerStatus";
 import { linkUserToDeveloper } from "../services/developerLink";
+
+const teamSettingsSchema = z.object({
+  inactive_threshold_days: z.number().int().min(1).max(365),
+});
 
 export function teamsRoutes(sql: SQL) {
   const app = new Hono();
@@ -38,16 +44,13 @@ export function teamsRoutes(sql: SQL) {
   });
 
   // PUT /api/teams/settings — update inactivity threshold (admin/owner only)
-  app.put("/settings", requireOrgAdmin(sql), async (c) => {
+  app.put("/settings", requireOrgAdmin(sql), zValidator("json", teamSettingsSchema), async (c) => {
     const session = c.get("session" as never) as any;
     const orgId = session?.activeOrganizationId;
     if (!orgId) return c.json({ error: "No active organization" }, 400);
 
-    const body = await c.req.json();
-    const days = Number(body.inactive_threshold_days);
-    if (!Number.isFinite(days) || days < 1 || days > 365) {
-      return c.json({ error: "inactive_threshold_days must be between 1 and 365" }, 400);
-    }
+    const body = c.req.valid("json");
+    const days = body.inactive_threshold_days;
 
     await sql`
       INSERT INTO organization_settings (organization_id, inactive_threshold_days)

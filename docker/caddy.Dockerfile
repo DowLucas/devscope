@@ -37,6 +37,10 @@ FROM caddy:2-alpine AS production
 COPY docker/Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/packages/dashboard/dist /srv/dashboard
 
+RUN addgroup -S caddy && adduser -S caddy -G caddy && \
+    chown -R caddy:caddy /srv /etc/caddy /data /config
+USER caddy
+
 EXPOSE 80 443
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \

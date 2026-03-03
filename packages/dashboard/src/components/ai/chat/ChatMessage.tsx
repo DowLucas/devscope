@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { User, Sparkles } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import type { AiMessage } from "@devscope/shared";
 
 interface ChatMessageProps {
@@ -45,95 +45,40 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
 function MessageContent({ content }: { content: string }) {
   if (!content) return null;
 
-  // Simple markdown-like rendering for common patterns
-  const lines = content.split("\n");
-  const elements: ReactNode[] = [];
-  let inCodeBlock = false;
-  let codeContent = "";
-  let key = 0;
-
-  for (const line of lines) {
-    if (line.startsWith("```")) {
-      if (inCodeBlock) {
-        elements.push(
-          <pre key={key++} className="bg-background/50 rounded p-2 text-xs overflow-x-auto my-2">
-            <code>{codeContent}</code>
-          </pre>
-        );
-        codeContent = "";
-      }
-      inCodeBlock = !inCodeBlock;
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeContent += (codeContent ? "\n" : "") + line;
-      continue;
-    }
-
-    if (line.startsWith("### ")) {
-      elements.push(<h4 key={key++} className="font-semibold mt-3 mb-1">{line.slice(4)}</h4>);
-    } else if (line.startsWith("## ")) {
-      elements.push(<h3 key={key++} className="font-semibold text-base mt-3 mb-1">{line.slice(3)}</h3>);
-    } else if (line.startsWith("# ")) {
-      elements.push(<h2 key={key++} className="font-bold text-lg mt-3 mb-1">{line.slice(2)}</h2>);
-    } else if (line.startsWith("- ") || line.startsWith("* ")) {
-      elements.push(
-        <div key={key++} className="flex gap-2 ml-2">
-          <span className="text-muted-foreground">•</span>
-          <span><InlineFormat text={line.slice(2)} /></span>
-        </div>
-      );
-    } else if (/^\d+\.\s/.test(line)) {
-      const match = line.match(/^(\d+)\.\s(.+)/);
-      if (match) {
-        elements.push(
-          <div key={key++} className="flex gap-2 ml-2">
-            <span className="text-muted-foreground">{match[1]}.</span>
-            <span><InlineFormat text={match[2]} /></span>
-          </div>
-        );
-      }
-    } else if (line.trim() === "") {
-      elements.push(<div key={key++} className="h-2" />);
-    } else {
-      elements.push(<p key={key++} className="my-1"><InlineFormat text={line} /></p>);
-    }
-  }
-
-  if (inCodeBlock && codeContent) {
-    elements.push(
-      <pre key={key++} className="bg-background/50 rounded p-2 text-xs overflow-x-auto my-2">
-        <code>{codeContent}</code>
-      </pre>
-    );
-  }
-
-  return <>{elements}</>;
-}
-
-function InlineFormat({ text }: { text: string }) {
-  // Bold: **text**
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return (
-    <>
-      {parts.map((part, i) => {
-        if (part.startsWith("**") && part.endsWith("**")) {
-          return <strong key={i}>{part.slice(2, -2)}</strong>;
-        }
-        // Inline code: `text`
-        const codeParts = part.split(/(`[^`]+`)/g);
-        return codeParts.map((cp, j) => {
-          if (cp.startsWith("`") && cp.endsWith("`")) {
+    <ReactMarkdown
+      components={{
+        h1: ({ children }) => <h2 className="text-lg font-bold mt-4 mb-2">{children}</h2>,
+        h2: ({ children }) => <h3 className="text-base font-semibold mt-3 mb-1">{children}</h3>,
+        h3: ({ children }) => <h4 className="text-sm font-semibold mt-2 mb-1">{children}</h4>,
+        p: ({ children }) => <p className="mb-2 leading-relaxed">{children}</p>,
+        ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-1">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1">{children}</ol>,
+        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+        code: ({ className, children, ...props }) => {
+          const isBlock = className?.includes("language-");
+          if (isBlock) {
             return (
-              <code key={`${i}-${j}`} className="bg-background/50 rounded px-1 py-0.5 text-xs">
-                {cp.slice(1, -1)}
-              </code>
+              <pre className="bg-zinc-900 rounded-lg p-3 my-2 overflow-x-auto">
+                <code className="text-sm text-zinc-100 font-mono">{children}</code>
+              </pre>
             );
           }
-          return <span key={`${i}-${j}`}>{cp}</span>;
-        });
-      })}
-    </>
+          return (
+            <code className="bg-zinc-800/50 text-zinc-200 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+              {children}
+            </code>
+          );
+        },
+        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+        blockquote: ({ children }) => (
+          <blockquote className="border-l-2 border-zinc-600 pl-3 italic text-zinc-400 my-2">
+            {children}
+          </blockquote>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
   );
 }

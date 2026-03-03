@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, Clock, Wrench, MessageSquare, User } from "lucide-react";
+import { ArrowLeft, Clock, Wrench, MessageSquare, User, Sparkles, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { SessionTurnCard } from "./SessionTurnCard";
 import { buildTurns } from "@/lib/buildTurns";
-import type { SessionDetail as SessionDetailType } from "@devscope/shared";
+import type { SessionDetail as SessionDetailType, SessionTitle } from "@devscope/shared";
 import type { SessionTurn } from "@devscope/shared";
 import { parseUTC } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
@@ -17,6 +17,7 @@ interface SessionDetailProps {
 export function SessionDetail({ sessionId }: SessionDetailProps) {
   const [data, setData] = useState<SessionDetailType | null>(null);
   const [turns, setTurns] = useState<SessionTurn[]>([]);
+  const [titles, setTitles] = useState<SessionTitle[]>([]);
   const [isSelfView, setIsSelfView] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -31,6 +32,11 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+
+    apiFetch(`/api/sessions/${sessionId}/titles`)
+      .then((r) => r.json())
+      .then((t: SessionTitle[]) => setTitles(t))
+      .catch(() => {});
   }, [sessionId]);
 
   if (loading) {
@@ -114,6 +120,34 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           </CardContent>
         </Card>
       </motion.div>
+
+      {titles.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="flex items-center gap-2 text-sm font-medium mb-3">
+              <Sparkles className="h-4 w-4 text-amber-400" />
+              Session Focus Timeline
+            </h3>
+            <div className="space-y-2">
+              {titles.map((t) => (
+                <div key={t.id} className="flex items-baseline gap-3 text-sm">
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {new Date(t.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <span className="italic text-gray-300">{t.title}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {titles.length === 0 && data && (data as any).session?.status === "active" && (
+        <div className="flex items-center gap-2 rounded-lg bg-muted/30 border border-border px-3 py-2 text-xs text-muted-foreground">
+          <Lock className="h-3.5 w-3.5" />
+          Privacy mode — session title unavailable
+        </div>
+      )}
 
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-muted-foreground">

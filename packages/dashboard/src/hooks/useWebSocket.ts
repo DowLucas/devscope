@@ -81,6 +81,9 @@ export function useDevscopeSocket() {
                 // the next WebSocket reconnect will trigger another developer.update
               });
               break;
+            case "session.title.update":
+              store.updateSessionTitle(msg.data.sessionId, msg.data.title);
+              break;
             case "alert.triggered":
               store.addAlert(msg.data);
               break;

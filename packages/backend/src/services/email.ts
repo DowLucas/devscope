@@ -5,6 +5,15 @@ function escapeHtml(s: string): string {
           .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 interface InviteEmailParams {
   to: string;
   inviterName: string;
@@ -32,6 +41,11 @@ export async function sendVerificationEmail(params: VerificationEmailParams): Pr
     return;
   }
 
+  if (!isSafeUrl(params.url)) {
+    console.warn(`[devscope] Refusing to send verification email — unsafe URL: ${params.url}`);
+    return;
+  }
+
   const from = process.env.RESEND_FROM ?? "DevScope <noreply@devscope.dev>";
   const name = params.name || params.to.split("@")[0];
 
@@ -45,7 +59,7 @@ export async function sendVerificationEmail(params: VerificationEmailParams): Pr
           <h2>Verify your email</h2>
           <p>Hi ${escapeHtml(name)}, thanks for signing up for DevScope.</p>
           <p>Click the button below to verify your email address and get started.</p>
-          <a href="${params.url}"
+          <a href="${escapeHtml(params.url)}"
              style="display: inline-block; padding: 12px 24px; background: #18181b; color: #fff;
                     border-radius: 6px; text-decoration: none; font-weight: 500;">
             Verify Email
@@ -69,6 +83,11 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<void> 
     return;
   }
 
+  if (!isSafeUrl(params.acceptUrl)) {
+    console.warn(`[devscope] Refusing to send invite email — unsafe URL: ${params.acceptUrl}`);
+    return;
+  }
+
   const from = process.env.RESEND_FROM ?? "DevScope <noreply@devscope.dev>";
 
   try {
@@ -82,7 +101,7 @@ export async function sendInviteEmail(params: InviteEmailParams): Promise<void> 
           <p><strong>${escapeHtml(params.inviterName)}</strong> has invited you to join
              <strong>${escapeHtml(params.organizationName)}</strong> as a <strong>${escapeHtml(params.role)}</strong>
              on DevScope.</p>
-          <a href="${params.acceptUrl}"
+          <a href="${escapeHtml(params.acceptUrl)}"
              style="display: inline-block; padding: 12px 24px; background: #18181b; color: #fff;
                     border-radius: 6px; text-decoration: none; font-weight: 500;">
             Accept Invitation

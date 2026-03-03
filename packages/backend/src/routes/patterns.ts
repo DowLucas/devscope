@@ -15,6 +15,9 @@ import { isAiAvailable } from "../ai/gemini";
 import { runPatternWorkflow } from "../ai/workflows/patternWorkflow";
 import { runAntiPatternWorkflow } from "../ai/workflows/antiPatternWorkflow";
 
+const VALID_EFFECTIVENESS = new Set(["effective", "neutral", "ineffective"]);
+const VALID_SEVERITY = new Set(["info", "warning", "critical"]);
+
 export function patternsRoutes(sql: SQL) {
   const app = new Hono();
 
@@ -23,7 +26,11 @@ export function patternsRoutes(sql: SQL) {
   app.get("/", async (c) => {
     const effectiveness = c.req.query("effectiveness");
     const category = c.req.query("category");
-    const limit = Number(c.req.query("limit") ?? 50);
+    const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 50), 1), 500);
+
+    if (effectiveness && !VALID_EFFECTIVENESS.has(effectiveness)) {
+      return c.json({ error: "Invalid effectiveness parameter" }, 400);
+    }
 
     const patterns = await getPatterns(sql, {
       effectiveness: effectiveness || undefined,
@@ -34,7 +41,7 @@ export function patternsRoutes(sql: SQL) {
   });
 
   app.get("/stats", async (c) => {
-    const days = Number(c.req.query("days") ?? 30);
+    const days = Math.min(Math.max(Number(c.req.query("days") ?? 30), 1), 365);
     const stats = await getPatternStats(sql, days);
     return c.json(stats);
   });
@@ -42,7 +49,11 @@ export function patternsRoutes(sql: SQL) {
   app.get("/anti", async (c) => {
     const severity = c.req.query("severity");
     const detection_rule = c.req.query("detection_rule");
-    const limit = Number(c.req.query("limit") ?? 50);
+    const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 50), 1), 500);
+
+    if (severity && !VALID_SEVERITY.has(severity)) {
+      return c.json({ error: "Invalid severity parameter" }, 400);
+    }
 
     const antiPatterns = await getAntiPatterns(sql, {
       severity: severity || undefined,
@@ -53,13 +64,13 @@ export function patternsRoutes(sql: SQL) {
   });
 
   app.get("/anti/stats", async (c) => {
-    const days = Number(c.req.query("days") ?? 30);
+    const days = Math.min(Math.max(Number(c.req.query("days") ?? 30), 1), 365);
     const stats = await getAntiPatternStats(sql, days);
     return c.json(stats);
   });
 
   app.get("/anti/trends", async (c) => {
-    const days = Number(c.req.query("days") ?? 30);
+    const days = Math.min(Math.max(Number(c.req.query("days") ?? 30), 1), 365);
     const trends = await getAntiPatternTrends(sql, days);
     return c.json(trends);
   });

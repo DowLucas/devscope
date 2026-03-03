@@ -3,7 +3,7 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: devscope
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devscope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: devscope
     volumes:
       - gc-pgdata:/var/lib/postgresql/data
@@ -21,13 +21,14 @@ services:
       target: production
     environment:
       PORT: "6767"
-      DATABASE_URL: postgres://devscope:${POSTGRES_PASSWORD:-devscope}@postgres:5432/devscope
+      NODE_ENV: production
+      DATABASE_URL: postgres://devscope:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/devscope
       STALE_SESSION_TIMEOUT_MINUTES: "${STALE_SESSION_TIMEOUT_MINUTES:-5}"
       GC_CORS_ORIGIN: ${GC_CORS_ORIGIN:-}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-devscope-dev-secret-change-in-production} # CHANGE IN PRODUCTION
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://backend:6767}
       DEVSCOPE_ADMIN_EMAIL: ${DEVSCOPE_ADMIN_EMAIL:-admin@devscope.local}
-      DEVSCOPE_ADMIN_PASSWORD: ${DEVSCOPE_ADMIN_PASSWORD:-changeme123!} # CHANGE IN PRODUCTION
+      DEVSCOPE_ADMIN_PASSWORD: ${DEVSCOPE_ADMIN_PASSWORD:?DEVSCOPE_ADMIN_PASSWORD must be set}
       DEVSCOPE_ADMIN_NAME: ${DEVSCOPE_ADMIN_NAME:-Admin}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       AI_DAILY_TOKEN_BUDGET: ${AI_DAILY_TOKEN_BUDGET:-1000000}

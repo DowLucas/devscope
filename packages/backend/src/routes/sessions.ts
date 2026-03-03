@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
-import { getActiveSessions, getActiveAgents, getAllSessions, getSessionDetail } from "../db";
+import { getActiveSessions, getActiveAgents, getAllSessions, getSessionDetail, getSessionTitleHistory } from "../db";
 import { getDeveloperIdForUser } from "../services/developerLink";
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 
@@ -24,6 +24,7 @@ function mapSession(row: any) {
     developerEmail: row.developer_email,
     eventCount: row.event_count,
     contextClearCount: row.context_clear_count ?? 0,
+    currentTitle: row.current_title ?? null,
   };
 }
 
@@ -96,6 +97,30 @@ export function sessionsRoutes(sql: SQL) {
         };
       }),
     });
+  });
+
+  app.get("/:id/titles", async (c) => {
+    const id = c.req.param("id");
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+
+    // Verify session exists and belongs to org
+    const detail = await getSessionDetail(sql, id);
+    if (!detail) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+    if (devIds && devIds.length > 0 && !devIds.includes((detail.session as any).developer_id)) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const titles = await getSessionTitleHistory(sql, id);
+    return c.json(
+      (titles as any[]).map((t) => ({
+        id: t.id,
+        sessionId: t.session_id,
+        title: t.title,
+        generatedAt: t.generated_at,
+      }))
+    );
   });
 
   return app;

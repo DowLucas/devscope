@@ -1,9 +1,83 @@
 import type { SQL } from "bun";
 import { StateGraph, Annotation, END, START } from "@langchain/langgraph";
-import type { Content } from "@google/genai";
-import { callGemini, callGeminiStreaming, TEMPERATURE } from "../gemini";
+import {
+  GoogleGenAI,
+  type Content,
+  type FunctionDeclaration,
+  type GenerateContentConfig,
+} from "@google/genai";
+import { TEMPERATURE, DEFAULT_MODEL, isAiAvailable } from "../gemini";
 import { getToolDeclarations, findTool } from "../tools";
 import { recordTokenUsage } from "../../db";
+
+/**
+ * Internal Gemini caller that supports systemInstruction via the SDK's
+ * dedicated field, preventing prompt-injection override of system prompts.
+ */
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const geminiClient = GEMINI_API_KEY
+  ? new GoogleGenAI({ apiKey: GEMINI_API_KEY })
+  : null;
+
+interface GeminiCallResult {
+  text: string;
+  functionCalls: Array<{ name: string; args: Record<string, unknown> }>;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+async function callGeminiWithSystem(
+  contents: Content[],
+  systemInstruction: string,
+  tools?: FunctionDeclaration[],
+  config?: { temperature?: number; model?: string; maxOutputTokens?: number }
+): Promise<GeminiCallResult> {
+  if (!geminiClient) {
+    throw new Error("AI features unavailable: GEMINI_API_KEY not configured");
+  }
+
+  const model = config?.model ?? DEFAULT_MODEL;
+
+  const generateConfig: GenerateContentConfig = {
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    temperature: config?.temperature ?? TEMPERATURE.query,
+    maxOutputTokens: config?.maxOutputTokens ?? 8192,
+  };
+
+  if (tools && tools.length > 0) {
+    generateConfig.tools = [{ functionDeclarations: tools }];
+  }
+
+  const response = await geminiClient.models.generateContent({
+    model,
+    contents,
+    config: generateConfig,
+  });
+
+  const candidate = response.candidates?.[0];
+  const parts = candidate?.content?.parts ?? [];
+
+  const text = parts
+    .filter((p) => p.text)
+    .map((p) => p.text)
+    .join("");
+
+  const functionCalls = parts
+    .filter((p) => p.functionCall)
+    .map((p) => ({
+      name: p.functionCall!.name!,
+      args: (p.functionCall!.args as Record<string, unknown>) ?? {},
+    }));
+
+  const usage = response.usageMetadata;
+
+  return {
+    text,
+    functionCalls,
+    inputTokens: usage?.promptTokenCount ?? 0,
+    outputTokens: usage?.candidatesTokenCount ?? 0,
+  };
+}
 
 const MAX_TOOL_ITERATIONS = 5;
 const MAX_TOTAL_TOOL_CALLS = 10;
@@ -40,13 +114,11 @@ const QueryState = Annotation.Root({
 
 type QueryStateType = typeof QueryState.State;
 
-function buildContentsWithSystem(
+function buildContents(
   history: Content[],
   userMessage: string
 ): Content[] {
   return [
-    { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
-    { role: "model", parts: [{ text: "Understood. I'm DevScope AI, ready to help analyze developer activity data." }] },
     ...history,
     { role: "user", parts: [{ text: userMessage }] },
   ];
@@ -55,12 +127,12 @@ function buildContentsWithSystem(
 async function classifyIntent(
   state: QueryStateType
 ): Promise<Partial<QueryStateType>> {
-  const contents = buildContentsWithSystem(
+  const contents = buildContents(
     state.conversationHistory,
     state.question
   );
 
-  const response = await callGemini(contents, getToolDeclarations(), {
+  const response = await callGeminiWithSystem(contents, SYSTEM_PROMPT, getToolDeclarations(), {
     temperature: TEMPERATURE.query,
   });
 
@@ -146,7 +218,7 @@ async function shouldContinue(
   }));
 
   const contents: Content[] = [
-    ...buildContentsWithSystem(state.conversationHistory, state.question),
+    ...buildContents(state.conversationHistory, state.question),
     {
       role: "model",
       parts: state.toolResults.map((tr) => ({
@@ -156,7 +228,7 @@ async function shouldContinue(
     { role: "user", parts: toolResultParts },
   ];
 
-  const response = await callGemini(contents, getToolDeclarations(), {
+  const response = await callGeminiWithSystem(contents, SYSTEM_PROMPT, getToolDeclarations(), {
     temperature: TEMPERATURE.query,
   });
 
@@ -300,9 +372,10 @@ export async function runQueryWorkflowStreaming(
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
       } catch (err) {
+        console.error("[devscope] AI chat error:", err);
         controller.enqueue(
           encoder.encode(
-            `data: ${JSON.stringify({ type: "error", content: String(err) })}\n\n`
+            `data: ${JSON.stringify({ type: "error", content: "An error occurred while processing your request. Please try again." })}\n\n`
           )
         );
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));

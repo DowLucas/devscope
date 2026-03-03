@@ -73,6 +73,9 @@ export const toolRegistry: ToolDefinition[] = [
       },
     },
     execute: async (sql, args, developerIds) => {
+      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
+        return JSON.stringify({ error: "Invalid developer ID" });
+      }
       const result = await getDeveloperActivityOverTime(
         sql,
         args.developerId as string | undefined,
@@ -102,6 +105,9 @@ export const toolRegistry: ToolDefinition[] = [
       },
     },
     execute: async (sql, args, developerIds) => {
+      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
+        return JSON.stringify({ error: "Invalid developer ID" });
+      }
       const result = await getToolUsageBreakdown(
         sql,
         args.developerId as string | undefined,
@@ -131,6 +137,9 @@ export const toolRegistry: ToolDefinition[] = [
       },
     },
     execute: async (sql, args, developerIds) => {
+      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
+        return JSON.stringify({ error: "Invalid developer ID" });
+      }
       const result = await getSessionStats(
         sql,
         args.developerId as string | undefined,
@@ -160,6 +169,9 @@ export const toolRegistry: ToolDefinition[] = [
       },
     },
     execute: async (sql, args, developerIds) => {
+      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
+        return JSON.stringify({ error: "Invalid developer ID" });
+      }
       const result = await getSessionStatsSummary(
         sql,
         args.developerId as string | undefined,
@@ -213,6 +225,9 @@ export const toolRegistry: ToolDefinition[] = [
       },
     },
     execute: async (sql, args, developerIds) => {
+      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
+        return JSON.stringify({ error: "Invalid developer ID" });
+      }
       const result = await getHourlyDistribution(
         sql,
         args.developerId as string | undefined,
@@ -243,6 +258,9 @@ export const toolRegistry: ToolDefinition[] = [
       },
     },
     execute: async (sql, args, developerIds) => {
+      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
+        return JSON.stringify({ error: "Invalid developer ID" });
+      }
       const result = await getPeriodComparison(
         sql,
         clampDays(args.days as number | undefined),
@@ -272,6 +290,9 @@ export const toolRegistry: ToolDefinition[] = [
       },
     },
     execute: async (sql, args, developerIds) => {
+      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
+        return JSON.stringify({ error: "Invalid developer ID" });
+      }
       const result = await getToolFailureRates(
         sql,
         clampDays(args.days as number | undefined),

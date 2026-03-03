@@ -458,61 +458,82 @@ export async function getProjectActivity(
   if (developerId) {
     return (await sql`
       SELECT
-        s.project_name,
-        s.project_path,
-        COUNT(DISTINCT s.id)::INT as session_count,
-        COUNT(e.id)::INT as event_count,
-        ROUND((SUM(
+        ss.project_name,
+        ss.project_path,
+        COUNT(*)::INT as session_count,
+        SUM(ss.event_count)::INT as event_count,
+        ROUND(SUM(ss.duration_min)::NUMERIC, 1)::FLOAT as total_minutes
+      FROM (
+        SELECT
+          s.id,
+          s.project_name,
+          s.project_path,
+          COUNT(e.id)::INT as event_count,
           CASE WHEN s.ended_at IS NOT NULL
             THEN EXTRACT(EPOCH FROM (s.ended_at - s.started_at)) / 60
             ELSE 0
-          END
-        ) / GREATEST(COUNT(DISTINCT s.id), 1))::NUMERIC, 1)::FLOAT as total_minutes
-      FROM sessions s
-      LEFT JOIN events e ON e.session_id = s.id
-      WHERE s.started_at >= NOW() - make_interval(days => ${days})
-        AND s.developer_id = ${developerId}
-      GROUP BY s.project_name, s.project_path
+          END as duration_min
+        FROM sessions s
+        LEFT JOIN events e ON e.session_id = s.id
+        WHERE s.started_at >= NOW() - make_interval(days => ${days})
+          AND s.developer_id = ${developerId}
+        GROUP BY s.id
+      ) ss
+      GROUP BY ss.project_name, ss.project_path
       ORDER BY event_count DESC
       LIMIT 10`) as ProjectActivityDataPoint[];
   }
   if (developerIds && developerIds.length > 0) {
     return (await sql`
       SELECT
-        s.project_name,
-        s.project_path,
-        COUNT(DISTINCT s.id)::INT as session_count,
-        COUNT(e.id)::INT as event_count,
-        ROUND((SUM(
+        ss.project_name,
+        ss.project_path,
+        COUNT(*)::INT as session_count,
+        SUM(ss.event_count)::INT as event_count,
+        ROUND(SUM(ss.duration_min)::NUMERIC, 1)::FLOAT as total_minutes
+      FROM (
+        SELECT
+          s.id,
+          s.project_name,
+          s.project_path,
+          COUNT(e.id)::INT as event_count,
           CASE WHEN s.ended_at IS NOT NULL
             THEN EXTRACT(EPOCH FROM (s.ended_at - s.started_at)) / 60
             ELSE 0
-          END
-        ) / GREATEST(COUNT(DISTINCT s.id), 1))::NUMERIC, 1)::FLOAT as total_minutes
-      FROM sessions s
-      LEFT JOIN events e ON e.session_id = s.id
-      WHERE s.started_at >= NOW() - make_interval(days => ${days})
-        AND s.developer_id IN (${inList(developerIds)})
-      GROUP BY s.project_name, s.project_path
+          END as duration_min
+        FROM sessions s
+        LEFT JOIN events e ON e.session_id = s.id
+        WHERE s.started_at >= NOW() - make_interval(days => ${days})
+          AND s.developer_id IN (${inList(developerIds)})
+        GROUP BY s.id
+      ) ss
+      GROUP BY ss.project_name, ss.project_path
       ORDER BY event_count DESC
       LIMIT 10`) as ProjectActivityDataPoint[];
   }
   return (await sql`
     SELECT
-      s.project_name,
-      s.project_path,
-      COUNT(DISTINCT s.id)::INT as session_count,
-      COUNT(e.id)::INT as event_count,
-      ROUND((SUM(
+      ss.project_name,
+      ss.project_path,
+      COUNT(*)::INT as session_count,
+      SUM(ss.event_count)::INT as event_count,
+      ROUND(SUM(ss.duration_min)::NUMERIC, 1)::FLOAT as total_minutes
+    FROM (
+      SELECT
+        s.id,
+        s.project_name,
+        s.project_path,
+        COUNT(e.id)::INT as event_count,
         CASE WHEN s.ended_at IS NOT NULL
           THEN EXTRACT(EPOCH FROM (s.ended_at - s.started_at)) / 60
           ELSE 0
-        END
-      ) / GREATEST(COUNT(DISTINCT s.id), 1))::NUMERIC, 1)::FLOAT as total_minutes
-    FROM sessions s
-    LEFT JOIN events e ON e.session_id = s.id
-    WHERE s.started_at >= NOW() - make_interval(days => ${days})
-    GROUP BY s.project_name, s.project_path
+        END as duration_min
+      FROM sessions s
+      LEFT JOIN events e ON e.session_id = s.id
+      WHERE s.started_at >= NOW() - make_interval(days => ${days})
+      GROUP BY s.id
+    ) ss
+    GROUP BY ss.project_name, ss.project_path
     ORDER BY event_count DESC
     LIMIT 10`) as ProjectActivityDataPoint[];
 }
@@ -886,21 +907,38 @@ export async function updateAlertRule(
   updates: Partial<Omit<AlertRule, "id" | "created_at">>,
   orgId?: string
 ) {
-  const orgFilter = orgId ? Sql.unsafe(` AND organization_id = '${orgId.replace(/'/g, "''")}'`) : Sql.unsafe("");
-  if (updates.rule_type !== undefined) {
-    await sql`UPDATE alert_rules SET rule_type = ${updates.rule_type} WHERE id = ${id} ${orgFilter}`;
-  }
-  if (updates.threshold !== undefined) {
-    await sql`UPDATE alert_rules SET threshold = ${updates.threshold} WHERE id = ${id} ${orgFilter}`;
-  }
-  if (updates.window_minutes !== undefined) {
-    await sql`UPDATE alert_rules SET window_minutes = ${updates.window_minutes} WHERE id = ${id} ${orgFilter}`;
-  }
-  if (updates.tool_name !== undefined) {
-    await sql`UPDATE alert_rules SET tool_name = ${updates.tool_name} WHERE id = ${id} ${orgFilter}`;
-  }
-  if (updates.enabled !== undefined) {
-    await sql`UPDATE alert_rules SET enabled = ${updates.enabled} WHERE id = ${id} ${orgFilter}`;
+  if (orgId) {
+    if (updates.rule_type !== undefined) {
+      await sql`UPDATE alert_rules SET rule_type = ${updates.rule_type} WHERE id = ${id} AND organization_id = ${orgId}`;
+    }
+    if (updates.threshold !== undefined) {
+      await sql`UPDATE alert_rules SET threshold = ${updates.threshold} WHERE id = ${id} AND organization_id = ${orgId}`;
+    }
+    if (updates.window_minutes !== undefined) {
+      await sql`UPDATE alert_rules SET window_minutes = ${updates.window_minutes} WHERE id = ${id} AND organization_id = ${orgId}`;
+    }
+    if (updates.tool_name !== undefined) {
+      await sql`UPDATE alert_rules SET tool_name = ${updates.tool_name} WHERE id = ${id} AND organization_id = ${orgId}`;
+    }
+    if (updates.enabled !== undefined) {
+      await sql`UPDATE alert_rules SET enabled = ${updates.enabled} WHERE id = ${id} AND organization_id = ${orgId}`;
+    }
+  } else {
+    if (updates.rule_type !== undefined) {
+      await sql`UPDATE alert_rules SET rule_type = ${updates.rule_type} WHERE id = ${id}`;
+    }
+    if (updates.threshold !== undefined) {
+      await sql`UPDATE alert_rules SET threshold = ${updates.threshold} WHERE id = ${id}`;
+    }
+    if (updates.window_minutes !== undefined) {
+      await sql`UPDATE alert_rules SET window_minutes = ${updates.window_minutes} WHERE id = ${id}`;
+    }
+    if (updates.tool_name !== undefined) {
+      await sql`UPDATE alert_rules SET tool_name = ${updates.tool_name} WHERE id = ${id}`;
+    }
+    if (updates.enabled !== undefined) {
+      await sql`UPDATE alert_rules SET enabled = ${updates.enabled} WHERE id = ${id}`;
+    }
   }
 }
 
@@ -1341,9 +1379,10 @@ export async function generateDigest(
   const id = crypto.randomUUID();
   await sql`
     INSERT INTO digests (id, digest_type, period_start, period_end, summary, generated_at)
-    VALUES (${id}, ${digestType}, ${periodStart}::TIMESTAMPTZ, ${periodEnd}::TIMESTAMPTZ, ${summary}::jsonb, NOW())`;
+    VALUES (${id}, ${digestType}, ${periodStart}::TIMESTAMPTZ, ${periodEnd}::TIMESTAMPTZ, ${summary}::jsonb, NOW())
+    ON CONFLICT (digest_type, period_start) DO UPDATE SET summary = ${summary}::jsonb, generated_at = NOW()`;
 
-  const [digest] = await sql`SELECT * FROM digests WHERE id = ${id}`;
+  const [digest] = await sql`SELECT * FROM digests WHERE digest_type = ${digestType} AND period_start = ${periodStart}::TIMESTAMPTZ`;
   return digest as any as DigestEntry;
 }
 
@@ -1478,4 +1517,82 @@ export async function getPublicStats(sql: SQL) {
     totalEvents: (row as any)?.total_events ?? 0,
     activeSessions: (row as any)?.active_sessions ?? 0,
   };
+}
+
+// --- Session Titles ---
+
+export async function getSessionsNeedingTitles(
+  sql: SQL,
+  intervalMinutes: number,
+  developerIds?: string[]
+) {
+  if (developerIds && developerIds.length > 0) {
+    return await sql`
+      SELECT DISTINCT s.id, s.developer_id, s.project_name, s.current_title
+      FROM sessions s
+      INNER JOIN events e ON e.session_id = s.id
+      WHERE s.status = 'active'
+        AND s.developer_id IN (${inList(developerIds)})
+        AND e.event_type = 'prompt.submit'
+        AND e.payload ? 'promptText'
+        AND (
+          s.current_title IS NULL
+          OR NOT EXISTS (
+            SELECT 1 FROM session_titles st
+            WHERE st.session_id = s.id
+              AND st.generated_at > NOW() - make_interval(mins => ${intervalMinutes})
+          )
+        )`;
+  }
+  return await sql`
+    SELECT DISTINCT s.id, s.developer_id, s.project_name, s.current_title
+    FROM sessions s
+    INNER JOIN events e ON e.session_id = s.id
+    WHERE s.status = 'active'
+      AND e.event_type = 'prompt.submit'
+      AND e.payload ? 'promptText'
+      AND (
+        s.current_title IS NULL
+        OR NOT EXISTS (
+          SELECT 1 FROM session_titles st
+          WHERE st.session_id = s.id
+            AND st.generated_at > NOW() - make_interval(mins => ${intervalMinutes})
+        )
+      )`;
+}
+
+export async function getSessionEventsForTitle(
+  sql: SQL,
+  sessionId: string,
+  limit: number = 30
+) {
+  return await sql`
+    SELECT id, event_type, payload, created_at
+    FROM events
+    WHERE session_id = ${sessionId}
+    ORDER BY created_at DESC
+    LIMIT ${limit}`;
+}
+
+export async function saveSessionTitle(
+  sql: SQL,
+  sessionId: string,
+  title: string,
+  inputTokens: number,
+  outputTokens: number
+) {
+  const id = crypto.randomUUID();
+  await sql`
+    INSERT INTO session_titles (id, session_id, title, input_tokens, output_tokens)
+    VALUES (${id}, ${sessionId}, ${title}, ${inputTokens}, ${outputTokens})`;
+  await sql`
+    UPDATE sessions SET current_title = ${title} WHERE id = ${sessionId}`;
+}
+
+export async function getSessionTitleHistory(sql: SQL, sessionId: string) {
+  return await sql`
+    SELECT id, session_id, title, generated_at
+    FROM session_titles
+    WHERE session_id = ${sessionId}
+    ORDER BY generated_at ASC`;
 }

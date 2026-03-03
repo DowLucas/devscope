@@ -1,5 +1,5 @@
 /**
- * Strips opt-in sensitive fields (promptText, toolInput) from event payloads.
+ * Strips opt-in sensitive fields (promptText, toolInput, responseText) from event payloads.
  *
  * These fields are only sent when a developer opts in via DEVSCOPE_SHARE_DETAILS.
  * Even when stored, they should only be visible to the developer themselves —
@@ -12,6 +12,7 @@ export function stripSensitivePayload(payload: Record<string, unknown>): Record<
   const stripped = { ...payload };
   delete stripped.promptText;
   delete stripped.toolInput;
+  delete stripped.responseText;
   return stripped;
 }
 

@@ -8,12 +8,12 @@ import { AiReportViewer } from "./reports/AiReportViewer";
 type AiTab = "chat" | "insights" | "reports";
 
 function getTabFromPath(pathname: string): { tab: AiTab; reportId?: string } {
-  if (pathname.startsWith("/assistant/insights")) return { tab: "insights" };
-  if (pathname.startsWith("/assistant/reports/")) {
-    const reportId = pathname.replace("/assistant/reports/", "");
+  if (pathname.startsWith("/dashboard/assistant/insights")) return { tab: "insights" };
+  if (pathname.startsWith("/dashboard/assistant/reports/")) {
+    const reportId = pathname.replace("/dashboard/assistant/reports/", "");
     return { tab: "reports", reportId };
   }
-  if (pathname.startsWith("/assistant/reports")) return { tab: "reports" };
+  if (pathname.startsWith("/dashboard/assistant/reports")) return { tab: "reports" };
   return { tab: "chat" };
 }
 
@@ -28,7 +28,7 @@ export function AiView() {
   const { tab: activeTab, reportId } = getTabFromPath(location);
 
   const handleTabChange = (tab: AiTab) => {
-    const path = tab === "chat" ? "/assistant" : `/assistant/${tab}`;
+    const path = tab === "chat" ? "/dashboard/assistant" : `/dashboard/assistant/${tab}`;
     navigate(path);
   };
 

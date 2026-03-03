@@ -8,6 +8,7 @@ import { runInsightWorkflow } from "../ai/workflows/insightWorkflow";
 import { runReportWorkflow } from "../ai/workflows/reportWorkflow";
 import {
   createConversation,
+  getConversation,
   getConversations,
   getConversationMessages,
   deleteConversation,
@@ -54,7 +55,8 @@ export function aiRoutes(sql: SQL) {
           503
         );
       }
-      const clientKey = c.req.header("x-forwarded-for") ?? "default";
+      const session = c.get("session" as never) as any;
+      const clientKey = session?.user?.id ?? c.req.header("x-forwarded-for") ?? "default";
       if (!checkRateLimit(clientKey)) {
         return c.json({ error: "Rate limit exceeded. Max 20 AI requests/minute." }, 429);
       }
@@ -85,7 +87,13 @@ export function aiRoutes(sql: SQL) {
 
     // Get or create conversation
     let conversationId = conversation_id;
-    if (!conversationId) {
+    if (conversationId) {
+      // Verify the user owns this conversation before appending to it
+      const conv = await getConversation(sql, conversationId);
+      if (!conv || (conv as any).user_id !== userId) {
+        return c.json({ error: "Conversation not found" }, 404);
+      }
+    } else {
       const conv = await createConversation(
         sql,
         question.slice(0, 100),
@@ -183,6 +191,15 @@ export function aiRoutes(sql: SQL) {
 
   app.get("/chat/conversations/:id", async (c) => {
     const id = c.req.param("id");
+    const user = c.get("user" as never) as any;
+    const userId = user?.id;
+
+    // Verify the user owns this conversation before returning messages
+    const conv = await getConversation(sql, id);
+    if (!conv || (conv as any).user_id !== userId) {
+      return c.json({ error: "Conversation not found" }, 404);
+    }
+
     const messages = await getConversationMessages(sql, id);
     return c.json(messages);
   });

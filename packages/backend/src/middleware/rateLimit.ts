@@ -25,7 +25,11 @@ function getClientIp(c: Context): string {
   const xff = c.req.header("x-forwarded-for");
   if (xff) {
     const parts = xff.split(",").map(s => s.trim());
-    return parts[parts.length - 1] || "unknown";
+    // Behind one trusted proxy (Caddy), the client IP is second-to-last
+    // If only one entry, that's the client
+    const trustedProxies = 1;
+    const clientIndex = Math.max(0, parts.length - 1 - trustedProxies);
+    return parts[clientIndex] || "unknown";
   }
   return c.req.header("x-real-ip") || "unknown";
 }

@@ -19,11 +19,12 @@ import { startStaleSessionCleanup } from "./jobs/cleanupStaleSessions";
 import { startDigestGeneration } from "./jobs/digestGeneration";
 import { startAiInsightGeneration } from "./jobs/aiInsights";
 import { startPatternAnalysis } from "./jobs/patternAnalysis";
+import { startSessionTitleGeneration } from "./jobs/sessionTitleGeneration";
 import { aiRoutes } from "./routes/ai";
-import { reportsRoutes } from "./routes/reports";
 import { patternsRoutes } from "./routes/patterns";
 import { skillsRoutes } from "./routes/skills";
 import { playbooksRoutes } from "./routes/playbooks";
+import { teamSkillsRoutes } from "./routes/teamSkills";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
@@ -35,13 +36,15 @@ const sql = await initializeDatabase();
 // Refuse to start with default secrets in production
 const isProduction = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
 if (isProduction) {
+  const secret = process.env.BETTER_AUTH_SECRET;
   const dangerousDefaults = ["devscope-dev-secret-change-in-production", "changeme", "changeme123!"];
-  if (dangerousDefaults.includes(process.env.BETTER_AUTH_SECRET ?? "")) {
-    console.error("[devscope] FATAL: BETTER_AUTH_SECRET is set to a default value. Set a secure random secret in production.");
+  if (!secret || dangerousDefaults.includes(secret)) {
+    console.error("[devscope] FATAL: BETTER_AUTH_SECRET is not set or uses a default value. Set a strong random secret.");
     process.exit(1);
   }
-  if (dangerousDefaults.includes(process.env.DEVSCOPE_ADMIN_PASSWORD ?? "")) {
-    console.error("[devscope] FATAL: DEVSCOPE_ADMIN_PASSWORD is set to a default value. Set a secure password in production.");
+  const adminPassword = process.env.DEVSCOPE_ADMIN_PASSWORD;
+  if (!adminPassword || dangerousDefaults.includes(adminPassword)) {
+    console.error("[devscope] FATAL: DEVSCOPE_ADMIN_PASSWORD is not set or uses a default value. Set a secure password in production.");
     process.exit(1);
   }
 }
@@ -51,6 +54,7 @@ startStaleSessionCleanup(sql);
 startDigestGeneration(sql);
 startAiInsightGeneration(sql);
 startPatternAnalysis(sql);
+startSessionTitleGeneration(sql);
 
 // Seed a default alert rule if none exist
 const [existingRules] = await sql`SELECT COUNT(*)::INT as cnt FROM alert_rules`;
@@ -139,6 +143,9 @@ async function requireApiKeyOrSession(c: Context, next: Next) {
 }
 
 // --- Protected routes ---
+// Rate limit event ingestion (120 req/min per IP)
+app.use("/api/events", rateLimitMiddleware({ maxRequests: 120, windowMs: 60_000, prefix: "events" }));
+
 // Event ingestion accepts API keys or session cookies
 app.use("/api/events/*", requireApiKeyOrSession);
 app.use("/api/events", requireApiKeyOrSession);
@@ -172,8 +179,8 @@ app.use("/api/export/*", orgScopeMiddleware(sql));
 app.use("/api/export", orgScopeMiddleware(sql));
 app.use("/api/ai/*", orgScopeMiddleware(sql));
 app.use("/api/ai", orgScopeMiddleware(sql));
-app.use("/api/reports/*", orgScopeMiddleware(sql));
-app.use("/api/reports", orgScopeMiddleware(sql));
+app.use("/api/team-skills/*", orgScopeMiddleware(sql));
+app.use("/api/team-skills", orgScopeMiddleware(sql));
 
 app.route("/api/events", eventsRoutes(sql));
 app.route("/api/sessions", sessionsRoutes(sql));
@@ -182,11 +189,11 @@ app.route("/api/insights", insightsRoutes(sql));
 app.route("/api/alerts", alertsRoutes(sql));
 app.route("/api/export", exportRoutes(sql));
 app.route("/api/ai", aiRoutes(sql));
-app.route("/api/reports", reportsRoutes(sql));
 app.route("/api/teams", teamsRoutes(sql));
 app.route("/api/patterns", patternsRoutes(sql));
 app.route("/api/skills", skillsRoutes(sql));
 app.route("/api/playbooks", playbooksRoutes(sql));
+app.route("/api/team-skills", teamSkillsRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })

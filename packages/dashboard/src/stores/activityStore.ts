@@ -35,6 +35,7 @@ interface ActivityState {
   bumpFetchGeneration: () => void;
   setEvents: (events: DevscopeEvent[]) => void;
   updateSession: (sessionId: string, status: string) => void;
+  updateSessionTitle: (sessionId: string, title: string) => void;
   addAlert: (alert: AlertEvent) => void;
   acknowledgeAlert: (alertId: string) => void;
   cleanupStale: () => void;
@@ -103,6 +104,13 @@ export const useActivityStore = create<ActivityState>((set) => ({
                 .map((a) => ({ ...a, stoppedAt: Date.now() })),
             ].slice(-MAX_STOPPED_AGENTS)
           : state.stoppedAgents,
+    })),
+
+  updateSessionTitle: (sessionId, title) =>
+    set((state) => ({
+      activeSessions: state.activeSessions.map((s) =>
+        s.id === sessionId ? { ...s, currentTitle: title } : s
+      ),
     })),
 
   cleanupStale: () =>

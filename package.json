@@ -12,6 +12,8 @@
   "scripts": {
     "dev:backend": "bun run --hot packages/backend/src/index.ts",
     "dev:dashboard": "bun run --filter @devscope/dashboard dev",
-    "dev": "bun run scripts/dev.ts"
+    "dev": "bun run scripts/dev.ts",
+    "test": "cd packages/backend && bun test",
+    "test:backend": "cd packages/backend && bun test"
   }
 }

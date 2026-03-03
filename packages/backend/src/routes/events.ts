@@ -11,7 +11,7 @@ import {
   getRecentEvents,
   checkAlertThresholds,
 } from "../db";
-import { broadcast, broadcastToOrg } from "../ws/handler";
+import { broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg } from "../services/developerLink";
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 
@@ -96,9 +96,8 @@ export function eventsRoutes(sql: SQL) {
         for (const row of devOrgs as any[]) {
           broadcastToOrg(row.organization_id, msg);
         }
-      } else {
-        broadcast(msg);
       }
+      // No fallback broadcast -- events from unlinked developers are not broadcast
     }
 
     // Broadcasts after DB insert

@@ -9,7 +9,7 @@ import type { DevscopeEvent, ToolEventPayload, AgentEventPayload } from "@devsco
 const NODE_WIDTH_DEVELOPER = 200;
 const NODE_HEIGHT_DEVELOPER = 90;
 const NODE_WIDTH_SESSION = 280;
-const NODE_HEIGHT_SESSION = 140;
+const NODE_HEIGHT_SESSION = 160;
 const NODE_WIDTH_AGENT = 240;
 const NODE_HEIGHT_AGENT = 110;
 

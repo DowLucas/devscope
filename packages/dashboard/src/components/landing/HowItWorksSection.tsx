@@ -130,7 +130,7 @@ const MANAGER_STEPS: Step[] = [
     number: 4,
     icon: BarChart3,
     title: "See your team's activity",
-    description: "Sessions stream in as your team works. Metrics, alerts, and AI briefings — all automatic.",
+    description: "Sessions stream in as your team works. Metrics, alerts, and AI insights — all automatic.",
     detail: (
       <div className="flex items-center gap-2">
         <motion.span

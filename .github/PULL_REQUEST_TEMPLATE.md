@@ -14,4 +14,6 @@ Implementation approach (if not obvious from the diff).
 
 - [ ] Tests pass (`cd packages/backend && bun test`)
 - [ ] Lint passes (`cd packages/dashboard && bun run lint`)
+- [ ] Types check (`cd packages/dashboard && bunx tsc --noEmit`)
+- [ ] CI checks pass (all three jobs green)
 - [ ] Docker builds work (`docker compose up --build`)

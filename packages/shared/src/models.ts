@@ -15,11 +15,13 @@ export interface Session {
   endedAt: string | null;
   status: "active" | "ended";
   permissionMode: string | null;
+  currentTitle?: string | null;
 }
 
 export type WsMessageType =
   | "event.new"
   | "session.update"
+  | "session.title.update"
   | "developer.update"
   | "alert.triggered"
   | "ai.insight.new"
@@ -27,6 +29,8 @@ export type WsMessageType =
   | "ai.pattern.new"
   | "ai.antipattern.new"
   | "ai.playbook.new"
+  | "ai.skill.new"
+  | "ai.skill.updated"
   | "subscribe"
   | "connected";
 
@@ -83,4 +87,11 @@ export interface SessionTurn {
 export interface WsMessage {
   type: WsMessageType;
   data: unknown;
+}
+
+export interface SessionTitle {
+  id: string;
+  sessionId: string;
+  title: string;
+  generatedAt: string;
 }

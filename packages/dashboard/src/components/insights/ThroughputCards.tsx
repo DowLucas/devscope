@@ -10,8 +10,7 @@ export function ThroughputCards() {
   const eventsPerMin = useMemo(() => {
     const cutoff = Date.now() - 60_000;
     return events.filter((e) => {
-      const ts = (e as unknown as Record<string, unknown>).created_at ?? (e as unknown as Record<string, unknown>).createdAt;
-      return ts && new Date(ts as string).getTime() > cutoff;
+      return e.timestamp && new Date(e.timestamp).getTime() > cutoff;
     }).length;
   }, [events]);
 

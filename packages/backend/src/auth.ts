@@ -24,12 +24,22 @@ export const auth = betterAuth({
       },
     },
   },
-  session: { modelName: "auth_session" },
+  session: {
+    modelName: "auth_session",
+    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    updateAge: 60 * 60 * 24, // 1 day
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60, // 5 minutes
+    },
+  },
   account: { modelName: "auth_account" },
   verification: { modelName: "auth_verification" },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
+    minPasswordLength: 12,
+    maxPasswordLength: 128,
   },
   socialProviders: {
     google: {
@@ -53,6 +63,15 @@ export const auth = betterAuth({
     autoSignInAfterVerification: true,
     expiresIn: 3600,
   },
+  advanced: {
+    cookiePrefix: "devscope",
+    defaultCookieAttributes: {
+      httpOnly: true,
+      sameSite: "lax" as const,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    },
+  },
   trustedOrigins: (process.env.GC_CORS_ORIGIN ?? "http://localhost:5173")
     .split(",")
     .map((o) => o.trim()),
@@ -60,8 +79,8 @@ export const auth = betterAuth({
     apiKey({
       rateLimit: {
         enabled: true,
-        maxRequests: 100,
-        timeWindow: 1000, // 100 requests per second
+        maxRequests: 15,
+        timeWindow: 1000, // 15 requests per second
       },
     }),
     organization({
