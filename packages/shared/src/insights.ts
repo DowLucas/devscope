@@ -35,15 +35,14 @@ export interface ProjectActivityDataPoint {
   total_minutes: number;
 }
 
-export interface DeveloperLeaderboardEntry {
-  id: string;
-  name: string;
-  email: string;
+/** Team-level activity summary — aggregates only, no per-developer ranking. */
+export interface TeamActivityEntry {
   total_sessions: number;
   total_events: number;
   total_prompts: number;
   total_tool_calls: number;
-  last_active: string;
+  active_developers: number;
+  period_days: number;
 }
 
 export interface HourlyDistributionPoint {
@@ -75,17 +74,6 @@ export interface PeriodComparisonResult {
   };
 }
 
-export interface DeveloperComparisonEntry {
-  id: string;
-  name: string;
-  email: string;
-  sessions: number;
-  prompts: number;
-  tool_calls: number;
-  failures: number;
-  avg_session_minutes: number;
-}
-
 export interface ToolFailureRatePoint {
   day: string;
   tool_name: string;
@@ -97,7 +85,6 @@ export interface ToolFailureRatePoint {
 export interface FailureCluster {
   tool_name: string;
   session_id: string;
-  developer_name: string;
   fail_count: number;
   error_messages: string[];
 }
@@ -127,7 +114,7 @@ export interface AlertEvent {
 export interface TeamHealthData {
   developers: DeveloperHealthEntry[];
   velocity: VelocityTrend;
-  stuckSessions: StuckSession[];
+  sessionsNeedingAttention: SessionNeedingAttention[];
   workload: WorkloadEntry[];
 }
 
@@ -160,11 +147,10 @@ export interface VelocityTrend {
   };
 }
 
-export interface StuckSession {
+/** Sessions with high tool failure rates — indicates tooling issues, not developer issues. */
+export interface SessionNeedingAttention {
   session_id: string;
-  developer_name: string;
   project_name: string;
-  idle_minutes: number;
   tool_failure_rate: number;
 }
 
@@ -221,10 +207,8 @@ export interface DigestSummary {
   total_failures: number;
   active_developers: number;
   active_projects: number;
-  top_developers: { name: string; prompts: number }[];
   top_projects: { name: string; events: number }[];
   notable_failures: { tool_name: string; count: number }[];
-  burnout_risks?: { developer_name: string; risk_level: string; off_hours_ratio: number }[];
   scorecard?: { label: string; value: number; delta_percent: number; status: string }[];
   roi?: { prompts_per_session: number; tool_calls_per_session: number; sessions_per_developer: number };
   project_allocation?: { project_name: string; percentage: number }[];

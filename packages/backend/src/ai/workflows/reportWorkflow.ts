@@ -4,7 +4,7 @@ import { callGemini, TEMPERATURE } from "../gemini";
 import {
   getPeriodComparison,
   getTeamHealth,
-  getDeveloperLeaderboard,
+  getTeamActivitySummary,
   getProjectsOverview,
   getToolUsageBreakdown,
   getSessionStatsSummary,
@@ -50,10 +50,11 @@ async function gatherReportData(
 ): Promise<Partial<ReportStateType>> {
   const days = getDaysForType(state.reportType);
 
+  // Team-level aggregate data only — no individual developer data sent to LLM.
   const [
     periodComparison,
     teamHealth,
-    leaderboard,
+    teamActivity,
     projects,
     toolUsage,
     sessionSummary,
@@ -61,7 +62,7 @@ async function gatherReportData(
   ] = await Promise.all([
     getPeriodComparison(sql, days),
     getTeamHealth(sql),
-    getDeveloperLeaderboard(sql, days),
+    getTeamActivitySummary(sql, days),
     getProjectsOverview(sql, days),
     getToolUsageBreakdown(sql, undefined, days),
     getSessionStatsSummary(sql, undefined, days),
@@ -79,8 +80,10 @@ async function gatherReportData(
   return {
     data: {
       periodComparison,
-      teamHealth,
-      leaderboard,
+      // Only include aggregate team health data — not individual developer entries
+      teamVelocity: teamHealth.velocity,
+      sessionsNeedingAttention: teamHealth.sessionsNeedingAttention,
+      teamActivity,
       projects,
       toolUsage,
       sessionSummary,
@@ -96,7 +99,7 @@ async function generateOutline(
   const dataStr = JSON.stringify(state.data, null, 2).slice(0, 25_000);
 
   const personaGuidance = state.persona
-    ? `\n\nAudience: ${state.persona === "ceo" ? "CEO — focus on 3-4 top-level KPIs, traffic light status, and one-sentence explanations. Keep it extremely concise." : state.persona === "cto" ? "CTO — include ROI metrics, project allocation, adoption and efficiency data. Board-ready language." : "Engineering Manager — operational focus with team velocity, burnout risk signals, stuck sessions, and failure clusters."}`
+    ? `\n\nAudience: ${state.persona === "team-lead" ? "Team Lead — focus on project progress, blockers, tool issues, and team velocity trends." : state.persona === "developer" ? "Developer — focus on tool adoption, failure patterns, and project health. Practical and actionable." : "Team Lead — focus on project progress, blockers, tool issues, and team velocity trends."}`
     : "";
 
   const response = await callGemini(
@@ -105,11 +108,17 @@ async function generateOutline(
         role: "user",
         parts: [
           {
-            text: `You are creating an executive report for DevScope, a developer activity monitoring platform.
+            text: `You are creating a team report for DevScope, a developer workflow analytics platform.
 Report type: ${state.reportType}
 Title: ${state.title}${personaGuidance}
 
-Based on this data, create a detailed outline for the report. Include section headings, key points for each section, and the most important metrics to highlight.
+IMPORTANT: This report should focus on TEAM-LEVEL metrics only. Do NOT include individual developer names, rankings, or performance comparisons. Focus on:
+- Team velocity trends (sessions, prompts, tool calls)
+- Project health and progress
+- Tool adoption and failure patterns (which tools need fixing?)
+- Sessions with high failure rates (tooling problems, not people problems)
+
+Based on this data, create a detailed outline for the report.
 
 Data:
 ${dataStr}
@@ -137,7 +146,7 @@ async function writeReport(
   const dataStr = JSON.stringify(state.data, null, 2).slice(0, 25_000);
 
   const personaRequirements = state.persona
-    ? `\n- Tailored for ${state.persona === "ceo" ? "a CEO audience: ultra-concise, 3-4 KPIs with status indicators, no technical jargon" : state.persona === "cto" ? "a CTO audience: include AI ROI metrics, project allocation, adoption vs efficiency data, board-ready language" : "an Engineering Manager audience: operational focus, team velocity trends, burnout risk signals, stuck sessions, failure patterns"}`
+    ? `\n- Tailored for ${state.persona === "team-lead" ? "a Team Lead audience: focus on project progress, blockers, team velocity trends, and tool issues" : state.persona === "developer" ? "a Developer audience: focus on tool adoption patterns, failure analysis, and practical recommendations" : "a Team Lead audience: focus on project progress, blockers, team velocity trends, and tool issues"}`
     : "";
 
   const response = await callGemini(
@@ -146,7 +155,7 @@ async function writeReport(
         role: "user",
         parts: [
           {
-            text: `Write a polished executive report in Markdown based on this outline and data.
+            text: `Write a polished team report in Markdown based on this outline and data.
 
 Report type: ${state.reportType}
 Title: ${state.title}
@@ -160,11 +169,12 @@ ${dataStr}
 Requirements:
 - Use proper Markdown with headers (##, ###), bullet points, and bold for emphasis
 - Include specific numbers and percentages
-- Start with an Executive Summary section
-- Include sections for: Key Metrics, Developer Activity, Project Health, Tool Performance, Risks & Recommendations
-- End with Action Items
-- Keep the tone professional but accessible
-- Highlight both wins and areas for improvement
+- Start with a Summary section
+- Include sections for: Team Velocity, Project Health, Tool Performance, Sessions Needing Attention, Recommendations
+- End with Action Items focused on improving tooling and workflow
+- NEVER include individual developer names, rankings, or performance comparisons
+- Focus on team-level patterns, not individual behavior
+- Keep the tone collaborative — this is about improving team workflow, not evaluating individuals
 - Total length: 500-1500 words${personaRequirements}`,
           },
         ],

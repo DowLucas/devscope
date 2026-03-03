@@ -5,7 +5,7 @@ import {
   getPeriodComparison,
   getTeamHealth,
   getFailureClusters,
-  getDeveloperLeaderboard,
+  getTeamActivitySummary,
   getProjectsOverview,
 } from "../../db";
 import { recordTokenUsage, createInsight } from "../../db";
@@ -15,7 +15,7 @@ interface InsightData {
   periodComparison: unknown;
   teamHealth: unknown;
   failureClusters: unknown;
-  leaderboard: unknown;
+  teamActivity: unknown;
   projects: unknown;
 }
 
@@ -42,12 +42,12 @@ async function gatherData(
 ): Promise<Partial<InsightStateType>> {
   const days = state.days;
 
-  const [periodComparison, teamHealth, failureClusters, leaderboard, projects] =
+  const [periodComparison, teamHealth, failureClusters, teamActivity, projects] =
     await Promise.all([
       getPeriodComparison(sql, days),
       getTeamHealth(sql),
       getFailureClusters(sql, days),
-      getDeveloperLeaderboard(sql, days),
+      getTeamActivitySummary(sql, days),
       getProjectsOverview(sql, days),
     ]);
 
@@ -56,7 +56,7 @@ async function gatherData(
       periodComparison,
       teamHealth,
       failureClusters,
-      leaderboard,
+      teamActivity,
       projects,
     },
   };
@@ -65,9 +65,11 @@ async function gatherData(
 const INSIGHT_PROMPT = `You are an expert data analyst for DevScope, a developer activity monitoring platform.
 Analyze the following data and identify significant insights. Focus on:
 1. Anomalies: unusual spikes or drops in activity, failure rates, or session patterns
-2. Trends: week-over-week changes that indicate improving or declining productivity
-3. Comparisons: notable differences between developers or projects
-4. Recommendations: actionable suggestions based on the data
+2. Trends: week-over-week changes that indicate improving or declining team velocity
+3. Tool Health: tools with high failure rates that need attention
+4. Recommendations: actionable suggestions for improving team workflow and tooling
+
+IMPORTANT: Focus on team-level patterns only. Do NOT include individual developer names, rankings, or performance comparisons.
 
 For each insight, provide:
 - type: one of "anomaly", "trend", "comparison", "recommendation"
@@ -140,7 +142,7 @@ export async function runInsightWorkflow(
       periodComparison: null,
       teamHealth: null,
       failureClusters: null,
-      leaderboard: null,
+      teamActivity: null,
       projects: null,
     },
     insights: [],

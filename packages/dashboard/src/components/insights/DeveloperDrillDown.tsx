@@ -5,7 +5,6 @@ import type {
   SessionStatsSummary,
   ProjectActivityDataPoint,
   HourlyDistributionPoint,
-  DeveloperLeaderboardEntry,
 } from "@devscope/shared";
 import { useInsightsData } from "@/hooks/useInsightsData";
 import { useDateRange } from "@/hooks/useDateRange";
@@ -30,8 +29,6 @@ export function DeveloperDrillDown({
   onBack,
 }: DeveloperDrillDownProps) {
   const { days } = useDateRange();
-  const leaderboard = useInsightsData<DeveloperLeaderboardEntry[]>("leaderboard", undefined, days);
-  const developer = (leaderboard.data ?? []).find((d) => d.id === developerId);
 
   const summary = useInsightsData<SessionStatsSummary>("sessions/summary", developerId, days);
   const activity = useInsightsData<ActivityDataPoint[]>("activity", developerId, days);
@@ -51,12 +48,6 @@ export function DeveloperDrillDown({
             <ArrowLeft className="h-4 w-4" />
             Back to overview
           </button>
-          {developer && (
-            <div className="border-l border-border pl-3">
-              <h2 className="text-xl font-semibold">{developer.name}</h2>
-              <p className="text-xs text-muted-foreground">{developer.email}</p>
-            </div>
-          )}
         </div>
         <div className="flex items-center gap-2">
           <ExportButton dataType="activity" days={days} developerId={developerId} />

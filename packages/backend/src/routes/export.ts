@@ -33,7 +33,7 @@ function toCsv(data: unknown[]): string {
   return [headers.join(","), ...rows].join("\n");
 }
 
-const VALID_EXPORT_TYPES = ["leaderboard", "sessions", "activity", "failures", "tools"];
+const VALID_EXPORT_TYPES = ["team-activity", "sessions", "activity", "failures", "tools"];
 
 export function exportRoutes(sql: SQL) {
   const app = new Hono();

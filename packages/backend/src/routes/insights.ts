@@ -6,10 +6,9 @@ import {
   getSessionStats,
   getSessionStatsSummary,
   getProjectActivity,
-  getDeveloperLeaderboard,
+  getTeamActivitySummary,
   getHourlyDistribution,
   getPeriodComparison,
-  getDeveloperComparison,
   getToolFailureRates,
   getFailureClusters,
   getTeamHealth,
@@ -29,9 +28,9 @@ function clampInt(val: string | undefined, def: number, max: number): number {
 export function insightsRoutes(sql: SQL) {
   const app = new Hono();
 
-  app.get("/leaderboard", async (c) => {
+  app.get("/team-activity", async (c) => {
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getDeveloperLeaderboard(sql, days));
+    return c.json(await getTeamActivitySummary(sql, days));
   });
 
   app.get("/activity", async (c) => {
@@ -80,14 +79,6 @@ export function insightsRoutes(sql: SQL) {
     const days = clampInt(c.req.query("days"), 7, 365);
     const developerId = c.req.query("developerId") || undefined;
     return c.json(await getPeriodComparison(sql, days, developerId));
-  });
-
-  // --- Developer Comparison ---
-  app.get("/comparison", async (c) => {
-    const developerIdsRaw = c.req.query("developerIds") || "";
-    const developerIds = developerIdsRaw.split(",").filter(Boolean);
-    const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getDeveloperComparison(sql, developerIds, days));
   });
 
   // --- Failure Analysis ---

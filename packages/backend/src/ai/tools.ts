@@ -6,10 +6,9 @@ import {
   getToolUsageBreakdown,
   getSessionStats,
   getSessionStatsSummary,
-  getDeveloperLeaderboard,
+  getTeamActivitySummary,
   getHourlyDistribution,
   getPeriodComparison,
-  getDeveloperComparison,
   getToolFailureRates,
   getFailureClusters,
   getTeamHealth,
@@ -165,9 +164,9 @@ export const toolRegistry: ToolDefinition[] = [
   },
   {
     declaration: {
-      name: "getDeveloperLeaderboard",
+      name: "getTeamActivitySummary",
       description:
-        "Get developer leaderboard ranked by total events. Shows sessions, prompts, tool calls per developer.",
+        "Get aggregate team activity summary: total sessions, prompts, tool calls, and active developer count. No individual developer data.",
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -179,7 +178,7 @@ export const toolRegistry: ToolDefinition[] = [
       },
     },
     execute: async (sql, args) => {
-      const result = await getDeveloperLeaderboard(
+      const result = await getTeamActivitySummary(
         sql,
         clampDays(args.days as number | undefined)
       );
@@ -239,36 +238,6 @@ export const toolRegistry: ToolDefinition[] = [
         sql,
         clampDays(args.days as number | undefined),
         args.developerId as string | undefined
-      );
-      return truncateResult(result);
-    },
-  },
-  {
-    declaration: {
-      name: "getDeveloperComparison",
-      description:
-        "Compare multiple developers side-by-side on sessions, prompts, tool calls, failures, and avg session duration.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          developerIds: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "Array of developer IDs to compare",
-          },
-          days: {
-            type: Type.NUMBER,
-            description: "Number of days to look back (default 30, max 365)",
-          },
-        },
-        required: ["developerIds"],
-      },
-    },
-    execute: async (sql, args) => {
-      const result = await getDeveloperComparison(
-        sql,
-        args.developerIds as string[],
-        clampDays(args.days as number | undefined)
       );
       return truncateResult(result);
     },

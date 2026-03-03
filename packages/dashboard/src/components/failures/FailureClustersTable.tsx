@@ -23,7 +23,6 @@ export function FailureClustersTable({ data, loading }: FailureClustersTableProp
         <TableHeader>
           <TableRow>
             <TableHead>Tool</TableHead>
-            <TableHead>Developer</TableHead>
             <TableHead className="text-right">Failures</TableHead>
             <TableHead>Session</TableHead>
           </TableRow>
@@ -38,7 +37,6 @@ export function FailureClustersTable({ data, loading }: FailureClustersTableProp
               }}
             >
               <TableCell className="font-mono text-sm">{cluster.tool_name}</TableCell>
-              <TableCell>{cluster.developer_name}</TableCell>
               <TableCell className="text-right">
                 <Badge variant="destructive" className="text-[10px]">
                   {cluster.fail_count}
@@ -51,7 +49,7 @@ export function FailureClustersTable({ data, loading }: FailureClustersTableProp
           ))}
           {(!data || data.length === 0) && !loading && (
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+              <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
                 No failure clusters detected
               </TableCell>
             </TableRow>
