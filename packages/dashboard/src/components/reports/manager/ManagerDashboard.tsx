@@ -1,8 +1,7 @@
 import { useManagerSummary } from "@/hooks/useManagerSummary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TeamSummaryCards } from "./TeamSummaryCards";
-import { BurnoutRiskTable } from "./BurnoutRiskTable";
-import { StuckSessionAlerts } from "@/components/health/StuckSessionAlerts";
+import { SessionsNeedingAttention } from "@/components/health/SessionsNeedingAttention";
 import { FailureClustersTable } from "@/components/failures/FailureClustersTable";
 
 export function ManagerDashboard() {
@@ -33,10 +32,8 @@ export function ManagerDashboard() {
         tool_calls={data.velocity.tool_calls}
       />
 
-      <BurnoutRiskTable data={data.burnout_risks} />
-
       <div className="grid gap-6 lg:grid-cols-2">
-        <StuckSessionAlerts sessions={data.stuck_sessions} loading={false} />
+        <SessionsNeedingAttention sessions={data.sessions_needing_attention} loading={false} />
         <FailureClustersTable
           data={data.failure_clusters.map((c) => ({
             ...c,

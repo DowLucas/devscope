@@ -7,36 +7,24 @@ import type {
   SessionStatsDataPoint,
   SessionStatsSummary,
   ProjectActivityDataPoint,
-  DeveloperLeaderboardEntry,
+  TeamActivityEntry,
   HourlyDistributionPoint,
   PeriodComparisonResult,
-  DeveloperComparisonEntry,
   ToolFailureRatePoint,
   FailureCluster,
   AlertRule,
   AlertEvent,
   TeamHealthData,
   DeveloperHealthEntry,
-  StuckSession,
+  SessionNeedingAttention,
   WorkloadEntry,
   ProjectDetail,
   ProjectContributor,
   DigestSummary,
   DigestEntry,
-  BurnoutRiskEntry,
   MinuteActivityPoint,
 } from "@devscope/shared";
-
-/**
- * Build a safe SQL fragment for WHERE column IN (...) with string IDs.
- * Bun.sql's `IN (${array})` silently fails — it serializes the JS array
- * as a single comma-separated string parameter, matching zero rows.
- * This helper uses Sql.unsafe with proper single-quote escaping.
- */
-function inList(ids: string[]): ReturnType<typeof Sql.unsafe> {
-  const escaped = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(",");
-  return Sql.unsafe(escaped);
-}
+import { inList } from "./utils";
 
 export async function upsertDeveloper(
   sql: SQL,
@@ -531,46 +519,52 @@ export async function getProjectActivity(
     LIMIT 10`) as ProjectActivityDataPoint[];
 }
 
-export async function getDeveloperLeaderboard(
+/** Team-level activity summary — aggregates only, no per-developer breakdown. */
+export async function getTeamActivitySummary(
   sql: SQL,
   days: number = 30,
   developerIds?: string[]
-): Promise<DeveloperLeaderboardEntry[]> {
+): Promise<TeamActivityEntry> {
   if (developerIds && developerIds.length > 0) {
-    return (await sql`
+    const [row] = await sql`
       SELECT
-        d.id,
-        d.name,
-        d.email,
         COUNT(DISTINCT s.id)::INT as total_sessions,
         COUNT(e.id)::INT as total_events,
         SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as total_prompts,
         SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as total_tool_calls,
-        MAX(e.created_at) as last_active
-      FROM developers d
-      LEFT JOIN sessions s ON s.developer_id = d.id
-        AND s.started_at >= NOW() - make_interval(days => ${days})
+        COUNT(DISTINCT s.developer_id)::INT as active_developers
+      FROM sessions s
       LEFT JOIN events e ON e.session_id = s.id
-      WHERE d.id IN (${inList(developerIds)})
-      GROUP BY d.id
-      ORDER BY total_events DESC`) as DeveloperLeaderboardEntry[];
+      WHERE s.started_at >= NOW() - make_interval(days => ${days})
+        AND s.developer_id IN (${inList(developerIds)})`;
+
+    return {
+      total_sessions: (row as any)?.total_sessions ?? 0,
+      total_events: (row as any)?.total_events ?? 0,
+      total_prompts: (row as any)?.total_prompts ?? 0,
+      total_tool_calls: (row as any)?.total_tool_calls ?? 0,
+      active_developers: (row as any)?.active_developers ?? 0,
+    };
   }
-  return (await sql`
+  const [row] = await sql`
     SELECT
-      d.id,
-      d.name,
-      d.email,
       COUNT(DISTINCT s.id)::INT as total_sessions,
       COUNT(e.id)::INT as total_events,
       SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as total_prompts,
       SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as total_tool_calls,
-      MAX(e.created_at) as last_active
-    FROM developers d
-    LEFT JOIN sessions s ON s.developer_id = d.id
-      AND s.started_at >= NOW() - make_interval(days => ${days})
+      COUNT(DISTINCT s.developer_id)::INT as active_developers
+    FROM sessions s
     LEFT JOIN events e ON e.session_id = s.id
-    GROUP BY d.id
-    ORDER BY total_events DESC`) as DeveloperLeaderboardEntry[];
+    WHERE s.started_at >= NOW() - make_interval(days => ${days})`;
+
+  return {
+    total_sessions: (row as any)?.total_sessions ?? 0,
+    total_events: (row as any)?.total_events ?? 0,
+    total_prompts: (row as any)?.total_prompts ?? 0,
+    total_tool_calls: (row as any)?.total_tool_calls ?? 0,
+    active_developers: (row as any)?.active_developers ?? 0,
+    period_days: days,
+  };
 }
 
 export async function getHourlyDistribution(
@@ -750,41 +744,6 @@ export async function getPeriodComparison(
   };
 }
 
-// --- Developer Comparison ---
-
-export async function getDeveloperComparison(
-  sql: SQL,
-  developerIds: string[],
-  days: number = 30,
-  orgDeveloperIds?: string[]
-): Promise<DeveloperComparisonEntry[]> {
-  // If org-scoped, intersect requested IDs with allowed org IDs
-  const filteredIds = orgDeveloperIds
-    ? developerIds.filter(id => orgDeveloperIds.includes(id))
-    : developerIds;
-  if (filteredIds.length === 0) return [];
-
-  return (await sql`
-    SELECT
-      d.id, d.name, d.email,
-      COUNT(DISTINCT s.id)::INT as sessions,
-      SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
-      SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls,
-      SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::INT as failures,
-      ROUND(AVG(
-        CASE WHEN s.ended_at IS NOT NULL
-          THEN EXTRACT(EPOCH FROM (s.ended_at - s.started_at)) / 60
-          ELSE NULL
-        END
-      )::NUMERIC, 1)::FLOAT as avg_session_minutes
-    FROM developers d
-    LEFT JOIN sessions s ON s.developer_id = d.id
-      AND s.started_at >= NOW() - make_interval(days => ${days})
-    LEFT JOIN events e ON e.session_id = s.id
-    WHERE d.id IN (${inList(filteredIds)})
-    GROUP BY d.id`) as DeveloperComparisonEntry[];
-}
-
 // --- Tool Failure Analysis ---
 
 export async function getToolFailureRates(
@@ -863,16 +822,14 @@ export async function getFailureClusters(
       SELECT
         e.payload->>'toolName' as tool_name,
         e.session_id,
-        d.name as developer_name,
         COUNT(*)::INT as fail_count,
         STRING_AGG(COALESCE(e.payload->>'errorMessage', ''), '|||') as error_messages_raw
       FROM events e
       JOIN sessions s ON e.session_id = s.id
-      JOIN developers d ON s.developer_id = d.id
       WHERE e.event_type = 'tool.fail'
         AND e.created_at >= NOW() - make_interval(days => ${days})
         AND s.developer_id IN (${inList(developerIds)})
-      GROUP BY e.payload->>'toolName', e.session_id, d.name
+      GROUP BY e.payload->>'toolName', e.session_id
       HAVING COUNT(*) >= 2
       ORDER BY fail_count DESC
       LIMIT 50`;
@@ -881,15 +838,12 @@ export async function getFailureClusters(
       SELECT
         e.payload->>'toolName' as tool_name,
         e.session_id,
-        d.name as developer_name,
         COUNT(*)::INT as fail_count,
         STRING_AGG(COALESCE(e.payload->>'errorMessage', ''), '|||') as error_messages_raw
       FROM events e
-      JOIN sessions s ON e.session_id = s.id
-      JOIN developers d ON s.developer_id = d.id
       WHERE e.event_type = 'tool.fail'
         AND e.created_at >= NOW() - make_interval(days => ${days})
-      GROUP BY e.payload->>'toolName', e.session_id, d.name
+      GROUP BY e.payload->>'toolName', e.session_id
       HAVING COUNT(*) >= 2
       ORDER BY fail_count DESC
       LIMIT 50`;
@@ -898,7 +852,6 @@ export async function getFailureClusters(
   return (rows as any[]).map((r) => ({
     tool_name: r.tool_name,
     session_id: r.session_id,
-    developer_name: r.developer_name,
     fail_count: r.fail_count,
     error_messages: (r.error_messages_raw || "")
       .split("|||")
@@ -1181,65 +1134,47 @@ export async function getTeamHealth(sql: SQL, developerIds?: string[]): Promise<
     },
   };
 
-  // Stuck sessions
-  let stuckRows;
+  // Sessions needing attention — high tool failure rates indicate tooling issues.
+  // No developer names — this surfaces problem sessions, not problem people.
+  // No idle time tracking — thinking/reading/whiteboarding is not "stuck".
+  let sessionsNeedingAttention;
   if (developerIds && developerIds.length > 0) {
-    stuckRows = await sql`
+    sessionsNeedingAttention = await sql`
       SELECT
         s.id as session_id,
-        d.name as developer_name,
         s.project_name,
-        ROUND((EXTRACT(EPOCH FROM (NOW() - COALESCE(
-          (SELECT MAX(e2.created_at) FROM events e2 WHERE e2.session_id = s.id),
-          s.started_at
-        ))) / 60)::NUMERIC, 1)::FLOAT as idle_minutes,
         ROUND(
           (SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC /
           GREATEST(SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END), 1)), 2
         )::FLOAT as tool_failure_rate
       FROM sessions s
-      JOIN developers d ON s.developer_id = d.id
       LEFT JOIN events e ON e.session_id = s.id
       WHERE s.status = 'active'
         AND s.developer_id IN (${inList(developerIds)})
-      GROUP BY s.id, d.name, s.project_name, s.started_at
-      HAVING ROUND((EXTRACT(EPOCH FROM (NOW() - COALESCE(
-        (SELECT MAX(e2.created_at) FROM events e2 WHERE e2.session_id = s.id),
-        s.started_at
-      ))) / 60)::NUMERIC, 1) > 5
-      OR ROUND(
+      GROUP BY s.id, s.project_name
+      HAVING ROUND(
         (SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC /
         GREATEST(SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END), 1)), 2
       ) > 0.3
-      ORDER BY idle_minutes DESC` as StuckSession[];
+      ORDER BY tool_failure_rate DESC` as SessionNeedingAttention[];
   } else {
-    stuckRows = await sql`
+    sessionsNeedingAttention = await sql`
       SELECT
         s.id as session_id,
-        d.name as developer_name,
         s.project_name,
-        ROUND((EXTRACT(EPOCH FROM (NOW() - COALESCE(
-          (SELECT MAX(e2.created_at) FROM events e2 WHERE e2.session_id = s.id),
-          s.started_at
-        ))) / 60)::NUMERIC, 1)::FLOAT as idle_minutes,
         ROUND(
           (SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC /
           GREATEST(SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END), 1)), 2
         )::FLOAT as tool_failure_rate
       FROM sessions s
-      JOIN developers d ON s.developer_id = d.id
       LEFT JOIN events e ON e.session_id = s.id
       WHERE s.status = 'active'
-      GROUP BY s.id, d.name, s.project_name, s.started_at
-      HAVING ROUND((EXTRACT(EPOCH FROM (NOW() - COALESCE(
-        (SELECT MAX(e2.created_at) FROM events e2 WHERE e2.session_id = s.id),
-        s.started_at
-      ))) / 60)::NUMERIC, 1) > 5
-      OR ROUND(
+      GROUP BY s.id, s.project_name
+      HAVING ROUND(
         (SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC /
         GREATEST(SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END), 1)), 2
       ) > 0.3
-      ORDER BY idle_minutes DESC` as StuckSession[];
+      ORDER BY tool_failure_rate DESC` as SessionNeedingAttention[];
   }
 
   // Workload
@@ -1275,7 +1210,7 @@ export async function getTeamHealth(sql: SQL, developerIds?: string[]): Promise<
       ORDER BY prompts DESC` as WorkloadEntry[];
   }
 
-  return { developers, velocity, stuckSessions: stuckRows, workload };
+  return { developers, velocity, sessionsNeedingAttention, workload };
 }
 
 // --- Project Board ---
@@ -1489,15 +1424,6 @@ export async function generateDigest(
     WHERE e.created_at >= ${periodStart}::TIMESTAMPTZ AND e.created_at < ${periodEnd}::TIMESTAMPTZ
       ${devFilter}`;
 
-  const topDevs = await sql`
-    SELECT d.name, SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts
-    FROM events e
-    JOIN sessions s ON e.session_id = s.id
-    JOIN developers d ON s.developer_id = d.id
-    WHERE e.created_at >= ${periodStart}::TIMESTAMPTZ AND e.created_at < ${periodEnd}::TIMESTAMPTZ
-      ${devFilter}
-    GROUP BY d.id, d.name ORDER BY prompts DESC LIMIT 5`;
-
   const topProjects = await sql`
     SELECT s.project_name as name, COUNT(e.id)::INT as events
     FROM events e
@@ -1515,14 +1441,13 @@ export async function generateDigest(
       ${devFilter}
     GROUP BY tool_name ORDER BY count DESC LIMIT 5`;
 
-  // Compute period in days for burnout/ROI queries
+  // Compute period in days for ROI/project queries
   const periodDays = Math.max(
     1,
     Math.ceil((new Date(periodEnd).getTime() - new Date(periodStart).getTime()) / (1000 * 60 * 60 * 24))
   );
 
-  const [burnoutRisks, roiEfficiency, projectActivity] = await Promise.all([
-    getBurnoutRiskSignals(sql, periodDays, developerIds),
+  const [roiEfficiency, projectActivity] = await Promise.all([
     getAiRoiEfficiency(sql, periodDays, developerIds),
     getProjectActivity(sql, undefined, periodDays, developerIds),
   ]);
@@ -1536,13 +1461,8 @@ export async function generateDigest(
     total_failures: (metrics as any)?.total_failures ?? 0,
     active_developers: (metrics as any)?.active_developers ?? 0,
     active_projects: (metrics as any)?.active_projects ?? 0,
-    top_developers: (topDevs as any[]).map((d) => ({ name: d.name, prompts: d.prompts })),
     top_projects: (topProjects as any[]).map((p) => ({ name: p.name, events: p.events })),
     notable_failures: (notableFailures as any[]).map((f) => ({ tool_name: f.tool_name, count: f.count })),
-    burnout_risks: burnoutRisks
-      .filter((b) => b.risk_level !== "low")
-      .slice(0, 5)
-      .map((b) => ({ developer_name: b.developer_name, risk_level: b.risk_level, off_hours_ratio: b.off_hours_ratio })),
     roi: {
       prompts_per_session: roiEfficiency.prompts_per_session,
       tool_calls_per_session: roiEfficiency.tool_calls_per_session,
@@ -1587,8 +1507,8 @@ export async function getExportData(
   developerIds?: string[]
 ): Promise<unknown[]> {
   switch (dataType) {
-    case "leaderboard":
-      return getDeveloperLeaderboard(sql, days, developerIds);
+    case "team-activity":
+      return [await getTeamActivitySummary(sql, days, developerIds)];
     case "sessions":
       return getAllSessions(sql, 500, developerIds);
     case "activity":
@@ -1600,99 +1520,6 @@ export async function getExportData(
     default:
       return [];
   }
-}
-
-// --- Burnout Risk Signals ---
-
-export async function getBurnoutRiskSignals(
-  sql: SQL,
-  days: number = 30,
-  developerIds?: string[]
-): Promise<BurnoutRiskEntry[]> {
-  const devFilter = developerIds && developerIds.length > 0
-    ? Sql.unsafe(`AND s.developer_id IN (${developerIds.map(id => `'${id.replace(/'/g, "''")}'`).join(",")})`)
-    : Sql.unsafe("");
-  const rows = await sql`
-    WITH dev_events AS (
-      SELECT
-        s.developer_id,
-        d.name as developer_name,
-        e.created_at,
-        EXTRACT(DOW FROM e.created_at) as dow,
-        EXTRACT(HOUR FROM e.created_at) as hour
-      FROM events e
-      JOIN sessions s ON e.session_id = s.id
-      JOIN developers d ON s.developer_id = d.id
-      WHERE e.created_at >= NOW() - make_interval(days => ${days})
-        ${devFilter}
-    ),
-    dev_stats AS (
-      SELECT
-        developer_id,
-        developer_name,
-        COUNT(*) as total_events,
-        SUM(CASE
-          WHEN dow IN (0, 6) THEN 1
-          ELSE 0
-        END)::INT as weekend_events,
-        SUM(CASE
-          WHEN dow NOT IN (0, 6) AND (hour < 9 OR hour >= 18) THEN 1
-          ELSE 0
-        END)::FLOAT / GREATEST(
-          SUM(CASE WHEN dow NOT IN (0, 6) THEN 1 ELSE 0 END), 1
-        ) as off_hours_ratio,
-        COUNT(DISTINCT created_at::DATE)::FLOAT as active_days
-      FROM dev_events
-      GROUP BY developer_id, developer_name
-    ),
-    prev_stats AS (
-      SELECT
-        s.developer_id,
-        COUNT(DISTINCT s.id)::FLOAT as prev_sessions
-      FROM sessions s
-      WHERE s.started_at >= NOW() - make_interval(days => ${days * 2})
-        AND s.started_at < NOW() - make_interval(days => ${days})
-        ${devFilter}
-      GROUP BY s.developer_id
-    ),
-    curr_stats AS (
-      SELECT
-        s.developer_id,
-        COUNT(DISTINCT s.id)::FLOAT as curr_sessions
-      FROM sessions s
-      WHERE s.started_at >= NOW() - make_interval(days => ${days})
-        ${devFilter}
-      GROUP BY s.developer_id
-    )
-    SELECT
-      ds.developer_id,
-      ds.developer_name,
-      ROUND(ds.off_hours_ratio::NUMERIC, 3)::FLOAT as off_hours_ratio,
-      ds.weekend_events,
-      ROUND((COALESCE(cs.curr_sessions, 0) / GREATEST(COALESCE(ps.prev_sessions, 1), 1))::NUMERIC, 2)::FLOAT as session_frequency_spike
-    FROM dev_stats ds
-    LEFT JOIN prev_stats ps ON ds.developer_id = ps.developer_id
-    LEFT JOIN curr_stats cs ON ds.developer_id = cs.developer_id
-    WHERE ds.total_events > 0
-    ORDER BY ds.off_hours_ratio DESC`;
-
-  return (rows as any[]).map((r) => {
-    let risk_level: "high" | "medium" | "low" = "low";
-    if (r.off_hours_ratio > 0.4 || r.session_frequency_spike >= 3) {
-      risk_level = "high";
-    } else if (r.off_hours_ratio > 0.25) {
-      risk_level = "medium";
-    }
-
-    return {
-      developer_id: r.developer_id,
-      developer_name: r.developer_name,
-      off_hours_ratio: r.off_hours_ratio,
-      weekend_events: r.weekend_events,
-      session_frequency_spike: r.session_frequency_spike,
-      risk_level,
-    };
-  });
 }
 
 // --- AI ROI Efficiency ---

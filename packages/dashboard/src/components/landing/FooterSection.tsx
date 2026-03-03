@@ -32,7 +32,7 @@ export function FooterSection() {
               <img src={logoFull} alt="DevScope" className="h-5" />
             </a>
             <p className="mt-2 text-sm text-muted-foreground">
-              Observability for agentic engineering workflows.
+              Upskilling platform for AI-assisted development.
             </p>
           </div>
 

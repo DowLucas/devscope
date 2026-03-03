@@ -11,7 +11,12 @@ eval "$(echo "$INPUT" | jq -r '
   @sh "SESSION_ID=\(.session_id // "")",
   @sh "AGENT_ID=\(.agent_id // "")"
 ' | tr ',' '\n')"
-TOOL_INPUT=$(echo "$INPUT" | jq -c '.tool_input // null')
+# Only capture tool input when developer has opted in to detailed sharing
+if _ds_share_details_enabled; then
+  TOOL_INPUT=$(echo "$INPUT" | jq -c '.tool_input // null')
+else
+  TOOL_INPUT="null"
+fi
 
 # Sanitize for safe temp file paths
 SESSION_ID_SAFE=$(echo "$SESSION_ID" | tr -cd 'a-zA-Z0-9_-')

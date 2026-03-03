@@ -278,7 +278,7 @@ export function OnboardingWizard() {
                 <div className="space-y-1 pt-0.5">
                   <h2 className="text-lg font-semibold">Invite Team Members</h2>
                   <p className="text-sm text-muted-foreground">
-                    Add developers to your team so you can track their sessions.
+                    Add developers to your team to share insights and collaborate.
                   </p>
                 </div>
               </div>

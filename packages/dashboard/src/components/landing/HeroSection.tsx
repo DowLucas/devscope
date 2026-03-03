@@ -24,11 +24,11 @@ const fadeUp = {
 
 /** Fallback content used before persona is chosen. */
 const DEFAULT = {
-  badge: "Open Source Developer Monitoring",
-  headline: "Observability for the age of agentic engineering.",
-  headlineAccent: "See everything.",
+  badge: "Open Source AI Upskilling Platform",
+  headline: "Help your team master AI-assisted development.",
+  headlineAccent: "Together.",
   subtext:
-    "Engineering is shifting from writing code to orchestrating AI agents. DevScope gives you full visibility into Claude Code sessions across your team — track activity, catch stuck sessions, and understand agentic workflows from a single dashboard.",
+    "DevScope surfaces patterns in how your team uses Claude Code — revealing effective workflows to share, anti-patterns to avoid, and skills to develop. Turn every session into a learning opportunity.",
 };
 
 export function HeroSection() {

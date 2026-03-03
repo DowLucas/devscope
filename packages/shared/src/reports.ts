@@ -17,15 +17,6 @@ export interface ExecutiveScorecard {
   period_days: number;
 }
 
-export interface BurnoutRiskEntry {
-  developer_id: string;
-  developer_name: string;
-  off_hours_ratio: number;
-  weekend_events: number;
-  session_frequency_spike: number;
-  risk_level: "high" | "medium" | "low";
-}
-
 export interface AiRoiMetrics {
   prompts_per_session: number;
   tool_calls_per_session: number;
@@ -50,18 +41,14 @@ export interface ManagerSummary {
     prompts: KpiMetric;
     tool_calls: KpiMetric;
   };
-  burnout_risks: BurnoutRiskEntry[];
   failure_clusters: {
     tool_name: string;
     session_id: string;
-    developer_name: string;
     fail_count: number;
   }[];
-  stuck_sessions: {
+  sessions_needing_attention: {
     session_id: string;
-    developer_name: string;
     project_name: string;
-    idle_minutes: number;
     tool_failure_rate: number;
   }[];
 }

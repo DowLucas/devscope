@@ -33,8 +33,8 @@ const fadeUp = {
 const TECHNICAL_FEATURES = [
   {
     icon: Activity,
-    title: "Live session timeline",
-    desc: "See every prompt, tool call, and agent spawn as it happens.",
+    title: "Pattern discovery",
+    desc: "Surface effective AI workflows and catch anti-patterns automatically.",
   },
   {
     icon: Terminal,
@@ -43,13 +43,13 @@ const TECHNICAL_FEATURES = [
   },
   {
     icon: GitBranch,
-    title: "Session history & replay",
-    desc: "Review past sessions to understand what worked and what didn't.",
+    title: "Skill development",
+    desc: "Track how your AI development skills improve over time.",
   },
   {
     icon: Zap,
-    title: "Stuck session alerts",
-    desc: "Get notified when a session hits errors or stops making progress.",
+    title: "AI-powered suggestions",
+    desc: "Get concrete tips to build better AI workflows from your session data.",
   },
 ] as const;
 
@@ -76,17 +76,6 @@ const NON_TECHNICAL_FEATURES = [
     desc: "Runs silently in the background. Your team won't even notice it.",
   },
 ] as const;
-
-const HEADLINES = {
-  technical: {
-    text: "Full observability for your agentic engineering sessions. ",
-    accent: "Every step.",
-  },
-  "non-technical": {
-    text: "Understand your team's agentic engineering workflows. ",
-    accent: "Without the noise.",
-  },
-} as const;
 
 const QUOTES = {
   technical: {
@@ -120,7 +109,6 @@ export function AuthPage({ view }: { view?: string }) {
   const isSignUp = view === "sign-up";
   const p = persona ?? "technical";
   const features = p === "non-technical" ? NON_TECHNICAL_FEATURES : TECHNICAL_FEATURES;
-  const headline = HEADLINES[p];
   const quote = QUOTES[p];
 
   return (
@@ -167,9 +155,9 @@ export function AuthPage({ view }: { view?: string }) {
             custom={1}
           >
             <h2 className="max-w-sm text-3xl font-bold leading-snug tracking-tight">
-              {headline.text}
+              Level up your team's AI development skills.{" "}
               <span className="bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
-                {headline.accent}
+                Together.
               </span>
             </h2>
           </motion.div>
@@ -205,7 +193,8 @@ export function AuthPage({ view }: { view?: string }) {
           className="relative z-10 border-l-2 border-white/10 pl-4"
         >
           <p className="text-sm leading-relaxed text-white/60">
-            "{quote.text}"
+            "DevScope helped our team go from using AI haphazardly to having
+            shared patterns and skills. Setup took two minutes."
           </p>
           <footer className="mt-2 text-xs text-white/40">
             {quote.author}

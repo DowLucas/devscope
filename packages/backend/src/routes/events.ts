@@ -13,6 +13,7 @@ import {
 } from "../db";
 import { broadcast, broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg } from "../services/developerLink";
+import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 
 const eventSchema = z.object({
   id: z.string().min(1).max(200),
@@ -109,7 +110,15 @@ export function eventsRoutes(sql: SQL) {
       broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
     }
 
-    broadcastToDevOrgs({ type: "event.new", data: event });
+    // Strip opt-in sensitive fields (promptText, toolInput) from broadcasts.
+    // WebSocket goes to all dashboard viewers — we can't scope to self-view here.
+    broadcastToDevOrgs({
+      type: "event.new",
+      data: {
+        ...event,
+        payload: stripSensitivePayload(event.payload as Record<string, unknown>),
+      },
+    });
 
     // Check alert thresholds on tool failures
     if (event.eventType === "tool.fail") {
@@ -127,18 +136,23 @@ export function eventsRoutes(sql: SQL) {
     const limit = clampInt(c.req.query("limit"), 50, 500);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     const rows = await getRecentEvents(sql, limit, devIds);
-    const events = (rows as any[]).map((row: any) => ({
-      id: row.id,
-      timestamp: row.created_at,
-      sessionId: row.session_id,
-      developerId: row.developer_id ?? "",
-      developerName: row.developer_name,
-      developerEmail: row.developer_email,
-      projectPath: row.project_path ?? "",
-      projectName: row.project_name,
-      eventType: row.event_type,
-      payload: typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload,
-    }));
+    // Strip opt-in sensitive fields from the team-visible recent events feed.
+    // Prompt text and tool inputs are only visible in the self-view session detail.
+    const events = (rows as any[]).map((row: any) => {
+      const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+      return {
+        id: row.id,
+        timestamp: row.created_at,
+        sessionId: row.session_id,
+        developerId: row.developer_id ?? "",
+        developerName: row.developer_name,
+        developerEmail: row.developer_email,
+        projectPath: row.project_path ?? "",
+        projectName: row.project_name,
+        eventType: row.event_type,
+        payload: stripSensitivePayload(payload),
+      };
+    });
     return c.json(events);
   });
 

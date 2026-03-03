@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { DeveloperHeatmap } from "./DeveloperHeatmap";
 import { WorkloadChart } from "./WorkloadChart";
 import { VelocityCards } from "./VelocityCards";
-import { StuckSessionAlerts } from "./StuckSessionAlerts";
+import { SessionsNeedingAttention } from "./SessionsNeedingAttention";
 
 export function HealthView() {
   const { data, loading } = useTeamHealth();
@@ -37,7 +37,7 @@ export function HealthView() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <WorkloadChart data={data.workload} loading={false} />
-        <StuckSessionAlerts sessions={data.stuckSessions} loading={false} />
+        <SessionsNeedingAttention sessions={data.sessionsNeedingAttention} loading={false} />
       </div>
     </div>
   );

@@ -6,10 +6,9 @@ import {
   getToolUsageBreakdown,
   getSessionStats,
   getSessionStatsSummary,
-  getDeveloperLeaderboard,
+  getTeamActivitySummary,
   getHourlyDistribution,
   getPeriodComparison,
-  getDeveloperComparison,
   getToolFailureRates,
   getFailureClusters,
   getTeamHealth,
@@ -17,6 +16,10 @@ import {
   getProjectContributors,
   getProjectActivityOverTime,
   getAllDevelopers,
+  getPatterns,
+  getPatternStats,
+  getAntiPatterns,
+  getAntiPatternStats,
 } from "../db";
 
 const MAX_DAYS = 365;
@@ -169,9 +172,9 @@ export const toolRegistry: ToolDefinition[] = [
   },
   {
     declaration: {
-      name: "getDeveloperLeaderboard",
+      name: "getTeamActivitySummary",
       description:
-        "Get developer leaderboard ranked by total events. Shows sessions, prompts, tool calls per developer.",
+        "Get aggregate team activity summary: total sessions, prompts, tool calls, and active developer count. No individual developer data.",
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -183,7 +186,7 @@ export const toolRegistry: ToolDefinition[] = [
       },
     },
     execute: async (sql, args, developerIds) => {
-      const result = await getDeveloperLeaderboard(
+      const result = await getTeamActivitySummary(
         sql,
         clampDays(args.days as number | undefined),
         developerIds
@@ -245,37 +248,6 @@ export const toolRegistry: ToolDefinition[] = [
         sql,
         clampDays(args.days as number | undefined),
         args.developerId as string | undefined,
-        developerIds
-      );
-      return truncateResult(result);
-    },
-  },
-  {
-    declaration: {
-      name: "getDeveloperComparison",
-      description:
-        "Compare multiple developers side-by-side on sessions, prompts, tool calls, failures, and avg session duration.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {
-          developerIds: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "Array of developer IDs to compare",
-          },
-          days: {
-            type: Type.NUMBER,
-            description: "Number of days to look back (default 30, max 365)",
-          },
-        },
-        required: ["developerIds"],
-      },
-    },
-    execute: async (sql, args, developerIds) => {
-      const result = await getDeveloperComparison(
-        sql,
-        args.developerIds as string[],
-        clampDays(args.days as number | undefined),
         developerIds
       );
       return truncateResult(result);
@@ -445,6 +417,82 @@ export const toolRegistry: ToolDefinition[] = [
     },
     execute: async (sql, _args, developerIds) => {
       const result = await getAllDevelopers(sql, developerIds);
+      return truncateResult(result);
+    },
+  },
+  {
+    declaration: {
+      name: "getSessionPatterns",
+      description:
+        "Get discovered workflow patterns with effectiveness ratings, occurrence counts, and categories. Use this to understand what tool usage patterns lead to success or failure.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          effectiveness: {
+            type: Type.STRING,
+            description:
+              'Filter by effectiveness: "effective", "neutral", or "ineffective"',
+          },
+          category: {
+            type: Type.STRING,
+            description:
+              'Filter by category: "testing", "refactoring", "debugging", "exploration", "writing", "other"',
+          },
+          days: {
+            type: Type.NUMBER,
+            description: "Number of days to look back for stats (default 30)",
+          },
+        },
+      },
+    },
+    execute: async (sql, args) => {
+      if (args.effectiveness || args.category) {
+        const result = await getPatterns(sql, {
+          effectiveness: args.effectiveness as string | undefined,
+          category: args.category as string | undefined,
+          limit: 20,
+        });
+        return truncateResult(result);
+      }
+      const result = await getPatternStats(
+        sql,
+        clampDays(args.days as number | undefined)
+      );
+      return truncateResult(result);
+    },
+  },
+  {
+    declaration: {
+      name: "getAntiPatternData",
+      description:
+        "Get detected anti-patterns (retry loops, failure cascades, abandoned sessions) with severity and improvement suggestions.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          severity: {
+            type: Type.STRING,
+            description:
+              'Filter by severity: "info", "warning", or "critical"',
+          },
+          days: {
+            type: Type.NUMBER,
+            description: "Number of days for trend data (default 30)",
+          },
+        },
+      },
+    },
+    execute: async (sql, args) => {
+      if (args.severity) {
+        const result = await getAntiPatterns(sql, {
+          severity: args.severity as string,
+          limit: 20,
+        });
+        return truncateResult(result);
+      }
+      const result = await getAntiPatternStats(
+        sql,
+        clampDays(args.days as number | undefined)
+      );
       return truncateResult(result);
     },
   },

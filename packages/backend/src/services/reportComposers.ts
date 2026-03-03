@@ -13,7 +13,6 @@ import {
   getProjectActivity,
   getTeamHealth,
   getFailureClusters,
-  getBurnoutRiskSignals,
   getAiRoiEfficiency,
 } from "../db";
 
@@ -101,11 +100,10 @@ export async function composeManagerSummary(
   days: number,
   developerIds?: string[]
 ): Promise<ManagerSummary> {
-  const [comparison, teamHealth, clusters, burnout] = await Promise.all([
+  const [comparison, teamHealth, clusters] = await Promise.all([
     getPeriodComparison(sql, days, undefined, developerIds),
     getTeamHealth(sql, developerIds),
     getFailureClusters(sql, days, developerIds),
-    getBurnoutRiskSignals(sql, days, developerIds),
   ]);
 
   return {
@@ -129,14 +127,12 @@ export async function composeManagerSummary(
         comparison.deltas.tool_calls
       ),
     },
-    burnout_risks: burnout,
     failure_clusters: clusters.slice(0, 5).map((c) => ({
       tool_name: c.tool_name,
       session_id: c.session_id,
-      developer_name: c.developer_name,
       fail_count: c.fail_count,
     })),
-    stuck_sessions: teamHealth.stuckSessions.slice(0, 5),
+    sessions_needing_attention: teamHealth.sessionsNeedingAttention.slice(0, 5),
   };
 }
 

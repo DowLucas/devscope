@@ -20,7 +20,7 @@ const DEFAULT_FAQ: readonly FaqItem[] = [
   {
     question: "What is DevScope?",
     answer:
-      "DevScope is an open-source observability platform for agentic engineering workflows. It gives teams and leaders visibility into Claude Code sessions — every prompt, tool call, and agent spawn — as engineering shifts from writing code to orchestrating AI agents.",
+      "DevScope is an open-source upskilling platform for AI-assisted development. It analyzes Claude Code sessions to surface effective patterns, flag anti-patterns, and help teams build better AI workflows.",
   },
   {
     question: "How does the plugin work?",
@@ -40,7 +40,7 @@ const DEFAULT_FAQ: readonly FaqItem[] = [
   {
     question: "Does it work with any IDE?",
     answer:
-      "DevScope works with Claude Code CLI regardless of which editor or IDE you use. If Claude Code runs, DevScope monitors it.",
+      "DevScope works with Claude Code CLI regardless of which editor or IDE you use. If Claude Code runs, DevScope captures insights from it.",
   },
 ] as const;
 

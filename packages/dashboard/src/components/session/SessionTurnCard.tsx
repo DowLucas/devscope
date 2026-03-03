@@ -9,9 +9,10 @@ import { parseUTC } from "@/lib/utils";
 interface SessionTurnCardProps {
   turn: SessionTurn;
   index: number;
+  isSelfView?: boolean;
 }
 
-export function SessionTurnCard({ turn, index }: SessionTurnCardProps) {
+export function SessionTurnCard({ turn, index, isSelfView = false }: SessionTurnCardProps) {
   const [expanded, setExpanded] = useState(index === 0);
 
   const successCount = turn.toolCalls.filter((t) => t.success === true).length;
@@ -81,7 +82,7 @@ export function SessionTurnCard({ turn, index }: SessionTurnCardProps) {
               <p className="text-xs text-muted-foreground mb-1 font-medium">
                 Tool Chain ({successCount} ok, {failCount} fail)
               </p>
-              <ToolChainTimeline toolCalls={turn.toolCalls} />
+              <ToolChainTimeline toolCalls={turn.toolCalls} isSelfView={isSelfView} />
             </div>
           )}
 

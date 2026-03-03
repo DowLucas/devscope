@@ -6,6 +6,7 @@ import type { ToolCallEntry } from "@devscope/shared";
 
 interface ToolChainTimelineProps {
   toolCalls: ToolCallEntry[];
+  isSelfView?: boolean;
 }
 
 function getToolInputSummary(toolName: string, toolInput: Record<string, unknown>): string {
@@ -47,7 +48,7 @@ function getToolInputSummary(toolName: string, toolInput: Record<string, unknown
   }
 }
 
-export function ToolChainTimeline({ toolCalls }: ToolChainTimelineProps) {
+export function ToolChainTimeline({ toolCalls, isSelfView = false }: ToolChainTimelineProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   if (toolCalls.length === 0) return null;
@@ -56,7 +57,9 @@ export function ToolChainTimeline({ toolCalls }: ToolChainTimelineProps) {
     <div className="space-y-1 ml-4">
       {toolCalls.map((tool, i) => {
         const isExpanded = expandedIndex === i;
-        const hasDetail = tool.errorMessage || tool.toolInput;
+        // Tool inputs are only available in self-view (when developer opted in).
+        // Error messages are always visible — they help identify tooling issues.
+        const hasDetail = tool.errorMessage || (isSelfView && tool.toolInput);
 
         return (
           <div key={i}>
@@ -96,13 +99,13 @@ export function ToolChainTimeline({ toolCalls }: ToolChainTimelineProps) {
                   className="overflow-hidden"
                 >
                   <div className="ml-6 mb-2 px-3 py-2 rounded bg-muted/50 border border-border text-xs">
-                    {tool.toolInput && (
+                    {isSelfView && tool.toolInput && (
                       <p className="font-mono text-muted-foreground break-all">
                         {getToolInputSummary(tool.toolName, tool.toolInput)}
                       </p>
                     )}
                     {tool.errorMessage && (
-                      <p className={`text-destructive ${tool.toolInput ? "mt-1" : ""}`}>
+                      <p className={`text-destructive ${isSelfView && tool.toolInput ? "mt-1" : ""}`}>
                         Error: {tool.errorMessage}
                       </p>
                     )}

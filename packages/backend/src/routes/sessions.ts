@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
 import { getActiveSessions, getActiveAgents, getAllSessions, getSessionDetail } from "../db";
+import { getDeveloperIdForUser } from "../services/developerLink";
+import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
   if (!val) return def;
@@ -73,14 +75,26 @@ export function sessionsRoutes(sql: SQL) {
     if (devIds && devIds.length > 0 && !devIds.includes((detail.session as any).developer_id)) {
       return c.json({ error: "Session not found" }, 404);
     }
+
+    // Determine if the viewer is the session's developer (self-view).
+    // Only the developer themselves can see their own prompt text and tool inputs.
+    const user = c.get("user" as never) as any;
+    const viewerDevId = user?.id ? await getDeveloperIdForUser(sql, user.id) : null;
+    const sessionDevId = (detail.session as any).developer_id;
+    const isSelfView = viewerDevId != null && viewerDevId === sessionDevId;
+
     return c.json({
       session: mapSession(detail.session),
-      events: (detail.events as any[]).map((e) => ({
-        id: e.id,
-        event_type: e.event_type,
-        payload: typeof e.payload === "string" ? JSON.parse(e.payload) : e.payload,
-        created_at: e.created_at,
-      })),
+      isSelfView,
+      events: (detail.events as any[]).map((e) => {
+        const payload = typeof e.payload === "string" ? JSON.parse(e.payload) : e.payload;
+        return {
+          id: e.id,
+          event_type: e.event_type,
+          payload: isSelfView ? payload : stripSensitivePayload(payload),
+          created_at: e.created_at,
+        };
+      }),
     });
   });
 
