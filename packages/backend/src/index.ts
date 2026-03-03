@@ -17,8 +17,13 @@ import { teamsRoutes } from "./routes/teams";
 import { addClient, removeClient, getClientCount } from "./ws/handler";
 import { startStaleSessionCleanup } from "./jobs/cleanupStaleSessions";
 import { startDigestGeneration } from "./jobs/digestGeneration";
+import { startAiInsightGeneration } from "./jobs/aiInsights";
+import { startPatternAnalysis } from "./jobs/patternAnalysis";
 import { aiRoutes } from "./routes/ai";
 import { reportsRoutes } from "./routes/reports";
+import { patternsRoutes } from "./routes/patterns";
+import { skillsRoutes } from "./routes/skills";
+import { playbooksRoutes } from "./routes/playbooks";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { getPublicStats } from "./db/queries";
@@ -28,6 +33,8 @@ const sql = await initializeDatabase();
 await seedDefaultAdmin(sql);
 startStaleSessionCleanup(sql);
 startDigestGeneration(sql);
+startAiInsightGeneration(sql);
+startPatternAnalysis(sql);
 
 // Seed a default alert rule if none exist
 const [existingRules] = await sql`SELECT COUNT(*)::INT as cnt FROM alert_rules`;
@@ -133,6 +140,10 @@ app.use("/api/developers/*", orgScopeMiddleware(sql));
 app.use("/api/developers", orgScopeMiddleware(sql));
 app.use("/api/insights/*", orgScopeMiddleware(sql));
 app.use("/api/insights", orgScopeMiddleware(sql));
+app.use("/api/patterns/*", orgScopeMiddleware(sql));
+app.use("/api/patterns", orgScopeMiddleware(sql));
+app.use("/api/playbooks/*", orgScopeMiddleware(sql));
+app.use("/api/playbooks", orgScopeMiddleware(sql));
 
 app.route("/api/events", eventsRoutes(sql));
 app.route("/api/sessions", sessionsRoutes(sql));
@@ -143,6 +154,9 @@ app.route("/api/export", exportRoutes(sql));
 app.route("/api/ai", aiRoutes(sql));
 app.route("/api/reports", reportsRoutes(sql));
 app.route("/api/teams", teamsRoutes(sql));
+app.route("/api/patterns", patternsRoutes(sql));
+app.route("/api/skills", skillsRoutes(sql));
+app.route("/api/playbooks", playbooksRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })

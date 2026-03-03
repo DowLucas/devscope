@@ -24,6 +24,9 @@ export type WsMessageType =
   | "alert.triggered"
   | "ai.insight.new"
   | "ai.report.completed"
+  | "ai.pattern.new"
+  | "ai.antipattern.new"
+  | "ai.playbook.new"
   | "subscribe"
   | "connected";
 

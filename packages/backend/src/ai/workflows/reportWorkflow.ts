@@ -9,8 +9,8 @@ import {
   getToolUsageBreakdown,
   getSessionStatsSummary,
   getFailureClusters,
-} from "../../db";
-import {
+  getPatterns,
+  getAntiPatternStats,
   recordTokenUsage,
   createReport,
   updateReport,
@@ -59,6 +59,8 @@ async function gatherReportData(
     toolUsage,
     sessionSummary,
     failureClusters,
+    effectivePatterns,
+    antiPatternSummary,
   ] = await Promise.all([
     getPeriodComparison(sql, days),
     getTeamHealth(sql),
@@ -67,6 +69,8 @@ async function gatherReportData(
     getToolUsageBreakdown(sql, undefined, days),
     getSessionStatsSummary(sql, undefined, days),
     getFailureClusters(sql, days),
+    getPatterns(sql, { effectiveness: "effective", limit: 10 }),
+    getAntiPatternStats(sql, days),
   ]);
 
   // Create the report record
@@ -88,6 +92,8 @@ async function gatherReportData(
       toolUsage,
       sessionSummary,
       failureClusters,
+      effectivePatterns,
+      antiPatternSummary,
     },
     reportId: report.id,
   };
@@ -117,8 +123,9 @@ IMPORTANT: This report should focus on TEAM-LEVEL metrics only. Do NOT include i
 - Project health and progress
 - Tool adoption and failure patterns (which tools need fixing?)
 - Sessions with high failure rates (tooling problems, not people problems)
+- Skills & Patterns: effective workflow patterns the team uses well, common anti-patterns to avoid, and coaching suggestions
 
-Based on this data, create a detailed outline for the report.
+Based on this data, create a detailed outline for the report. Include a "Skills & Patterns" section.
 
 Data:
 ${dataStr}
@@ -170,7 +177,8 @@ Requirements:
 - Use proper Markdown with headers (##, ###), bullet points, and bold for emphasis
 - Include specific numbers and percentages
 - Start with a Summary section
-- Include sections for: Team Velocity, Project Health, Tool Performance, Sessions Needing Attention, Recommendations
+- Include sections for: Team Velocity, Project Health, Tool Performance, Skills & Patterns, Sessions Needing Attention, Recommendations
+- In the Skills & Patterns section: highlight top effective workflow patterns with success rates, flag common anti-patterns with frequency and avoidance tips, and provide 2-3 concrete coaching suggestions based on the data (e.g. "Sessions that used Read before Edit had fewer failures")
 - End with Action Items focused on improving tooling and workflow
 - NEVER include individual developer names, rankings, or performance comparisons
 - Focus on team-level patterns, not individual behavior

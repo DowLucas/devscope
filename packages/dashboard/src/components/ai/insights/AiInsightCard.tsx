@@ -5,6 +5,7 @@ import {
   Lightbulb,
   AlertCircle,
   Info,
+  GraduationCap,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,11 +13,12 @@ import { Badge } from "@/components/ui/badge";
 import { timeAgo } from "@/lib/utils";
 import type { AiInsight } from "@devscope/shared";
 
-const TYPE_CONFIG = {
+const TYPE_CONFIG: Record<string, { icon: typeof AlertTriangle; color: string }> = {
   anomaly: { icon: AlertTriangle, color: "text-amber-400" },
   trend: { icon: TrendingUp, color: "text-blue-400" },
   comparison: { icon: GitCompare, color: "text-purple-400" },
   recommendation: { icon: Lightbulb, color: "text-emerald-400" },
+  coaching: { icon: GraduationCap, color: "text-cyan-400" },
 };
 
 const SEVERITY_CONFIG = {

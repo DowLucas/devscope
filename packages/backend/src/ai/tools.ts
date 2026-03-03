@@ -16,6 +16,10 @@ import {
   getProjectContributors,
   getProjectActivityOverTime,
   getAllDevelopers,
+  getPatterns,
+  getPatternStats,
+  getAntiPatterns,
+  getAntiPatternStats,
 } from "../db";
 
 const MAX_DAYS = 365;
@@ -401,6 +405,82 @@ export const toolRegistry: ToolDefinition[] = [
     },
     execute: async (sql) => {
       const result = await getAllDevelopers(sql);
+      return truncateResult(result);
+    },
+  },
+  {
+    declaration: {
+      name: "getSessionPatterns",
+      description:
+        "Get discovered workflow patterns with effectiveness ratings, occurrence counts, and categories. Use this to understand what tool usage patterns lead to success or failure.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          effectiveness: {
+            type: Type.STRING,
+            description:
+              'Filter by effectiveness: "effective", "neutral", or "ineffective"',
+          },
+          category: {
+            type: Type.STRING,
+            description:
+              'Filter by category: "testing", "refactoring", "debugging", "exploration", "writing", "other"',
+          },
+          days: {
+            type: Type.NUMBER,
+            description: "Number of days to look back for stats (default 30)",
+          },
+        },
+      },
+    },
+    execute: async (sql, args) => {
+      if (args.effectiveness || args.category) {
+        const result = await getPatterns(sql, {
+          effectiveness: args.effectiveness as string | undefined,
+          category: args.category as string | undefined,
+          limit: 20,
+        });
+        return truncateResult(result);
+      }
+      const result = await getPatternStats(
+        sql,
+        clampDays(args.days as number | undefined)
+      );
+      return truncateResult(result);
+    },
+  },
+  {
+    declaration: {
+      name: "getAntiPatternData",
+      description:
+        "Get detected anti-patterns (retry loops, failure cascades, abandoned sessions) with severity and improvement suggestions.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          severity: {
+            type: Type.STRING,
+            description:
+              'Filter by severity: "info", "warning", or "critical"',
+          },
+          days: {
+            type: Type.NUMBER,
+            description: "Number of days for trend data (default 30)",
+          },
+        },
+      },
+    },
+    execute: async (sql, args) => {
+      if (args.severity) {
+        const result = await getAntiPatterns(sql, {
+          severity: args.severity as string,
+          limit: 20,
+        });
+        return truncateResult(result);
+      }
+      const result = await getAntiPatternStats(
+        sql,
+        clampDays(args.days as number | undefined)
+      );
       return truncateResult(result);
     },
   },

@@ -7,8 +7,11 @@ import {
   getFailureClusters,
   getTeamActivitySummary,
   getProjectsOverview,
+  getPatternStats,
+  getAntiPatternTrends,
+  recordTokenUsage,
+  createInsight,
 } from "../../db";
-import { recordTokenUsage, createInsight } from "../../db";
 import type { AiInsight, InsightType, InsightSeverity } from "@devscope/shared";
 
 interface InsightData {
@@ -17,6 +20,8 @@ interface InsightData {
   failureClusters: unknown;
   teamActivity: unknown;
   projects: unknown;
+  patternStats: unknown;
+  antiPatternTrends: unknown;
 }
 
 interface DetectedInsight {
@@ -42,13 +47,15 @@ async function gatherData(
 ): Promise<Partial<InsightStateType>> {
   const days = state.days;
 
-  const [periodComparison, teamHealth, failureClusters, teamActivity, projects] =
+  const [periodComparison, teamHealth, failureClusters, teamActivity, projects, patternStats, antiPatternTrends] =
     await Promise.all([
       getPeriodComparison(sql, days),
       getTeamHealth(sql),
       getFailureClusters(sql, days),
       getTeamActivitySummary(sql, days),
       getProjectsOverview(sql, days),
+      getPatternStats(sql, days),
+      getAntiPatternTrends(sql, days),
     ]);
 
   return {
@@ -58,6 +65,8 @@ async function gatherData(
       failureClusters,
       teamActivity,
       projects,
+      patternStats,
+      antiPatternTrends,
     },
   };
 }
@@ -68,11 +77,13 @@ Analyze the following data and identify significant insights. Focus on:
 2. Trends: week-over-week changes that indicate improving or declining team velocity
 3. Tool Health: tools with high failure rates that need attention
 4. Recommendations: actionable suggestions for improving team workflow and tooling
+5. Pattern Health: are effective workflow patterns being adopted more? Are anti-patterns declining?
+6. Coaching Opportunities: specific suggestions based on pattern/anti-pattern data (e.g. "Sessions using Read-before-Edit had fewer failures")
 
 IMPORTANT: Focus on team-level patterns only. Do NOT include individual developer names, rankings, or performance comparisons.
 
 For each insight, provide:
-- type: one of "anomaly", "trend", "comparison", "recommendation"
+- type: one of "anomaly", "trend", "comparison", "recommendation", "coaching"
 - severity: "info" for neutral observations, "warning" for concerning patterns, "critical" for urgent issues
 - title: a concise headline (max 80 chars)
 - narrative: a 2-3 sentence explanation with specific numbers
@@ -144,6 +155,8 @@ export async function runInsightWorkflow(
       failureClusters: null,
       teamActivity: null,
       projects: null,
+      patternStats: null,
+      antiPatternTrends: null,
     },
     insights: [],
     inputTokens: 0,
