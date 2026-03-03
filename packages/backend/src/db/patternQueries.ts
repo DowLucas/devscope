@@ -1,11 +1,7 @@
 import type { SQL } from "bun";
 import { sql as Sql } from "bun";
 import type { SessionPattern, SessionPatternMatch } from "@devscope/shared";
-
-function inList(ids: string[]): ReturnType<typeof Sql.unsafe> {
-  const escaped = ids.map(id => `'${id.replace(/'/g, "''")}'`).join(",");
-  return Sql.unsafe(escaped);
-}
+import { inList } from "./utils";
 
 // --- Tool Sequence Extraction ---
 
@@ -133,12 +129,12 @@ export async function upsertPattern(
 
   const id = crypto.randomUUID();
   const dataContext = JSON.stringify(pattern.data_context ?? {});
-  const toolSeq = `{${pattern.tool_sequence.map(t => `"${t}"`).join(",")}}`;
+  const toolSeq = `{${pattern.tool_sequence.map(t => `"${t.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
 
   await sql`
     INSERT INTO session_patterns (id, name, description, tool_sequence, avg_success_rate, occurrence_count, effectiveness, category, data_context)
     VALUES (${id}, ${pattern.name}, ${pattern.description},
-      ${Sql.unsafe(`'${toolSeq}'`)}::TEXT[],
+      ${Sql.unsafe(`'${toolSeq.replace(/'/g, "''")}'`)}::TEXT[],
       ${pattern.avg_success_rate}, ${pattern.occurrence_count},
       ${pattern.effectiveness}, ${pattern.category ?? null},
       ${dataContext}::JSONB)`;

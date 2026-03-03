@@ -19,12 +19,12 @@ export async function createPlaybook(
 ): Promise<Playbook> {
   const id = crypto.randomUUID();
   const metrics = JSON.stringify(playbook.success_metrics ?? {});
-  const toolSeq = `{${playbook.tool_sequence.map(t => `"${t}"`).join(",")}}`;
+  const toolSeq = `{${playbook.tool_sequence.map(t => `"${t.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
 
   await sql`
     INSERT INTO playbooks (id, name, description, tool_sequence, when_to_use, success_metrics, source_pattern_id, created_by, status)
     VALUES (${id}, ${playbook.name}, ${playbook.description},
-      ${Sql.unsafe(`'${toolSeq}'`)}::TEXT[],
+      ${Sql.unsafe(`'${toolSeq.replace(/'/g, "''")}'`)}::TEXT[],
       ${playbook.when_to_use}, ${metrics}::JSONB,
       ${playbook.source_pattern_id ?? null},
       ${playbook.created_by ?? "auto"},

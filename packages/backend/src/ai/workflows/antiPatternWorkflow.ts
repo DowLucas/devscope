@@ -115,14 +115,17 @@ async function classifyWithAi(
     const aiResults = classified.filter((c: any) => c.session_id === hit.session_id);
     if (aiResults.length === 0) return hit;
 
+    const validRules = ["retry_loop", "failure_cascade", "abandoned_session"] as const;
     const refinedDetections = hit.detections.map(d => {
       const aiMatch = aiResults.find((a: any) => a.rule === d.rule);
       if (!aiMatch) return d;
+      const validSeverities = ["info", "warning", "critical"] as const;
       return {
         ...d,
+        rule: validRules.includes(aiMatch.rule) ? aiMatch.rule : "ai_detected",
         name: aiMatch.name ?? d.name,
         description: aiMatch.description ?? d.description,
-        severity: aiMatch.severity ?? d.severity,
+        severity: validSeverities.includes(aiMatch.severity) ? aiMatch.severity : d.severity,
         suggestion: aiMatch.suggestion ?? d.suggestion,
       };
     });

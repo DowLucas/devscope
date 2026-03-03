@@ -8,7 +8,7 @@ import { AntiPatternTrendChart } from "./AntiPatternTrendChart";
 import { SessionQualityChart } from "./SessionQualityChart";
 
 export function SkillsView() {
-  const { mastery, patterns, antiPatterns, quality, summary, loading, fetchAll } =
+  const { mastery, patterns, antiPatterns, quality, summary, loading, error, fetchAll } =
     useSkillStore();
 
   useEffect(() => {
@@ -21,6 +21,12 @@ export function SkillsView() {
         title="My Skills"
         description="Track your AI development skills and patterns over time"
       />
+
+      {error && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       <SkillSummaryCards summary={summary} loading={loading} />
 

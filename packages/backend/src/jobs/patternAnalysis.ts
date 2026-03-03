@@ -61,7 +61,11 @@ export function startPatternAnalysis(sql: SQL) {
       }
 
       // 3. Weekly playbook refresh (Mondays)
-      const weekStr = `${now.getFullYear()}-W${Math.ceil((now.getDate() + 6 - now.getDay()) / 7)}`;
+      // Proper ISO week number calculation
+      const jan4 = new Date(now.getFullYear(), 0, 4);
+      const startOfWeek = new Date(jan4.getTime() - ((jan4.getDay() || 7) - 1) * 86400000);
+      const isoWeekNum = Math.ceil(((now.getTime() - startOfWeek.getTime()) / 86400000 + 1) / 7);
+      const weekStr = `${now.getFullYear()}-W${isoWeekNum}`;
       if (dayOfWeek === 1 && weekStr !== lastPlaybookWeek) {
         lastPlaybookWeek = weekStr;
 

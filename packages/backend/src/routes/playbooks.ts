@@ -33,8 +33,8 @@ export function playbooksRoutes(sql: SQL) {
 
   app.post("/", async (c) => {
     const body = await c.req.json();
-    if (!body.name || !body.description || !body.tool_sequence || !body.when_to_use) {
-      return c.json({ error: "name, description, tool_sequence, and when_to_use are required" }, 400);
+    if (!body.name || !body.description || !Array.isArray(body.tool_sequence) || body.tool_sequence.length === 0 || !body.when_to_use) {
+      return c.json({ error: "name, description, tool_sequence (non-empty array), and when_to_use are required" }, 400);
     }
 
     const playbook = await createPlaybook(sql, {
