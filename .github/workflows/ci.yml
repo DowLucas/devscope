@@ -16,7 +16,15 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - run: cd packages/backend && bun test
+      - name: Run backend tests
+        run: |
+          cd packages/backend
+          # Run each test file in its own process to avoid Bun mock.module()
+          # leaking between files (known Bun limitation with module mocking)
+          for f in $(find src -name '*.test.ts' | sort); do
+            echo "--- $f ---"
+            bun test "$f" || exit 1
+          done
 
   lint:
     name: Lint

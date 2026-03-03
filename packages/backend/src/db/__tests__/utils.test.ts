@@ -13,13 +13,13 @@ beforeEach(() => {
 describe("inList", () => {
   // --- Valid inputs ---
 
-  test("single valid hex ID produces correct escaped SQL fragment", () => {
+  test("single ID produces correct escaped SQL fragment", () => {
     inList(["abc123"]);
     expect(unsafeSpy).toHaveBeenCalledTimes(1);
     expect(unsafeSpy.mock.calls[0][0]).toBe("'abc123'");
   });
 
-  test("multiple valid hex IDs joined with commas", () => {
+  test("multiple IDs joined with commas", () => {
     inList(["aaa", "bbb", "ccc"]);
     expect(unsafeSpy).toHaveBeenCalledTimes(1);
     expect(unsafeSpy.mock.calls[0][0]).toBe("'aaa','bbb','ccc'");
@@ -32,97 +32,45 @@ describe("inList", () => {
     expect(unsafeSpy.mock.calls[0][0]).toBe(`'${sha}'`);
   });
 
-  test("all hex digits 0-9 a-f are accepted", () => {
-    inList(["0123456789abcdef"]);
-    expect(unsafeSpy).toHaveBeenCalledTimes(1);
-    expect(unsafeSpy.mock.calls[0][0]).toBe("'0123456789abcdef'");
-  });
-
   test("returns the result of Sql.unsafe", () => {
     const result = inList(["deadbeef"]);
     expect(result).toEqual({ __raw: "'deadbeef'" });
   });
 
-  // --- Invalid inputs: non-hex characters ---
-
-  test("throws for uppercase hex characters", () => {
-    expect(() => inList(["ABC123"])).toThrow("inList: invalid ID format: ABC123");
-  });
-
-  test("throws for ID containing a dash", () => {
-    expect(() => inList(["abc-123"])).toThrow("inList: invalid ID format: abc-123");
-  });
-
-  test("throws for ID containing a space", () => {
-    expect(() => inList(["abc 123"])).toThrow("inList: invalid ID format: abc 123");
-  });
-
-  test("throws for ID containing special characters", () => {
-    expect(() => inList(["abc'; DROP TABLE--"])).toThrow("inList: invalid ID format");
-  });
-
-  test("throws for ID with underscores", () => {
-    expect(() => inList(["abc_def"])).toThrow("inList: invalid ID format: abc_def");
-  });
-
-  test("throws for ID with non-hex lowercase letters (g-z)", () => {
-    expect(() => inList(["abcxyz"])).toThrow("inList: invalid ID format: abcxyz");
-  });
-
-  // --- Empty string ID ---
-
-  test("throws for empty string ID", () => {
-    expect(() => inList([""])).toThrow("inList: invalid ID format: ");
-  });
-
-  // --- Mixed valid and invalid ---
-
-  test("throws on first invalid ID in a mixed array", () => {
-    expect(() => inList(["aaa", "INVALID", "bbb"])).toThrow(
-      "inList: invalid ID format: INVALID"
-    );
-  });
-
-  test("throws when last ID is invalid", () => {
-    expect(() => inList(["deadbeef", "cafebabe", "not-hex"])).toThrow(
-      "inList: invalid ID format: not-hex"
-    );
-  });
-
-  test("does not call Sql.unsafe when validation fails", () => {
-    try {
-      inList(["aabbcc", "INVALID"]);
-    } catch {
-      // expected
-    }
-    expect(unsafeSpy).not.toHaveBeenCalled();
-  });
-
   // --- Empty array ---
 
-  test("empty array passes validation and calls Sql.unsafe with empty string", () => {
+  test("empty array returns Sql.unsafe('NULL')", () => {
     inList([]);
     expect(unsafeSpy).toHaveBeenCalledTimes(1);
-    expect(unsafeSpy.mock.calls[0][0]).toBe("");
+    expect(unsafeSpy.mock.calls[0][0]).toBe("NULL");
   });
 
-  // --- SQL injection prevention ---
+  // --- SQL injection prevention via quote escaping ---
 
-  test("rejects single-quote injection attempt", () => {
-    expect(() => inList(["' OR '1'='1"])).toThrow("inList: invalid ID format");
+  test("escapes single quotes in IDs", () => {
+    inList(["it's"]);
+    expect(unsafeSpy.mock.calls[0][0]).toBe("'it''s'");
   });
 
-  test("rejects semicolon injection attempt", () => {
-    expect(() => inList(["abc;DELETE FROM sessions"])).toThrow(
-      "inList: invalid ID format"
-    );
+  test("escapes SQL injection attempt with single quotes", () => {
+    inList(["' OR '1'='1"]);
+    const escaped = unsafeSpy.mock.calls[0][0];
+    // Single quotes are doubled, preventing injection breakout
+    expect(escaped).toBe("''' OR ''1''=''1'");
   });
 
-  test("rejects null byte injection", () => {
-    expect(() => inList(["abc\0def"])).toThrow("inList: invalid ID format");
+  test("handles IDs with special characters", () => {
+    inList(["abc-123", "def_456"]);
+    expect(unsafeSpy.mock.calls[0][0]).toBe("'abc-123','def_456'");
   });
 
-  test("rejects unicode lookalike characters", () => {
-    expect(() => inList(["\uff41bc"])).toThrow("inList: invalid ID format");
+  test("handles IDs with spaces", () => {
+    inList(["abc 123"]);
+    expect(unsafeSpy.mock.calls[0][0]).toBe("'abc 123'");
+  });
+
+  test("handles mixed IDs correctly", () => {
+    inList(["normal", "has'quote", "also-fine"]);
+    expect(unsafeSpy.mock.calls[0][0]).toBe("'normal','has''quote','also-fine'");
   });
 });
