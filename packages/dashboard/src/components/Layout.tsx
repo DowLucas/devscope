@@ -1,11 +1,11 @@
 import { type ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Activity, Users, GitBranch, BarChart3, AlertTriangle, Heart, FolderOpen, Sparkles, LayoutDashboard, Clock, Settings, LogOut, UsersRound, Mail, Cog, TrendingUp, BookOpen } from "lucide-react";
+import { Activity, Users, GitBranch, BarChart3, AlertTriangle, FolderOpen, Sparkles, LayoutDashboard, Clock, Settings, LogOut, UsersRound, Mail, Cog, TrendingUp, BookOpen } from "lucide-react";
 import { useActivityStore } from "@/stores/activityStore";
 import { authClient } from "@/lib/auth-client";
 import { useTeamStore } from "@/stores/teamStore";
 import { AlertBanner } from "@/components/failures/AlertBanner";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Separator } from "@/components/ui/separator";
 import logoFull from "@/assets/logo-full.png";
 
@@ -84,7 +84,6 @@ const BASE_NAV_GROUPS = [
     group: "Analytics",
     items: [
       { path: "/dashboard/metrics", label: "Metrics", icon: BarChart3 },
-      { path: "/dashboard/team-health", label: "Team Health", icon: Heart },
       { path: "/dashboard/projects", label: "Projects", icon: FolderOpen },
     ],
   },
@@ -112,7 +111,7 @@ function isActive(location: string, path: string): boolean {
   return location === path || location.startsWith(path + "/");
 }
 
-const WIDE_VIEWS = ["/dashboard/topology", "/dashboard/metrics", "/dashboard/team-health", "/dashboard/projects", "/dashboard/incidents", "/dashboard/assistant", "/dashboard/briefings", "/dashboard/skills", "/dashboard/playbooks", "/dashboard/account", "/dashboard/team"];
+const WIDE_VIEWS = ["/dashboard/topology", "/dashboard/metrics", "/dashboard/projects", "/dashboard/incidents", "/dashboard/assistant", "/dashboard/briefings", "/dashboard/skills", "/dashboard/playbooks", "/dashboard/account", "/dashboard/team"];
 
 function useNavGroups() {
   const admin = useTeamStore((s) => s.isAdmin());
@@ -142,17 +141,17 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <aside className="fixed top-0 left-0 w-52 h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col z-40">
-        <ScrollArea className="flex-1">
+      <aside className="fixed top-0 left-0 w-52 h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-border z-40 overflow-y-auto">
+        <div className="flex flex-col min-h-full">
           {currentTeam && (
-            <div className="px-4 pt-4 pb-2">
+            <div className="px-4 pt-3 pb-1 xl:pt-4 xl:pb-2">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Team</p>
               <p className="text-sm font-medium truncate">{currentTeam.name}</p>
             </div>
           )}
-          <nav className="p-4 space-y-4">
+          <nav className="p-2 xl:p-4 space-y-2 xl:space-y-4 flex-1">
             {navGroups.map((group) => (
-              <div key={group.group} className="space-y-1">
+              <div key={group.group} className="space-y-0.5 xl:space-y-1">
                 <p className="px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
                   {group.group}
                 </p>
@@ -163,7 +162,7 @@ export function Layout({ children }: LayoutProps) {
                     <Link
                       key={item.path}
                       href={item.path}
-                      className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                      className={`w-full flex items-center gap-2 text-left px-3 py-1.5 xl:py-2 rounded-lg text-sm transition-colors ${
                         active
                           ? "bg-sidebar-accent text-sidebar-accent-foreground"
                           : "text-muted-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/50"
@@ -178,41 +177,41 @@ export function Layout({ children }: LayoutProps) {
               </div>
             ))}
           </nav>
-        </ScrollArea>
 
-        {session?.user && (
-          <div className="shrink-0 border-t border-sidebar-border p-4 space-y-2">
-            <Link
-              href="/dashboard/account"
-              className={`w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                isActive(location, "/dashboard/account")
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-muted-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/50"
-              }`}
-            >
-              <Settings className="h-4 w-4" />
-              Settings
-            </Link>
-            <div className="px-3 py-2">
-              <p className="text-sm font-medium truncate">
-                {session.user.name || "User"}
-              </p>
-              <p className="text-xs text-muted-foreground truncate">
-                {session.user.email}
-              </p>
+          {session?.user && (
+            <div className="shrink-0 border-t border-sidebar-border p-2 xl:p-4 space-y-1 xl:space-y-2">
+              <Link
+                href="/dashboard/account"
+                className={`w-full flex items-center gap-2 text-left px-3 py-1.5 xl:py-2 rounded-lg text-sm transition-colors ${
+                  isActive(location, "/dashboard/account")
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-muted-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/50"
+                }`}
+              >
+                <Settings className="h-4 w-4" />
+                Settings
+              </Link>
+              <div className="px-3 py-1 xl:py-2">
+                <p className="text-sm font-medium truncate">
+                  {session.user.name || "User"}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {session.user.email}
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  await authClient.signOut();
+                  setLocation("/auth/sign-in");
+                }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 xl:py-2 rounded-lg text-sm text-muted-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </button>
             </div>
-            <button
-              onClick={async () => {
-                await authClient.signOut();
-                setLocation("/auth/sign-in");
-              }}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign out
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </aside>
 
       <div className="ml-52">

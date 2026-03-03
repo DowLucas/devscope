@@ -10,7 +10,6 @@ import { FlowView } from "@/components/flow/FlowView";
 import { InsightsView } from "@/components/insights/InsightsView";
 import { SessionDetail } from "@/components/session/SessionDetail";
 import { FailuresView } from "@/components/failures/FailuresView";
-import { HealthView } from "@/components/health/HealthView";
 import { ProjectsView } from "@/components/projects/ProjectsView";
 import { AiView } from "@/components/ai/AiView";
 import { ReportsView } from "@/components/reports/ReportsView";
@@ -68,7 +67,6 @@ function AppContent() {
         <Route path="/dashboard/topology" component={FlowView} />
         <Route path="/dashboard/metrics/*?" component={InsightsView} />
         <Route path="/dashboard/incidents" component={FailuresView} />
-        <Route path="/dashboard/team-health" component={HealthView} />
         <Route path="/dashboard/projects/*?" component={ProjectsView} />
         <Route path="/dashboard/assistant/*?" component={AiView} />
         <Route path="/dashboard/briefings/*?" component={ReportsView} />

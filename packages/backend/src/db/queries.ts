@@ -15,9 +15,7 @@ import type {
   AlertRule,
   AlertEvent,
   TeamHealthData,
-  DeveloperHealthEntry,
   SessionNeedingAttention,
-  WorkloadEntry,
   ProjectDetail,
   ProjectContributor,
   DigestSummary,
@@ -992,108 +990,7 @@ export async function checkAlertThresholds(
 // --- Team Health ---
 
 export async function getTeamHealth(sql: SQL, developerIds?: string[]): Promise<TeamHealthData> {
-  let allDevs;
-  if (developerIds && developerIds.length > 0) {
-    allDevs = await sql`
-      SELECT d.id, d.name, d.email, d.last_seen,
-        (SELECT COUNT(*)::INT FROM sessions WHERE developer_id = d.id AND status = 'active') as active_sessions
-      FROM developers d
-      WHERE d.id IN (${inList(developerIds)})
-      ORDER BY d.last_seen DESC`;
-  } else {
-    allDevs = await sql`
-      SELECT d.id, d.name, d.email, d.last_seen,
-        (SELECT COUNT(*)::INT FROM sessions WHERE developer_id = d.id AND status = 'active') as active_sessions
-      FROM developers d
-      ORDER BY d.last_seen DESC`;
-  }
-
-  let todayMetricsRows;
-  if (developerIds && developerIds.length > 0) {
-    todayMetricsRows = await sql`
-      SELECT
-        s.developer_id,
-        COUNT(DISTINCT s.id)::INT as sessions,
-        SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
-        SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls
-      FROM events e
-      JOIN sessions s ON e.session_id = s.id
-      WHERE e.created_at::DATE = CURRENT_DATE
-        AND s.developer_id IN (${inList(developerIds)})
-      GROUP BY s.developer_id`;
-  } else {
-    todayMetricsRows = await sql`
-      SELECT
-        s.developer_id,
-        COUNT(DISTINCT s.id)::INT as sessions,
-        SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
-        SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls
-      FROM events e
-      JOIN sessions s ON e.session_id = s.id
-      WHERE e.created_at::DATE = CURRENT_DATE
-      GROUP BY s.developer_id`;
-  }
-
-  const todayMetricsMap = new Map<string, any>();
-  for (const row of todayMetricsRows) {
-    todayMetricsMap.set((row as any).developer_id, row);
-  }
-
-  let hourlyRows;
-  if (developerIds && developerIds.length > 0) {
-    hourlyRows = await sql`
-      SELECT
-        s.developer_id,
-        EXTRACT(HOUR FROM e.created_at)::INT as hour,
-        COUNT(*)::INT as cnt
-      FROM events e
-      JOIN sessions s ON e.session_id = s.id
-      WHERE e.created_at::DATE = CURRENT_DATE
-        AND s.developer_id IN (${inList(developerIds)})
-      GROUP BY s.developer_id, EXTRACT(HOUR FROM e.created_at)`;
-  } else {
-    hourlyRows = await sql`
-      SELECT
-        s.developer_id,
-        EXTRACT(HOUR FROM e.created_at)::INT as hour,
-        COUNT(*)::INT as cnt
-      FROM events e
-      JOIN sessions s ON e.session_id = s.id
-      WHERE e.created_at::DATE = CURRENT_DATE
-      GROUP BY s.developer_id, EXTRACT(HOUR FROM e.created_at)`;
-  }
-
-  const hourlyMap = new Map<string, number[]>();
-  for (const row of hourlyRows as any[]) {
-    if (!hourlyMap.has(row.developer_id)) {
-      hourlyMap.set(row.developer_id, new Array(24).fill(0));
-    }
-    hourlyMap.get(row.developer_id)![row.hour] = row.cnt;
-  }
-
-  const developers: DeveloperHealthEntry[] = (allDevs as any[]).map((dev) => {
-    const lastSeenTime = new Date(dev.last_seen).getTime();
-    const oneHourAgo = Date.now() - 60 * 60 * 1000;
-    let status: "active" | "idle" | "offline" = "offline";
-    if (dev.active_sessions > 0) status = "active";
-    else if (lastSeenTime > oneHourAgo) status = "idle";
-
-    const todayMetrics = todayMetricsMap.get(dev.id);
-    const hourlyActivity = hourlyMap.get(dev.id) ?? new Array(24).fill(0);
-
-    return {
-      id: dev.id,
-      name: dev.name,
-      email: dev.email,
-      status,
-      today_sessions: todayMetrics?.sessions ?? 0,
-      today_prompts: todayMetrics?.prompts ?? 0,
-      today_tool_calls: todayMetrics?.tool_calls ?? 0,
-      hourly_activity: hourlyActivity,
-    };
-  });
-
-  // Velocity
+  // Velocity — aggregate week-over-week trends (no per-developer data)
   async function weekMetrics(startDays: number, endDays: number) {
     if (developerIds && developerIds.length > 0) {
       const [row] = await sql`
@@ -1177,40 +1074,7 @@ export async function getTeamHealth(sql: SQL, developerIds?: string[]): Promise<
       ORDER BY tool_failure_rate DESC` as SessionNeedingAttention[];
   }
 
-  // Workload
-  let workload;
-  if (developerIds && developerIds.length > 0) {
-    workload = await sql`
-      SELECT
-        s.developer_id,
-        d.name as developer_name,
-        COUNT(DISTINCT s.id)::INT as sessions,
-        SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
-        SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls
-      FROM sessions s
-      JOIN developers d ON s.developer_id = d.id
-      LEFT JOIN events e ON e.session_id = s.id
-      WHERE s.started_at::DATE = CURRENT_DATE
-        AND s.developer_id IN (${inList(developerIds)})
-      GROUP BY s.developer_id, d.name
-      ORDER BY prompts DESC` as WorkloadEntry[];
-  } else {
-    workload = await sql`
-      SELECT
-        s.developer_id,
-        d.name as developer_name,
-        COUNT(DISTINCT s.id)::INT as sessions,
-        SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
-        SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls
-      FROM sessions s
-      JOIN developers d ON s.developer_id = d.id
-      LEFT JOIN events e ON e.session_id = s.id
-      WHERE s.started_at::DATE = CURRENT_DATE
-      GROUP BY s.developer_id, d.name
-      ORDER BY prompts DESC` as WorkloadEntry[];
-  }
-
-  return { developers, velocity, sessionsNeedingAttention, workload };
+  return { velocity, sessionsNeedingAttention };
 }
 
 // --- Project Board ---

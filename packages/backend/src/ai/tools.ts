@@ -11,7 +11,6 @@ import {
   getPeriodComparison,
   getToolFailureRates,
   getFailureClusters,
-  getTeamHealth,
   getProjectsOverview,
   getProjectContributors,
   getProjectActivityOverTime,
@@ -303,21 +302,6 @@ export const toolRegistry: ToolDefinition[] = [
         clampDays(args.days as number | undefined),
         developerIds
       );
-      return truncateResult(result);
-    },
-  },
-  {
-    declaration: {
-      name: "getTeamHealth",
-      description:
-        "Get comprehensive team health data: developer statuses, velocity trends (week-over-week), stuck sessions, and workload distribution.",
-      parameters: {
-        type: Type.OBJECT,
-        properties: {},
-      },
-    },
-    execute: async (sql, _args, developerIds) => {
-      const result = await getTeamHealth(sql, developerIds);
       return truncateResult(result);
     },
   },

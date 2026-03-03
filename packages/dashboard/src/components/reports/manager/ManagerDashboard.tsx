@@ -1,8 +1,39 @@
 import { useManagerSummary } from "@/hooks/useManagerSummary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TeamSummaryCards } from "./TeamSummaryCards";
-import { SessionsNeedingAttention } from "@/components/health/SessionsNeedingAttention";
 import { FailureClustersTable } from "@/components/failures/FailureClustersTable";
+import { AlertTriangle } from "lucide-react";
+
+function SessionsAttentionList({ sessions }: { sessions: { session_id: string; project_name: string; tool_failure_rate: number }[] }) {
+  if (sessions.length === 0) {
+    return (
+      <div className="rounded-lg border bg-card p-4">
+        <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          Sessions Needing Attention
+        </h3>
+        <p className="text-muted-foreground text-sm">No sessions with high failure rates.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 text-amber-500" />
+        Sessions Needing Attention
+      </h3>
+      <div className="space-y-2">
+        {sessions.map((s) => (
+          <div key={s.session_id} className="flex items-center justify-between text-sm">
+            <span className="truncate">{s.project_name || "Unknown project"}</span>
+            <span className="text-destructive font-medium">{Math.round(s.tool_failure_rate * 100)}% failures</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function ManagerDashboard() {
   const { data, loading } = useManagerSummary(7);
@@ -33,7 +64,7 @@ export function ManagerDashboard() {
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <SessionsNeedingAttention sessions={data.sessions_needing_attention} loading={false} />
+        <SessionsAttentionList sessions={data.sessions_needing_attention} />
         <FailureClustersTable
           data={data.failure_clusters.map((c) => ({
             ...c,

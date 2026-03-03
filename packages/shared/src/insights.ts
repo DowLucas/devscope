@@ -112,21 +112,8 @@ export interface AlertEvent {
 }
 
 export interface TeamHealthData {
-  developers: DeveloperHealthEntry[];
   velocity: VelocityTrend;
   sessionsNeedingAttention: SessionNeedingAttention[];
-  workload: WorkloadEntry[];
-}
-
-export interface DeveloperHealthEntry {
-  id: string;
-  name: string;
-  email: string;
-  status: "active" | "idle" | "offline";
-  today_sessions: number;
-  today_prompts: number;
-  today_tool_calls: number;
-  hourly_activity: number[];
 }
 
 export interface VelocityTrend {
@@ -152,14 +139,6 @@ export interface SessionNeedingAttention {
   session_id: string;
   project_name: string;
   tool_failure_rate: number;
-}
-
-export interface WorkloadEntry {
-  developer_id: string;
-  developer_name: string;
-  sessions: number;
-  prompts: number;
-  tool_calls: number;
 }
 
 export interface ProjectDetail {

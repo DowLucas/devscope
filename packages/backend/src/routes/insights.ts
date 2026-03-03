@@ -11,7 +11,6 @@ import {
   getPeriodComparison,
   getToolFailureRates,
   getFailureClusters,
-  getTeamHealth,
   getProjectsOverview,
   getProjectContributors,
   getProjectToolUsage,
@@ -126,12 +125,6 @@ export function insightsRoutes(sql: SQL) {
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     return c.json(await getFailureClusters(sql, days, devIds));
-  });
-
-  // --- Team Health ---
-  app.get("/team-health", async (c) => {
-    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    return c.json(await getTeamHealth(sql, devIds));
   });
 
   // --- Project Board ---

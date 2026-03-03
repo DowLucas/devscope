@@ -110,6 +110,19 @@ claude plugin marketplace list                            # List marketplace sou
 claude plugin update devscope                             # Update plugin (after version bump)
 ```
 
+## Ethics & Design Principles
+
+DevScope exists to improve **team workflow and tooling** — not to monitor, rank, or compare individual developers.
+
+**Core principles:**
+- **No individual surveillance**: Never build features that track, rank, or compare individual developer activity, productivity, or output. Activity data is for understanding team-wide patterns and tooling health.
+- **No developer comparisons**: Dashboards and reports must present aggregate team metrics only. Leaderboards, individual heatmaps, per-developer workload charts, and "status" indicators (active/idle/offline) are not acceptable.
+- **Tooling focus, not people focus**: When surfacing problems (e.g., high failure rates), attribute them to sessions, tools, or projects — never to individuals.
+- **AI guardrails**: LLM prompts must explicitly instruct against including individual developer names, rankings, or performance comparisons in generated insights and reports.
+- **Consent-first**: Developers opt in via plugin installation. Privacy mode (`DEVSCOPE_PRIVACY=redacted`) is the default. Data collection should be minimal and transparent.
+
+When in doubt, ask: "Does this feature help the team improve their tools and workflow, or does it enable monitoring individuals?" Only build the former.
+
 ## Docker
 
 ```bash
