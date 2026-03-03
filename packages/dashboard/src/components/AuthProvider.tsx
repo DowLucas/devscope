@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authClient={authClient}
       navigate={setLocation}
       Link={Link}
-      apiKey={true}
+      apiKey={false}
       hooks={{ useListApiKeys, useListAccounts, useAccountInfo }}
       account={{ basePath: "/dashboard/account" }}
       social={{ providers: socialProviders }}
