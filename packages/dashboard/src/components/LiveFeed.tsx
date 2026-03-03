@@ -653,7 +653,7 @@ export function LiveFeed() {
                 Setup Not Complete
               </Badge>
               <p className="text-sm text-muted-foreground">
-                Connect the DevScope plugin to start monitoring your Claude Code sessions.
+                Connect the DevScope plugin to start capturing insights from your Claude Code sessions.
               </p>
               <Link
                 href="/onboarding"

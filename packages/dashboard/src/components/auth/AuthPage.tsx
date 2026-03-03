@@ -23,8 +23,8 @@ const fadeUp = {
 const FEATURES = [
   {
     icon: Activity,
-    title: "Real-time session monitoring",
-    desc: "Watch developer activity as it happens across your team.",
+    title: "Real-time session insights",
+    desc: "Understand team activity as it happens across your projects.",
   },
   {
     icon: Terminal,
@@ -38,8 +38,8 @@ const FEATURES = [
   },
   {
     icon: Zap,
-    title: "Instant anomaly detection",
-    desc: "Catch stuck sessions and failures before they snowball.",
+    title: "Proactive blocker detection",
+    desc: "Identify sessions with high failure rates before they snowball.",
   },
 ] as const;
 
@@ -99,7 +99,7 @@ export function AuthPage({ view }: { view?: string }) {
             custom={1}
           >
             <h2 className="max-w-sm text-3xl font-bold leading-snug tracking-tight">
-              See what your AI developers are building.{" "}
+              Understand how your team builds with AI.{" "}
               <span className="bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
                 In real time.
               </span>
@@ -137,7 +137,7 @@ export function AuthPage({ view }: { view?: string }) {
           className="relative z-10 border-l-2 border-white/10 pl-4"
         >
           <p className="text-sm leading-relaxed text-white/60">
-            "DevScope finally gives us the visibility we needed into our AI-assisted
+            "DevScope finally gives us the insights we needed into our AI-assisted
             development workflow. Setup took two minutes."
           </p>
           <footer className="mt-2 text-xs text-white/40">

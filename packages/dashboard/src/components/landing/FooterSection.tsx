@@ -31,7 +31,7 @@ export function FooterSection() {
               DevScope
             </a>
             <p className="mt-2 text-sm text-muted-foreground">
-              Real-time monitoring for AI-assisted development.
+              Real-time insights for AI-assisted development.
             </p>
           </div>
 

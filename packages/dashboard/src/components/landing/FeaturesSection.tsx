@@ -36,7 +36,7 @@ const DEFAULT_FEATURES: readonly Feature[] = [
     icon: Activity,
     title: "Real-Time Activity Feed",
     description:
-      "Watch developer prompts, tool calls, and session events stream in live via WebSocket.",
+      "See developer prompts, tool calls, and session events stream in live via WebSocket.",
   },
   {
     icon: GitBranch,
@@ -48,19 +48,19 @@ const DEFAULT_FEATURES: readonly Feature[] = [
     icon: BarChart3,
     title: "Team Metrics & Insights",
     description:
-      "Track session duration, tool usage, and developer productivity trends over time.",
+      "Understand session patterns, tool adoption, and team velocity trends over time.",
   },
   {
     icon: AlertTriangle,
-    title: "Incident Detection",
+    title: "Blocker Detection",
     description:
-      "Automatically detect stuck sessions, tool failures, and unusual patterns across your team.",
+      "Automatically identify sessions with high tool failure rates and unusual patterns across your team.",
   },
   {
     icon: Sparkles,
     title: "AI Briefings",
     description:
-      "Ask natural-language questions about your team's activity and get AI-generated executive briefings.",
+      "Ask natural-language questions about your team's activity and get AI-generated team briefings.",
   },
   {
     icon: Terminal,
@@ -70,9 +70,9 @@ const DEFAULT_FEATURES: readonly Feature[] = [
   },
 ] as const;
 
-const DEFAULT_HEADING = "Everything you need to monitor AI\u00a0development";
+const DEFAULT_HEADING = "Everything you need to understand AI\u00a0development";
 const DEFAULT_SUBHEADING =
-  "From real-time feeds to AI-generated briefings, DevScope gives you complete visibility.";
+  "From real-time feeds to AI-generated briefings, DevScope gives you actionable team insights.";
 
 /* -------------------------------------------------------------------------- */
 /*  Scroll-reveal animation variants                                          */

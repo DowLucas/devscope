@@ -42,7 +42,7 @@ export function InviteAcceptPage({ token }: { token: string }) {
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold tracking-tight">DevScope</h1>
-        <p className="text-muted-foreground mt-1">Developer Session Monitoring</p>
+        <p className="text-muted-foreground mt-1">AI Development Insights</p>
       </div>
       <div className="w-full max-w-md">
         <Card>

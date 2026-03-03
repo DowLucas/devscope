@@ -34,8 +34,8 @@ function formatNumber(n: number): string {
 
 function toLiveStats(data: PublicStats): Stat[] {
   return [
-    { value: formatNumber(data.totalDevelopers), label: "Developers tracked" },
-    { value: formatNumber(data.totalSessions), label: "Sessions monitored" },
+    { value: formatNumber(data.totalDevelopers), label: "Developers connected" },
+    { value: formatNumber(data.totalSessions), label: "Sessions analyzed" },
     { value: formatNumber(data.totalEvents), label: "Events processed" },
     { value: String(data.activeSessions), label: "Active right now" },
   ];

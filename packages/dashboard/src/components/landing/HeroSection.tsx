@@ -24,11 +24,11 @@ const fadeUp = {
 
 /** Fallback content used before persona is chosen. */
 const DEFAULT = {
-  badge: "Open Source Developer Monitoring",
-  headline: "See what your AI developers are building.",
+  badge: "Open Source AI Development Insights",
+  headline: "Understand how your team builds with AI.",
   headlineAccent: "In real time.",
   subtext:
-    "DevScope gives engineering leaders full visibility into Claude Code sessions across their team. Track activity, catch stuck sessions, and understand how AI is being used — all from a single dashboard.",
+    "DevScope helps engineering teams understand their AI-assisted development patterns. Discover tool adoption, identify blockers, and improve workflows — all from a shared dashboard.",
 };
 
 export function HeroSection() {

@@ -40,10 +40,10 @@ const HERO: Record<Persona, HeroContent> = {
   },
   "non-technical": {
     badge: "AI Development Intelligence",
-    headline: "Measure the impact of AI-assisted development.",
-    headlineAccent: "Quantify ROI.",
+    headline: "Understand how your team builds with AI.",
+    headlineAccent: "Drive adoption.",
     subtext:
-      "DevScope gives engineering leaders the business intelligence they need — team velocity, AI adoption metrics, cost-per-session analytics, and executive-ready briefings.",
+      "DevScope gives engineering leaders the insights they need — team velocity, AI adoption patterns, project-level analytics, and team-ready briefings.",
   },
 };
 
@@ -118,7 +118,7 @@ const FEATURES: Record<Persona, FeaturesContent> = {
         icon: TrendingUp,
         title: "Team Velocity Analytics",
         description:
-          "Track sessions per developer, compare sprint-over-sprint productivity, and identify capacity trends across your team.",
+          "Understand team-wide session patterns, sprint-over-sprint velocity, and capacity trends to guide resource planning.",
       },
       {
         icon: LineChart,
@@ -146,9 +146,9 @@ const FEATURES: Record<Persona, FeaturesContent> = {
       },
       {
         icon: Workflow,
-        title: "Team Comparison Dashboards",
+        title: "Best Practices Sharing",
         description:
-          "Benchmark teams and individuals. Identify best practices from top performers and scale them across the org.",
+          "Discover effective tool usage patterns across your team and share successful workflows to accelerate adoption.",
       },
     ],
   },
@@ -286,7 +286,7 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
     {
       question: "What is DevScope?",
       answer:
-        "DevScope is an open-source analytics platform that gives engineering leaders visibility into AI-assisted development. It captures team-wide session activity and turns it into actionable business intelligence — adoption metrics, velocity trends, and executive briefings.",
+        "DevScope is an open-source analytics platform that helps engineering leaders understand AI-assisted development. It captures team-wide session activity and turns it into actionable insights — adoption metrics, velocity trends, and team briefings.",
     },
     {
       question: "How does rollout work for my team?",
@@ -304,9 +304,9 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
         "DevScope is fully self-hosted — your data never leaves your infrastructure. It captures session metadata only, not source code or prompt content.",
     },
     {
-      question: "Can I compare team performance?",
+      question: "Can I see how AI adoption is going?",
       answer:
-        "Yes. DevScope includes developer comparison dashboards, period-over-period analytics, and team benchmarks so you can identify best practices and scale them.",
+        "Yes. DevScope includes team activity dashboards, period-over-period analytics, and adoption trends so you can identify what's working and share best practices across the team.",
     },
   ],
 };
