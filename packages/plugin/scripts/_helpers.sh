@@ -12,6 +12,17 @@ if [ -z "${DEVSCOPE_URL:-}" ]; then
 fi
 DEVSCOPE_URL="${DEVSCOPE_URL:-http://localhost:6767}"
 
+# Opt-in detailed data sharing (prompt text, tool inputs)
+# Developers must explicitly enable this to share detailed activity.
+# When enabled, prompt text and tool inputs are sent to the server
+# and visible only to the developer themselves in "My Patterns" view.
+# Set DEVSCOPE_SHARE_DETAILS=true in env or config file to opt in.
+DEVSCOPE_SHARE_DETAILS="${DEVSCOPE_SHARE_DETAILS:-false}"
+
+_ds_share_details_enabled() {
+  [ "$DEVSCOPE_SHARE_DETAILS" = "true" ] || [ "$DEVSCOPE_SHARE_DETAILS" = "1" ]
+}
+
 # SHA256 hash — works on Linux, macOS, and BSDs
 _ds_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then

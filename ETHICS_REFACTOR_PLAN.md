@@ -51,36 +51,41 @@ Every feature should pass this test: "Would a developer feel comfortable knowing
 
 ---
 
-### 1.3 Stop Storing Prompt Text
+### 1.3 Make Prompt Text Opt-In (IMPLEMENTED)
 
-**Why:** Full prompt text is the developer's private conversation with their AI assistant. Capturing it is the digital equivalent of reading over someone's shoulder. It creates a chilling effect where developers self-censor their prompts, making them less effective with the tool.
+**Why:** Full prompt text is the developer's private conversation with their AI assistant. It shouldn't be captured by default or visible to the team. However, when a developer opts in, their prompt history becomes a valuable self-improvement tool — they can review their own prompting patterns and improve how they use AI.
 
-**Files to change:**
+**Approach:** Opt-in at the plugin level via `DEVSCOPE_SHARE_DETAILS=true` config. Even when stored, prompt text is only visible to the developer themselves (self-view). Team members see only "Prompt (N chars)".
+
+**Files changed:**
 
 | File | Action |
 |------|--------|
-| `packages/plugin/scripts/prompt-submit.sh:10-14` | Remove `--arg pt "$PROMPT"` and `promptText` from payload. Keep only `promptLength` and `isContinuation` |
-| `packages/shared/src/events.ts:59-63` | Remove `promptText` from `PromptEventPayload` |
-| `packages/dashboard/src/components/session/SessionTurnCard.tsx:33-41` | Replace prompt text display with "Prompt (N chars)" indicator |
-| `packages/dashboard/src/components/session/SessionTurnCard.tsx:68-77` | Remove expanded prompt text view, show only character count |
-
-**Note:** Existing `promptText` data in the database should be scrubbed via a migration that sets `payload = payload - 'promptText'` on all `prompt.submit` events.
+| `packages/plugin/scripts/_helpers.sh` | Added `DEVSCOPE_SHARE_DETAILS` config and `_ds_share_details_enabled()` helper |
+| `packages/plugin/scripts/prompt-submit.sh` | Only includes `promptText` in payload when `DEVSCOPE_SHARE_DETAILS=true` |
+| `packages/backend/src/utils/stripSensitiveFields.ts` | New utility to strip `promptText` and `toolInput` from payloads |
+| `packages/backend/src/routes/sessions.ts` | Session detail route detects self-view via `user_developer_link` and only includes sensitive fields for the session's developer |
+| `packages/backend/src/routes/events.ts` | Recent events endpoint and WebSocket broadcasts always strip sensitive fields |
+| `packages/dashboard/src/components/session/SessionDetail.tsx` | Passes `isSelfView` to turn cards, shows info banner for non-self viewers |
+| `packages/dashboard/src/components/session/SessionTurnCard.tsx` | Accepts `isSelfView` prop |
 
 ---
 
-### 1.4 Stop Storing Tool Inputs
+### 1.4 Make Tool Inputs Opt-In (IMPLEMENTED)
 
-**Why:** `toolInput` captures the full JSON input to every tool call — file contents, search queries, bash commands. This goes far beyond "what tools are being used" into "exactly what is the developer doing at every moment." Tool name + success/fail + duration is sufficient for team insights.
+**Why:** `toolInput` captures the full JSON input to every tool call — file contents, search queries, bash commands. For team visibility, tool name + success/fail + duration is sufficient. But for the developer themselves, seeing what inputs caused failures is a valuable debugging and learning tool.
 
-**Files to change:**
+**Approach:** Same opt-in mechanism as prompt text (`DEVSCOPE_SHARE_DETAILS`). Tool inputs stripped from team views, visible only to session owner.
+
+**Files changed:**
 
 | File | Action |
 |------|--------|
-| `packages/plugin/scripts/tool-use.sh:14,25-29` | Remove `TOOL_INPUT` extraction and `toolInput` from payload |
-| `packages/plugin/scripts/tool-complete.sh` | Remove `toolInput` from payload |
-| `packages/shared/src/events.ts:65-72` | Remove `toolInput` from `ToolEventPayload` |
-
-**Note:** Scrub existing data via migration: `UPDATE events SET payload = payload - 'toolInput' WHERE event_type IN ('tool.start', 'tool.complete', 'tool.fail')`.
+| `packages/plugin/scripts/tool-use.sh` | Only captures `toolInput` when `DEVSCOPE_SHARE_DETAILS=true` |
+| `packages/plugin/scripts/tool-complete.sh` | Only captures `toolInput` when `DEVSCOPE_SHARE_DETAILS=true` |
+| `packages/backend/src/utils/stripSensitiveFields.ts` | Strips `toolInput` alongside `promptText` |
+| `packages/dashboard/src/components/session/ToolChainTimeline.tsx` | Only shows tool input details in self-view; error messages always visible |
+| `packages/backend/src/db/migrations/006_developer_privacy_preferences.sql` | Adds `share_details` preference column to developers table |
 
 ---
 
@@ -229,7 +234,9 @@ On first run (when no `~/.config/devscope/consent.json` exists), the plugin shou
 ```
 [DevScope] This plugin sends session activity data to your team's DevScope instance.
 [DevScope] Data collected: session start/end, tool names used, tool success/fail, session duration.
-[DevScope] Data NOT collected: prompt text, tool inputs, file contents.
+[DevScope] Data NOT collected (unless you opt in): prompt text, tool inputs, file contents.
+[DevScope] Opt in to detailed sharing: set DEVSCOPE_SHARE_DETAILS=true in config.
+[DevScope] When opted in, your prompt text and tool inputs are visible only to you.
 [DevScope] Configure: ~/.config/devscope/preferences.json
 [DevScope] Privacy policy: https://your-devscope-instance/privacy
 ```
@@ -291,16 +298,15 @@ Currently broadcasts full event objects (including payload) to all connected das
 
 ### Database Migrations
 
-1. **Scrub existing sensitive data:**
+1. **Privacy preferences (DONE — migration 006):**
    ```sql
-   UPDATE events SET payload = payload - 'promptText'
-     WHERE event_type = 'prompt.submit' AND payload ? 'promptText';
-   UPDATE events SET payload = payload - 'toolInput'
-     WHERE event_type IN ('tool.start', 'tool.complete', 'tool.fail')
-     AND payload ? 'toolInput';
+   ALTER TABLE developers
+     ADD COLUMN share_details BOOLEAN NOT NULL DEFAULT FALSE;
+   ALTER TABLE developers
+     ADD COLUMN share_details_updated_at TIMESTAMPTZ;
    ```
 
-2. **Add retention and consent columns:**
+2. **Add retention and consent columns (TODO):**
    ```sql
    ALTER TABLE organization_settings
      ADD COLUMN event_retention_days INTEGER DEFAULT 90;
@@ -332,8 +338,8 @@ None. These are ethical requirements, not experimental features. Ship them all.
 |---|---|
 | Developer Leaderboard (#1, #2, #3) | Team Activity Summary (aggregate only) |
 | Burnout Risk Scoring per developer | Self-service "My Work Patterns" (developer-only) |
-| Full prompt text capture | Prompt character count only |
-| Full tool input capture | Tool name + success/fail + duration |
+| Full prompt text captured and visible to team | Opt-in capture, self-view only (DONE) |
+| Full tool input captured and visible to team | Opt-in capture, self-view only (DONE) |
 | "Stuck Sessions" with developer names + idle time | "Sessions with High Failure Rates" (tooling problem, not people problem) |
 | Developer Comparison bar charts | Project Health views |
 | Individual failure clusters by developer | Team Tooling Health (which tools need fixing?) |
@@ -359,23 +365,32 @@ None. These are ethical requirements, not experimental features. Ship them all.
 
 ### Modify
 - `packages/shared/src/reports.ts` (remove `BurnoutRiskEntry`, update `ManagerSummary`)
-- `packages/shared/src/events.ts` (remove `promptText`, `toolInput`)
 - `packages/shared/src/insights.ts` (replace `DeveloperLeaderboardEntry` with team types)
-- `packages/plugin/scripts/prompt-submit.sh` (stop sending `promptText`)
-- `packages/plugin/scripts/tool-use.sh` (stop sending `toolInput`)
-- `packages/plugin/scripts/tool-complete.sh` (stop sending `toolInput`)
 - `packages/plugin/scripts/session-start.sh` (add consent notice)
 - `packages/backend/src/db/queries.ts` (remove burnout query, rewrite leaderboard as team aggregate)
-- `packages/backend/src/routes/events.ts` (filter sensitive data from broadcasts)
 - `packages/backend/src/routes/export.ts` (add role check, anonymize, audit log)
 - `packages/backend/src/routes/insights.ts` (remove comparison endpoint)
 
-### New Files
+### Already Modified (Opt-In Data Sharing)
+- `packages/plugin/scripts/_helpers.sh` (added `DEVSCOPE_SHARE_DETAILS` config + helper)
+- `packages/plugin/scripts/prompt-submit.sh` (opt-in `promptText` capture)
+- `packages/plugin/scripts/tool-use.sh` (opt-in `toolInput` capture)
+- `packages/plugin/scripts/tool-complete.sh` (opt-in `toolInput` capture)
+- `packages/backend/src/routes/events.ts` (strip sensitive fields from broadcasts + recent events)
+- `packages/backend/src/routes/sessions.ts` (self-view detection, conditional field stripping)
+- `packages/dashboard/src/components/session/SessionDetail.tsx` (isSelfView state + info banner)
+- `packages/dashboard/src/components/session/SessionTurnCard.tsx` (isSelfView prop)
+- `packages/dashboard/src/components/session/ToolChainTimeline.tsx` (self-view conditional display)
+
+### New Files (Already Created)
+- `packages/backend/src/utils/stripSensitiveFields.ts` (payload sanitization utility)
+- `packages/backend/src/db/migrations/006_developer_privacy_preferences.sql` (share_details column)
+
+### New Files (TODO)
 - `packages/dashboard/src/components/insights/TeamActivityTable.tsx`
 - `packages/dashboard/src/components/insights/TeamToolingHealth.tsx`
 - `packages/dashboard/src/components/insights/KnowledgeSharingIndicators.tsx`
 - `packages/dashboard/src/components/me/MyWorkPatterns.tsx`
-- `packages/backend/src/db/migrations/0XX_ethics_refactor.sql`
 - `packages/backend/src/jobs/cleanupExpiredEvents.ts`
 
 ### Plugin (both repos)

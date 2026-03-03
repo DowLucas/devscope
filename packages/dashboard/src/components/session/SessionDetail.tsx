@@ -17,15 +17,17 @@ interface SessionDetailProps {
 export function SessionDetail({ sessionId }: SessionDetailProps) {
   const [data, setData] = useState<SessionDetailType | null>(null);
   const [turns, setTurns] = useState<SessionTurn[]>([]);
+  const [isSelfView, setIsSelfView] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
     apiFetch(`/api/sessions/${sessionId}`)
       .then((r) => r.json())
-      .then((d: SessionDetailType) => {
+      .then((d: SessionDetailType & { isSelfView?: boolean }) => {
         setData(d);
         setTurns(buildTurns(d.events));
+        setIsSelfView(d.isSelfView ?? false);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -117,8 +119,14 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
         <h3 className="text-sm font-medium text-muted-foreground">
           Conversation ({turns.length} turns)
         </h3>
+        {!isSelfView && turns.length > 0 && (
+          <div className="rounded-lg bg-muted/30 border border-border px-3 py-2 text-xs text-muted-foreground">
+            Prompt text and tool inputs are only visible to the session owner.
+            Developers can opt in to detailed sharing via DEVSCOPE_SHARE_DETAILS.
+          </div>
+        )}
         {turns.map((turn, i) => (
-          <SessionTurnCard key={i} turn={turn} index={i} />
+          <SessionTurnCard key={i} turn={turn} index={i} isSelfView={isSelfView} />
         ))}
         {turns.length === 0 && (
           <div className="text-muted-foreground text-center py-8 text-sm">
