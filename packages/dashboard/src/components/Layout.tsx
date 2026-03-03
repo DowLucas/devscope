@@ -101,7 +101,7 @@ const BASE_NAV_GROUPS = [
     items: [
       { path: "/dashboard/assistant", label: "AI Assistant", icon: Sparkles },
       { path: "/dashboard/briefings", label: "Briefings", icon: LayoutDashboard },
-      { path: "/dashboard/skills", label: "Skills", icon: TrendingUp },
+      { path: "/dashboard/skills", label: "Team Skills", icon: TrendingUp },
       { path: "/dashboard/playbooks", label: "Playbooks", icon: BookOpen },
     ],
   },

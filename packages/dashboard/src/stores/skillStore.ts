@@ -1,12 +1,18 @@
 import { create } from "zustand";
 import { apiFetch } from "@/lib/api";
 
-interface ToolMasteryPoint {
+interface ProductivityPoint {
   week: string;
-  tool_name: string;
-  successes: number;
-  total: number;
-  success_rate: number;
+  sessions: number;
+  avg_duration_minutes: number;
+  active_devs: number;
+}
+
+interface OutcomePoint {
+  week: string;
+  total_sessions: number;
+  completed_sessions: number;
+  completion_rate: number;
 }
 
 interface PatternAdoptionPoint {
@@ -22,114 +28,161 @@ interface AntiPatternTrendPoint {
   by_rule: Record<string, number>;
 }
 
-interface SessionQualityPoint {
-  week: string;
-  sessions: number;
+interface TopPattern {
+  id: string;
+  name: string;
+  description: string;
+  effectiveness: string;
+  team_match_count: number;
   avg_success_rate: number;
-  avg_tool_calls: number;
 }
 
-interface SkillSummary {
-  tool_mastery_rate: number;
-  anti_pattern_count: number;
-  effective_patterns_used: number;
-  ineffective_patterns_used: number;
-  avg_session_quality: number;
-  period_weeks: number;
+interface TopAntiPattern {
+  id: string;
+  name: string;
+  description: string;
+  detection_rule: string;
+  severity: string;
+  suggestion: string;
+  team_match_count: number;
+}
+
+interface TeamSummary {
+  total_sessions: number;
+  completion_rate: number;
+  avg_duration_minutes: number;
+  patterns_detected: number;
+  anti_patterns_detected: number;
+  prev_total_sessions: number;
+  prev_completion_rate: number;
+  prev_avg_duration_minutes: number;
+  prev_patterns_detected: number;
+  prev_anti_patterns_detected: number;
+}
+
+interface CoachingData {
+  anti_patterns: TopAntiPattern[];
+  playbooks: { id: string; name: string; description: string; when_to_use: string }[];
+}
+
+// AI Insight types
+interface Prediction {
+  metric: "sessions" | "completion_rate" | "effective_patterns" | "anti_patterns";
+  next_weeks: { week: string; predicted_value: number; confidence: number }[];
+  trend_direction: "improving" | "stable" | "declining";
+  explanation: string;
+}
+
+interface SkillAssessment {
+  dimension: string;
+  score: number;
+  previous_score: number;
+  detail: string;
+}
+
+interface CoachingCard {
+  type: "strength" | "improvement" | "action";
+  title: string;
+  description: string;
+  impact: "high" | "medium" | "low";
+  related_metric?: string;
+}
+
+interface GrowthSummary {
+  overall_trend: "improving" | "stable" | "declining";
+  headline: string;
+  key_insight: string;
+}
+
+export interface AiInsights {
+  predictions: Prediction[];
+  skill_assessment: SkillAssessment[];
+  coaching: CoachingCard[];
+  growth_summary: GrowthSummary;
 }
 
 interface SkillState {
-  mastery: ToolMasteryPoint[];
+  summary: TeamSummary | null;
+  productivity: ProductivityPoint[];
+  outcomes: OutcomePoint[];
   patterns: PatternAdoptionPoint[];
   antiPatterns: AntiPatternTrendPoint[];
-  quality: SessionQualityPoint[];
-  summary: SkillSummary | null;
+  topPatterns: TopPattern[];
+  coaching: CoachingData | null;
+  aiInsights: AiInsights | null;
   loading: boolean;
+  insightsLoading: boolean;
   error: string | null;
 
-  fetchMastery: (weeks?: number) => Promise<void>;
-  fetchPatterns: (weeks?: number) => Promise<void>;
-  fetchAntiPatterns: (weeks?: number) => Promise<void>;
-  fetchQuality: (weeks?: number) => Promise<void>;
-  fetchSummary: () => Promise<void>;
+  weeks: number;
+  setWeeks: (weeks: number) => void;
   fetchAll: (weeks?: number) => Promise<void>;
+  generateInsights: (weeks?: number) => Promise<void>;
 }
 
-export const useSkillStore = create<SkillState>((set) => ({
-  mastery: [],
+export const useSkillStore = create<SkillState>((set, get) => ({
+  summary: null,
+  productivity: [],
+  outcomes: [],
   patterns: [],
   antiPatterns: [],
-  quality: [],
-  summary: null,
+  topPatterns: [],
+  coaching: null,
+  aiInsights: null,
   loading: true,
+  insightsLoading: false,
   error: null,
 
-  fetchMastery: async (weeks = 12) => {
-    try {
-      const res = await apiFetch(`/api/skills/mastery?weeks=${weeks}`);
-      const data = await res.json();
-      set({ mastery: data });
-    } catch {
-      set({ error: "Failed to load mastery data" });
-    }
+  weeks: 12,
+
+  setWeeks: (weeks: number) => {
+    set({ weeks });
+    get().fetchAll(weeks);
   },
 
-  fetchPatterns: async (weeks = 12) => {
-    try {
-      const res = await apiFetch(`/api/skills/patterns?weeks=${weeks}`);
-      const data = await res.json();
-      set({ patterns: data });
-    } catch {
-      set({ error: "Failed to load pattern data" });
-    }
-  },
-
-  fetchAntiPatterns: async (weeks = 12) => {
-    try {
-      const res = await apiFetch(`/api/skills/anti-patterns?weeks=${weeks}`);
-      const data = await res.json();
-      set({ antiPatterns: data });
-    } catch {
-      set({ error: "Failed to load anti-pattern data" });
-    }
-  },
-
-  fetchQuality: async (weeks = 12) => {
-    try {
-      const res = await apiFetch(`/api/skills/quality?weeks=${weeks}`);
-      const data = await res.json();
-      set({ quality: data });
-    } catch {
-      set({ error: "Failed to load quality data" });
-    }
-  },
-
-  fetchSummary: async () => {
-    try {
-      const res = await apiFetch("/api/skills/summary");
-      const data = await res.json();
-      set({ summary: data });
-    } catch {
-      set({ error: "Failed to load summary" });
-    }
-  },
-
-  fetchAll: async (weeks = 12) => {
+  fetchAll: async (weeks?: number) => {
+    const w = weeks ?? get().weeks;
     set({ loading: true, error: null });
     try {
-      const [mastery, patterns, antiPatterns, quality, summary] =
+      const [summary, productivity, outcomes, patterns, antiPatterns, topPatterns, coaching] =
         await Promise.all([
-          apiFetch(`/api/skills/mastery?weeks=${weeks}`).then((r) => r.json()),
-          apiFetch(`/api/skills/patterns?weeks=${weeks}`).then((r) => r.json()),
-          apiFetch(`/api/skills/anti-patterns?weeks=${weeks}`).then((r) =>
-            r.json()
-          ),
-          apiFetch(`/api/skills/quality?weeks=${weeks}`).then((r) => r.json()),
-          apiFetch("/api/skills/summary").then((r) => r.json()),
+          apiFetch(`/api/skills/summary?weeks=${w}`).then((r) => r.json()),
+          apiFetch(`/api/skills/productivity?weeks=${w}`).then((r) => r.json()),
+          apiFetch(`/api/skills/outcomes?weeks=${w}`).then((r) => r.json()),
+          apiFetch(`/api/skills/patterns?weeks=${w}`).then((r) => r.json()),
+          apiFetch(`/api/skills/anti-patterns?weeks=${w}`).then((r) => r.json()),
+          apiFetch(`/api/skills/top-patterns?weeks=${w}`).then((r) => r.json()),
+          apiFetch(`/api/skills/coaching?weeks=${w}`).then((r) => r.json()),
         ]);
-      set({ mastery, patterns, antiPatterns, quality, summary, loading: false });
+      set({
+        summary,
+        productivity,
+        outcomes,
+        patterns,
+        antiPatterns,
+        topPatterns,
+        coaching,
+        loading: false,
+      });
     } catch {
-      set({ error: "Failed to load skill data", loading: false });
+      set({ error: "Failed to load team skills data", loading: false });
+    }
+  },
+
+  generateInsights: async (weeks?: number) => {
+    const w = weeks ?? get().weeks;
+    set({ insightsLoading: true });
+    try {
+      const res = await apiFetch(`/api/skills/insights?weeks=${w}`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to generate insights" }));
+        set({ insightsLoading: false, error: (err as any).error ?? "Failed to generate insights" });
+        return;
+      }
+      const data = await res.json();
+      set({ aiInsights: data as AiInsights, insightsLoading: false });
+    } catch {
+      set({ error: "Failed to generate insights", insightsLoading: false });
     }
   },
 }));

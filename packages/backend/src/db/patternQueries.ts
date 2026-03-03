@@ -279,7 +279,7 @@ export async function getDeveloperToolMastery(
       e.payload->>'toolName' as tool_name,
       SUM(CASE WHEN e.event_type = 'tool.complete' THEN 1 ELSE 0 END)::INT as successes,
       COUNT(*)::INT as total,
-      ROUND(SUM(CASE WHEN e.event_type = 'tool.complete' THEN 1 ELSE 0 END)::FLOAT / GREATEST(COUNT(*), 1), 3)::FLOAT as success_rate
+      ROUND((SUM(CASE WHEN e.event_type = 'tool.complete' THEN 1 ELSE 0 END)::FLOAT / GREATEST(COUNT(*), 1))::NUMERIC, 3)::FLOAT as success_rate
     FROM events e
     JOIN sessions s ON e.session_id = s.id
     WHERE s.developer_id = ${developerId}
@@ -344,4 +344,216 @@ export async function getDeveloperSessionQuality(
       AND s.started_at >= NOW() - make_interval(weeks => ${weeks})
     GROUP BY week
     ORDER BY week ASC`) as any[];
+}
+
+// --- Team Skills Queries ---
+
+export async function getTeamSessionProductivity(
+  sql: SQL,
+  devIds: string[],
+  weeks: number = 12
+): Promise<{
+  week: string;
+  sessions: number;
+  avg_duration_minutes: number;
+  active_devs: number;
+}[]> {
+  if (devIds.length === 0) return [];
+  return (await sql`
+    SELECT
+      date_trunc('week', s.started_at)::DATE as week,
+      COUNT(*)::INT as sessions,
+      ROUND(
+        AVG(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::NUMERIC, 1
+      )::FLOAT as avg_duration_minutes,
+      COUNT(DISTINCT s.developer_id)::INT as active_devs
+    FROM sessions s
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND s.started_at >= NOW() - make_interval(weeks => ${weeks})
+    GROUP BY week
+    ORDER BY week ASC`) as any[];
+}
+
+export async function getTeamSessionOutcomes(
+  sql: SQL,
+  devIds: string[],
+  weeks: number = 12
+): Promise<{
+  week: string;
+  total_sessions: number;
+  completed_sessions: number;
+  completion_rate: number;
+}[]> {
+  if (devIds.length === 0) return [];
+  return (await sql`
+    SELECT
+      date_trunc('week', s.started_at)::DATE as week,
+      COUNT(*)::INT as total_sessions,
+      SUM(CASE WHEN s.status = 'ended' THEN 1 ELSE 0 END)::INT as completed_sessions,
+      ROUND(
+        (SUM(CASE WHEN s.status = 'ended' THEN 1 ELSE 0 END)::FLOAT /
+        GREATEST(COUNT(*), 1))::NUMERIC, 3
+      )::FLOAT as completion_rate
+    FROM sessions s
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND s.started_at >= NOW() - make_interval(weeks => ${weeks})
+    GROUP BY week
+    ORDER BY week ASC`) as any[];
+}
+
+export async function getTeamPatternAdoption(
+  sql: SQL,
+  devIds: string[],
+  weeks: number = 12
+): Promise<{
+  week: string;
+  effective_count: number;
+  ineffective_count: number;
+  neutral_count: number;
+}[]> {
+  if (devIds.length === 0) return [];
+  return (await sql`
+    SELECT
+      date_trunc('week', spm.created_at)::DATE as week,
+      SUM(CASE WHEN sp.effectiveness = 'effective' THEN 1 ELSE 0 END)::INT as effective_count,
+      SUM(CASE WHEN sp.effectiveness = 'ineffective' THEN 1 ELSE 0 END)::INT as ineffective_count,
+      SUM(CASE WHEN sp.effectiveness = 'neutral' THEN 1 ELSE 0 END)::INT as neutral_count
+    FROM session_pattern_matches spm
+    JOIN session_patterns sp ON spm.pattern_id = sp.id
+    JOIN sessions s ON spm.session_id = s.id
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND spm.created_at >= NOW() - make_interval(weeks => ${weeks})
+    GROUP BY week
+    ORDER BY week ASC`) as any[];
+}
+
+export async function getTeamTopPatterns(
+  sql: SQL,
+  devIds: string[],
+  weeks: number = 12,
+  limit: number = 10
+): Promise<{
+  id: string;
+  name: string;
+  description: string;
+  effectiveness: string;
+  team_match_count: number;
+  avg_success_rate: number;
+}[]> {
+  if (devIds.length === 0) return [];
+  return (await sql`
+    SELECT
+      sp.id,
+      sp.name,
+      sp.description,
+      sp.effectiveness,
+      COUNT(spm.id)::INT as team_match_count,
+      sp.avg_success_rate
+    FROM session_patterns sp
+    JOIN session_pattern_matches spm ON sp.id = spm.pattern_id
+    JOIN sessions s ON spm.session_id = s.id
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND sp.effectiveness = 'effective'
+      AND spm.created_at >= NOW() - make_interval(weeks => ${weeks})
+    GROUP BY sp.id, sp.name, sp.description, sp.effectiveness, sp.avg_success_rate
+    ORDER BY team_match_count DESC
+    LIMIT ${limit}`) as any[];
+}
+
+export async function getTeamSkillsSummary(
+  sql: SQL,
+  devIds: string[],
+  weeks: number = 4
+): Promise<{
+  total_sessions: number;
+  completion_rate: number;
+  avg_duration_minutes: number;
+  patterns_detected: number;
+  anti_patterns_detected: number;
+  prev_total_sessions: number;
+  prev_completion_rate: number;
+  prev_avg_duration_minutes: number;
+  prev_patterns_detected: number;
+  prev_anti_patterns_detected: number;
+}> {
+  if (devIds.length === 0) {
+    return {
+      total_sessions: 0, completion_rate: 0, avg_duration_minutes: 0,
+      patterns_detected: 0, anti_patterns_detected: 0,
+      prev_total_sessions: 0, prev_completion_rate: 0, prev_avg_duration_minutes: 0,
+      prev_patterns_detected: 0, prev_anti_patterns_detected: 0,
+    };
+  }
+
+  const [current] = await sql`
+    SELECT
+      COUNT(*)::INT as total_sessions,
+      ROUND(
+        (SUM(CASE WHEN s.status = 'ended' THEN 1 ELSE 0 END)::FLOAT /
+        GREATEST(COUNT(*), 1))::NUMERIC, 3
+      )::FLOAT as completion_rate,
+      ROUND(
+        AVG(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::NUMERIC, 1
+      )::FLOAT as avg_duration_minutes
+    FROM sessions s
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND s.started_at >= NOW() - make_interval(weeks => ${weeks})`;
+
+  const [prev] = await sql`
+    SELECT
+      COUNT(*)::INT as total_sessions,
+      ROUND(
+        (SUM(CASE WHEN s.status = 'ended' THEN 1 ELSE 0 END)::FLOAT /
+        GREATEST(COUNT(*), 1))::NUMERIC, 3
+      )::FLOAT as completion_rate,
+      ROUND(
+        AVG(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::NUMERIC, 1
+      )::FLOAT as avg_duration_minutes
+    FROM sessions s
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND s.started_at >= NOW() - make_interval(weeks => ${weeks * 2})
+      AND s.started_at < NOW() - make_interval(weeks => ${weeks})`;
+
+  const [currentPatterns] = await sql`
+    SELECT COUNT(*)::INT as cnt
+    FROM session_pattern_matches spm
+    JOIN sessions s ON spm.session_id = s.id
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND spm.created_at >= NOW() - make_interval(weeks => ${weeks})`;
+
+  const [prevPatterns] = await sql`
+    SELECT COUNT(*)::INT as cnt
+    FROM session_pattern_matches spm
+    JOIN sessions s ON spm.session_id = s.id
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND spm.created_at >= NOW() - make_interval(weeks => ${weeks * 2})
+      AND spm.created_at < NOW() - make_interval(weeks => ${weeks})`;
+
+  const [currentAnti] = await sql`
+    SELECT COUNT(*)::INT as cnt
+    FROM session_anti_pattern_matches sapm
+    JOIN sessions s ON sapm.session_id = s.id
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND sapm.created_at >= NOW() - make_interval(weeks => ${weeks})`;
+
+  const [prevAnti] = await sql`
+    SELECT COUNT(*)::INT as cnt
+    FROM session_anti_pattern_matches sapm
+    JOIN sessions s ON sapm.session_id = s.id
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND sapm.created_at >= NOW() - make_interval(weeks => ${weeks * 2})
+      AND sapm.created_at < NOW() - make_interval(weeks => ${weeks})`;
+
+  return {
+    total_sessions: (current as any)?.total_sessions ?? 0,
+    completion_rate: (current as any)?.completion_rate ?? 0,
+    avg_duration_minutes: (current as any)?.avg_duration_minutes ?? 0,
+    patterns_detected: (currentPatterns as any)?.cnt ?? 0,
+    anti_patterns_detected: (currentAnti as any)?.cnt ?? 0,
+    prev_total_sessions: (prev as any)?.total_sessions ?? 0,
+    prev_completion_rate: (prev as any)?.completion_rate ?? 0,
+    prev_avg_duration_minutes: (prev as any)?.avg_duration_minutes ?? 0,
+    prev_patterns_detected: (prevPatterns as any)?.cnt ?? 0,
+    prev_anti_patterns_detected: (prevAnti as any)?.cnt ?? 0,
+  };
 }

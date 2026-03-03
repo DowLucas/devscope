@@ -10,9 +10,10 @@ The backend and dashboard (`packages/backend/`, `packages/dashboard/`) are the c
 
 **MIT License:**
 All other portions of the repository are licensed under the MIT License. This includes:
-- The Claude Code plugin: `packages/plugin/`
 - Shared TypeScript types: `packages/shared/`
 - Docker configuration, documentation, and root-level files
+
+The Claude Code plugin is in a [separate repo](https://github.com/DowLucas/devscope-plugin) under the MIT License.
 
 Both licenses are available to read below:
 

@@ -15,7 +15,7 @@ You should receive an acknowledgment within 48 hours. We will work with you to u
 This policy applies to:
 - The DevScope backend API (`packages/backend/`)
 - The DevScope dashboard (`packages/dashboard/`)
-- The Claude Code plugin (`packages/plugin/`)
+- The Claude Code plugin ([`DowLucas/devscope-plugin`](https://github.com/DowLucas/devscope-plugin))
 
 ## Supported Versions
 

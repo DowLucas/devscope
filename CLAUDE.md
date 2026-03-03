@@ -28,12 +28,13 @@ bun test
 
 ## Architecture
 
-**Bun monorepo** with 4 packages under `packages/`:
+**Bun monorepo** with 3 packages under `packages/`:
 
 - **shared** — TypeScript types (`DevscopeEvent`, `Developer`, `Session`, `EventPayload` variants). This is the contract between all packages.
 - **backend** — Bun + Hono REST API + WebSocket server. Uses `Bun.sql` (built-in PostgreSQL client) with connection pooling. Runs on port 6767.
 - **dashboard** — React 19 + Vite + TailwindCSS 4 + Zustand. Proxies `/api` and `/ws` to backend in dev.
-- **plugin** — Bash scripts that fire as Claude Code hooks (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, etc.). They extract developer identity from `git config`, build a `DevscopeEvent` JSON, and POST to the backend. All hooks are async/non-blocking.
+
+The **plugin** (Bash hooks for Claude Code) lives in a separate repo: [`DowLucas/devscope-plugin`](https://github.com/DowLucas/devscope-plugin).
 
 ## Event Flow
 
@@ -78,13 +79,9 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 
 ## Plugin & Marketplace
 
-The plugin lives in two places:
-- **`packages/plugin/`** — local dev copy in this monorepo (test with `claude --plugin-dir packages/plugin`)
-- **`DowLucas/devscope-plugin`** — standalone GitHub repo that acts as both the plugin source and its own marketplace
+The plugin lives in a **separate repo**: [`DowLucas/devscope-plugin`](https://github.com/DowLucas/devscope-plugin). It is not part of this monorepo.
 
-### How the Marketplace Works
-
-This repo's plugin is distributed via the Claude Code marketplace system. The standalone repo (`DowLucas/devscope-plugin`) contains:
+The standalone repo acts as both the plugin source and its own marketplace:
 - `.claude-plugin/plugin.json` — plugin manifest (name, version)
 - `.claude-plugin/marketplace.json` — marketplace manifest (makes the repo discoverable as a marketplace)
 
@@ -105,23 +102,13 @@ To release:
 2. Push to `main`
 3. Users run `claude plugin update devscope` (restart required)
 
-Keep `packages/plugin/.claude-plugin/plugin.json` version in sync for local dev consistency.
-
 ### Useful CLI Commands
 
 ```bash
 claude plugin list                                        # List installed plugins
 claude plugin marketplace list                            # List marketplace sources
 claude plugin update devscope                             # Update plugin (after version bump)
-claude plugin validate packages/plugin                    # Validate local plugin structure
-claude --plugin-dir packages/plugin                       # Test local copy
 ```
-
-### Plugin Files to Keep in Sync
-
-When making plugin changes, update both:
-- `packages/plugin/` (this monorepo)
-- `DowLucas/devscope-plugin` (standalone repo)
 
 ## Docker
 

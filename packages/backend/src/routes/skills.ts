@@ -1,102 +1,100 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
 import {
-  getDeveloperToolMastery,
-  getDeveloperPatternAdoption,
-  getDeveloperSessionQuality,
+  getTeamSessionProductivity,
+  getTeamSessionOutcomes,
+  getTeamPatternAdoption,
+  getTeamTopPatterns,
+  getTeamSkillsSummary,
 } from "../db/patternQueries";
-import { getDeveloperAntiPatterns } from "../db/antiPatternQueries";
-
-/**
- * Resolve the authenticated user's developer ID.
- * The plugin derives developer ID as SHA256(git config user.email),
- * so we look up the developer by matching the auth user's email.
- */
-async function resolveDeveloperId(sql: SQL, userEmail: string): Promise<string | null> {
-  const [dev] = await sql`
-    SELECT id FROM developers WHERE email = ${userEmail} LIMIT 1`;
-  return (dev as any)?.id ?? null;
-}
+import {
+  getTeamAntiPatterns,
+  getTeamTopAntiPatterns,
+} from "../db/antiPatternQueries";
+import { getPlaybooks } from "../db/playbookQueries";
+import { isAiAvailable } from "../ai/gemini";
+import { runSkillInsightWorkflow } from "../ai/workflows/skillInsightWorkflow";
 
 export function skillsRoutes(sql: SQL) {
   const app = new Hono();
 
-  // All routes are developer self-view only
-  app.use("*", async (c, next) => {
-    const user = c.get("user" as never) as any;
-    if (!user?.email) {
-      return c.json({ error: "Unauthorized" }, 401);
-    }
-
-    const developerId = await resolveDeveloperId(sql, user.email);
-    if (!developerId) {
-      return c.json({ error: "No developer profile found for your account" }, 404);
-    }
-
-    c.set("developerId" as never, developerId as never);
-    return next();
+  app.get("/summary", async (c) => {
+    const devIds = c.get("orgDeveloperIds" as never) as string[];
+    const weeks = Number(c.req.query("weeks") ?? 4);
+    const summary = await getTeamSkillsSummary(sql, devIds, weeks);
+    return c.json(summary);
   });
 
-  app.get("/mastery", async (c) => {
-    const developerId = c.get("developerId" as never) as string;
+  app.get("/productivity", async (c) => {
+    const devIds = c.get("orgDeveloperIds" as never) as string[];
     const weeks = Number(c.req.query("weeks") ?? 12);
-    const mastery = await getDeveloperToolMastery(sql, developerId, weeks);
-    return c.json(mastery);
+    const data = await getTeamSessionProductivity(sql, devIds, weeks);
+    return c.json(data);
+  });
+
+  app.get("/outcomes", async (c) => {
+    const devIds = c.get("orgDeveloperIds" as never) as string[];
+    const weeks = Number(c.req.query("weeks") ?? 12);
+    const data = await getTeamSessionOutcomes(sql, devIds, weeks);
+    return c.json(data);
   });
 
   app.get("/patterns", async (c) => {
-    const developerId = c.get("developerId" as never) as string;
+    const devIds = c.get("orgDeveloperIds" as never) as string[];
     const weeks = Number(c.req.query("weeks") ?? 12);
-    const patterns = await getDeveloperPatternAdoption(sql, developerId, weeks);
-    return c.json(patterns);
+    const data = await getTeamPatternAdoption(sql, devIds, weeks);
+    return c.json(data);
   });
 
   app.get("/anti-patterns", async (c) => {
-    const developerId = c.get("developerId" as never) as string;
+    const devIds = c.get("orgDeveloperIds" as never) as string[];
     const weeks = Number(c.req.query("weeks") ?? 12);
-    const antiPatterns = await getDeveloperAntiPatterns(sql, developerId, weeks);
-    return c.json(antiPatterns);
+    const data = await getTeamAntiPatterns(sql, devIds, weeks);
+    return c.json(data);
   });
 
-  app.get("/quality", async (c) => {
-    const developerId = c.get("developerId" as never) as string;
+  app.get("/top-patterns", async (c) => {
+    const devIds = c.get("orgDeveloperIds" as never) as string[];
     const weeks = Number(c.req.query("weeks") ?? 12);
-    const quality = await getDeveloperSessionQuality(sql, developerId, weeks);
-    return c.json(quality);
+    const limit = Number(c.req.query("limit") ?? 10);
+    const data = await getTeamTopPatterns(sql, devIds, weeks, limit);
+    return c.json(data);
   });
 
-  app.get("/summary", async (c) => {
-    const developerId = c.get("developerId" as never) as string;
+  app.get("/top-anti-patterns", async (c) => {
+    const devIds = c.get("orgDeveloperIds" as never) as string[];
+    const weeks = Number(c.req.query("weeks") ?? 12);
+    const limit = Number(c.req.query("limit") ?? 10);
+    const data = await getTeamTopAntiPatterns(sql, devIds, weeks, limit);
+    return c.json(data);
+  });
 
-    const [mastery, patterns, antiPatterns, quality] = await Promise.all([
-      getDeveloperToolMastery(sql, developerId, 4),
-      getDeveloperPatternAdoption(sql, developerId, 4),
-      getDeveloperAntiPatterns(sql, developerId, 4),
-      getDeveloperSessionQuality(sql, developerId, 4),
+  app.get("/coaching", async (c) => {
+    const devIds = c.get("orgDeveloperIds" as never) as string[];
+    const weeks = Number(c.req.query("weeks") ?? 12);
+
+    const [topAntiPatterns, playbooks] = await Promise.all([
+      getTeamTopAntiPatterns(sql, devIds, weeks, 5),
+      getPlaybooks(sql, { status: "active", limit: 5 }),
     ]);
 
-    // Compute summary metrics
-    const recentMastery = mastery.length > 0
-      ? mastery.reduce((sum, m) => sum + m.success_rate * m.total, 0) /
-        Math.max(mastery.reduce((sum, m) => sum + m.total, 0), 1)
-      : 0;
+    return c.json({ anti_patterns: topAntiPatterns, playbooks });
+  });
 
-    const totalAntiPatterns = antiPatterns.reduce((sum, w) => sum + w.count, 0);
-    const totalEffective = patterns.reduce((sum, w) => sum + w.effective_count, 0);
-    const totalIneffective = patterns.reduce((sum, w) => sum + w.ineffective_count, 0);
+  app.post("/insights", async (c) => {
+    if (!isAiAvailable()) {
+      return c.json({ error: "AI features unavailable: GEMINI_API_KEY not configured" }, 503);
+    }
 
-    const avgQuality = quality.length > 0
-      ? quality.reduce((sum, q) => sum + q.avg_success_rate, 0) / quality.length
-      : 0;
+    const devIds = c.get("orgDeveloperIds" as never) as string[];
+    const weeks = Number(c.req.query("weeks") ?? 12);
 
-    return c.json({
-      tool_mastery_rate: Math.round(recentMastery * 1000) / 1000,
-      anti_pattern_count: totalAntiPatterns,
-      effective_patterns_used: totalEffective,
-      ineffective_patterns_used: totalIneffective,
-      avg_session_quality: Math.round(avgQuality * 1000) / 1000,
-      period_weeks: 4,
-    });
+    const result = await runSkillInsightWorkflow(sql, devIds, weeks);
+    if (!result) {
+      return c.json({ error: "Failed to generate insights" }, 500);
+    }
+
+    return c.json(result);
   });
 
   return app;

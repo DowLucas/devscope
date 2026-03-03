@@ -1,5 +1,6 @@
 import type { SQL } from "bun";
 import type { AntiPattern, SessionAntiPatternMatch } from "@devscope/shared";
+import { inList } from "./utils";
 
 // --- Anti-Pattern CRUD ---
 
@@ -213,4 +214,82 @@ export async function getDeveloperAntiPatterns(
     week,
     ...data,
   }));
+}
+
+// --- Team Anti-Pattern Queries ---
+
+export async function getTeamAntiPatterns(
+  sql: SQL,
+  devIds: string[],
+  weeks: number = 12
+): Promise<{
+  week: string;
+  count: number;
+  by_rule: Record<string, number>;
+}[]> {
+  if (devIds.length === 0) return [];
+
+  const rows = await sql`
+    SELECT
+      date_trunc('week', sapm.created_at)::DATE as week,
+      ap.detection_rule,
+      COUNT(*)::INT as count
+    FROM session_anti_pattern_matches sapm
+    JOIN anti_patterns ap ON sapm.anti_pattern_id = ap.id
+    JOIN sessions s ON sapm.session_id = s.id
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND sapm.created_at >= NOW() - make_interval(weeks => ${weeks})
+    GROUP BY week, ap.detection_rule
+    ORDER BY week ASC`;
+
+  const weekMap = new Map<string, { count: number; by_rule: Record<string, number> }>();
+  for (const row of rows as any[]) {
+    const week = row.week;
+    if (!weekMap.has(week)) {
+      weekMap.set(week, { count: 0, by_rule: {} });
+    }
+    const entry = weekMap.get(week)!;
+    entry.count += row.count;
+    entry.by_rule[row.detection_rule] = row.count;
+  }
+
+  return Array.from(weekMap.entries()).map(([week, data]) => ({
+    week,
+    ...data,
+  }));
+}
+
+export async function getTeamTopAntiPatterns(
+  sql: SQL,
+  devIds: string[],
+  weeks: number = 12,
+  limit: number = 10
+): Promise<{
+  id: string;
+  name: string;
+  description: string;
+  detection_rule: string;
+  severity: string;
+  suggestion: string;
+  team_match_count: number;
+}[]> {
+  if (devIds.length === 0) return [];
+
+  return (await sql`
+    SELECT
+      ap.id,
+      ap.name,
+      ap.description,
+      ap.detection_rule,
+      ap.severity,
+      ap.suggestion,
+      COUNT(sapm.id)::INT as team_match_count
+    FROM anti_patterns ap
+    JOIN session_anti_pattern_matches sapm ON ap.id = sapm.anti_pattern_id
+    JOIN sessions s ON sapm.session_id = s.id
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND sapm.created_at >= NOW() - make_interval(weeks => ${weeks})
+    GROUP BY ap.id, ap.name, ap.description, ap.detection_rule, ap.severity, ap.suggestion
+    ORDER BY team_match_count DESC
+    LIMIT ${limit}`) as any[];
 }

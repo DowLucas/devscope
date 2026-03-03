@@ -19,9 +19,6 @@ packages/shared/dist
 .vscode
 .idea
 
-# Plugin (runs on host, not containerized)
-packages/plugin
-
 # Docker files
 docker-compose*.yml
 .dockerignore

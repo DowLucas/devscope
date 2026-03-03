@@ -92,8 +92,6 @@ bun run dev
 
 - Backend runs on `http://localhost:6767`
 - Dashboard runs on `http://localhost:5173` (proxies API/WS to backend)
-- Test the plugin locally: `claude --plugin-dir packages/plugin`
-
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full development guidelines.
 
 ## Architecture
@@ -115,7 +113,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for full development guidelines.
 | [`packages/shared`](packages/shared) | TypeScript types — the contract between all packages |
 | [`packages/backend`](packages/backend) | Hono REST API + WebSocket server (Bun) |
 | [`packages/dashboard`](packages/dashboard) | React 19 + Vite + TailwindCSS 4 + Zustand |
-| [`packages/plugin`](packages/plugin) | Bash hooks for Claude Code ([standalone repo](https://github.com/DowLucas/devscope-plugin)) |
+| [`devscope-plugin`](https://github.com/DowLucas/devscope-plugin) | Bash hooks for Claude Code (separate repo) |
 
 ## Configuration
 
