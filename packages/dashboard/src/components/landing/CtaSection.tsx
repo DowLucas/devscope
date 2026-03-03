@@ -13,7 +13,7 @@ const revealVisible = { opacity: 1, y: 0 } as const;
 const revealViewport = { once: true, amount: 0.3 } as const;
 
 const DEFAULT = {
-  heading: "Empower your AI development workflow today",
+  heading: "Start building better AI skills today",
   subtext:
     "Set up DevScope in under 5 minutes. Open source, self-hosted, zero developer friction.",
   buttonLabel: "Get Started Free",

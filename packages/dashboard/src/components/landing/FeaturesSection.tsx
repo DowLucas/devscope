@@ -34,33 +34,33 @@ interface Feature {
 const DEFAULT_FEATURES: readonly Feature[] = [
   {
     icon: Activity,
-    title: "Real-Time Activity Feed",
+    title: "Pattern Discovery",
     description:
-      "See developer prompts, tool calls, and session events stream in live via WebSocket.",
+      "Surface effective workflows from real session data. See which tool sequences and prompting styles lead to the best outcomes.",
   },
   {
     icon: GitBranch,
-    title: "Session Topology",
+    title: "Anti-Pattern Detection",
     description:
-      "Visualize the relationship between developers, sessions, and agents in an interactive flow diagram.",
+      "Automatically flag common pitfalls — retry loops, high failure-rate tools, and inefficient workflows — so your team can learn from them.",
   },
   {
     icon: BarChart3,
-    title: "Team Metrics & Insights",
+    title: "Team Skill Mapping",
     description:
-      "Understand session patterns, tool adoption, and team velocity trends over time.",
+      "Understand how your team adopts AI tools over time. Track which skills are developing and where coaching can help most.",
   },
   {
     icon: AlertTriangle,
-    title: "Blocker Detection",
+    title: "Suggested Improvements",
     description:
-      "Automatically identify sessions with high tool failure rates and unusual patterns across your team.",
+      "AI-generated recommendations based on session patterns — concrete tips to help developers get more from every Claude Code session.",
   },
   {
     icon: Sparkles,
-    title: "AI Briefings",
+    title: "Shareable Learnings",
     description:
-      "Ask natural-language questions about your team's activity and get AI-generated team briefings.",
+      "Generate team briefings that highlight what's working, what isn't, and which patterns to adopt or avoid.",
   },
   {
     icon: Terminal,
@@ -70,9 +70,9 @@ const DEFAULT_FEATURES: readonly Feature[] = [
   },
 ] as const;
 
-const DEFAULT_HEADING = "Everything you need to understand AI\u00a0development";
+const DEFAULT_HEADING = "Turn AI usage data into\u00a0team\u00a0skills";
 const DEFAULT_SUBHEADING =
-  "From real-time feeds to AI-generated briefings, DevScope gives you actionable team insights.";
+  "DevScope finds patterns in how your team uses AI — surfacing effective workflows, catching anti-patterns, and helping everyone level up.";
 
 /* -------------------------------------------------------------------------- */
 /*  Scroll-reveal animation variants                                          */

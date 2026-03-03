@@ -20,7 +20,7 @@ const DEFAULT_FAQ: readonly FaqItem[] = [
   {
     question: "What is DevScope?",
     answer:
-      "DevScope is an open-source, real-time analytics platform for Claude Code developer sessions. It gives engineering teams insights into AI-assisted development patterns and helps improve workflows.",
+      "DevScope is an open-source upskilling platform for AI-assisted development. It analyzes Claude Code sessions to surface effective patterns, flag anti-patterns, and help teams build better AI workflows.",
   },
   {
     question: "How does the plugin work?",

@@ -32,18 +32,18 @@ interface HeroContent {
 
 const HERO: Record<Persona, HeroContent> = {
   technical: {
-    badge: "Open Source Developer Insights",
-    headline: "Understand how you use Claude Code.",
+    badge: "Open Source AI Upskilling",
+    headline: "Level up how you use Claude Code.",
     headlineAccent: "Ship smarter.",
     subtext:
-      "DevScope gives you deep insight into your Claude Code sessions — see which tools you lean on, where you get stuck, and how to get more from every prompt.",
+      "DevScope analyzes your Claude Code sessions to reveal what's working and what isn't — discover effective patterns, break out of anti-patterns, and build better AI workflows over time.",
   },
   "non-technical": {
-    badge: "AI Development Intelligence",
-    headline: "Understand how your team builds with AI.",
-    headlineAccent: "Drive adoption.",
+    badge: "AI Development Upskilling Platform",
+    headline: "Help your team master AI-assisted development.",
+    headlineAccent: "Faster.",
     subtext:
-      "DevScope gives engineering leaders the insights they need — team velocity, AI adoption patterns, project-level analytics, and team-ready briefings.",
+      "DevScope turns AI usage data into actionable team skills — surface effective patterns, identify anti-patterns to avoid, and accelerate adoption with data-driven coaching.",
   },
 };
 
@@ -67,39 +67,39 @@ interface FeaturesContent {
 
 const FEATURES: Record<Persona, FeaturesContent> = {
   technical: {
-    heading: "Insights that sharpen your workflow",
+    heading: "Build better AI skills, session by session",
     subheading:
-      "From session replays to tool-usage breakdowns, DevScope helps you understand and improve how you code with AI.",
+      "DevScope turns your Claude Code usage into a personal learning tool — revealing patterns, flagging anti-patterns, and suggesting better workflows.",
     items: [
       {
         icon: Activity,
         title: "Session Replay & Timeline",
         description:
-          "Review every prompt and tool call in chronological order. Spot patterns and understand the flow of your work.",
+          "Review every prompt and tool call in chronological order. Spot what works, learn from what doesn't, and refine your approach.",
       },
       {
         icon: GitBranch,
-        title: "Project-Level Breakdown",
+        title: "Pattern Library",
         description:
-          "See how your sessions map to repositories. Understand which projects get the most AI-assisted development.",
+          "See which tool sequences and prompting styles lead to success. Build a personal playbook of effective AI workflows.",
       },
       {
         icon: BrainCircuit,
-        title: "Tool Usage Heatmaps",
+        title: "Anti-Pattern Alerts",
         description:
-          "Discover which tools you use most, which ones fail, and where you spend the most time waiting.",
+          "Get flagged when you hit common pitfalls — retry loops, high-failure tools, or inefficient sequences — with suggestions to break out.",
       },
       {
         icon: Lightbulb,
-        title: "Workflow Suggestions",
+        title: "AI-Powered Suggestions",
         description:
-          "AI-generated tips based on your session patterns — learn techniques that other productive developers use.",
+          "Receive personalized tips based on your session patterns — concrete techniques to improve how you work with Claude Code.",
       },
       {
         icon: Zap,
-        title: "Stuck-Session Alerts",
+        title: "Skill Progress",
         description:
-          "Get notified when a session spins without progress so you can break out of loops faster.",
+          "See how your AI workflows improve over time. Track which tools you've mastered and where you're still learning.",
       },
       {
         icon: Terminal,
@@ -110,45 +110,45 @@ const FEATURES: Record<Persona, FeaturesContent> = {
     ],
   },
   "non-technical": {
-    heading: "Business intelligence for AI development",
+    heading: "Upskill your team's AI development",
     subheading:
-      "From adoption metrics to executive briefings, DevScope turns AI development activity into actionable insights.",
+      "DevScope helps teams learn from their AI usage — surfacing effective patterns, catching anti-patterns, and accelerating skill development.",
     items: [
       {
         icon: TrendingUp,
-        title: "Team Velocity Analytics",
+        title: "Adoption & Skill Trends",
         description:
-          "Understand team-wide session patterns, sprint-over-sprint velocity, and capacity trends to guide resource planning.",
+          "Understand how your team's AI skills are developing over time. See adoption curves, tool mastery, and areas where coaching can help.",
       },
       {
         icon: LineChart,
-        title: "AI Adoption & ROI Metrics",
+        title: "Pattern & Anti-Pattern Reports",
         description:
-          "Measure Claude Code adoption rates, session frequency, and correlate AI usage with engineering output.",
+          "Identify which AI workflows succeed across your team and which common anti-patterns are costing time.",
       },
       {
         icon: Briefcase,
-        title: "Executive Briefings",
+        title: "Team Learning Briefings",
         description:
-          "AI-generated summaries delivered on your schedule — understand team activity without reading every data point.",
+          "AI-generated summaries highlighting team patterns to adopt, anti-patterns to avoid, and skills to develop next.",
       },
       {
         icon: Target,
-        title: "Resource Allocation Insights",
+        title: "Project-Level Insights",
         description:
-          "See which projects consume the most AI-assisted development time and align investment with priorities.",
+          "See which projects benefit most from AI-assisted development and where teams can improve their approach.",
       },
       {
         icon: AlertTriangle,
-        title: "Risk & Anomaly Detection",
+        title: "Blocker Detection",
         description:
-          "Automatically flag stalled sessions, unusual usage spikes, and potential blockers before they impact delivery.",
+          "Automatically surface sessions with high failure rates — identify tooling issues and workflow blockers early.",
       },
       {
         icon: Workflow,
-        title: "Best Practices Sharing",
+        title: "Shareable Playbooks",
         description:
-          "Discover effective tool usage patterns across your team and share successful workflows to accelerate adoption.",
+          "Turn successful patterns into team knowledge. Share what works so everyone can level up together.",
       },
     ],
   },
@@ -186,9 +186,9 @@ const STEPS: Record<Persona, readonly StepItem[]> = {
     {
       number: 3,
       icon: Sparkles,
-      title: "Review Your Insights",
+      title: "Learn & Improve",
       description:
-        "Open DevScope to see session timelines, tool usage patterns, and AI-generated suggestions to sharpen your workflow.",
+        "Open DevScope to review your sessions, discover effective patterns, catch anti-patterns, and get AI-generated suggestions to level up.",
     },
   ],
   "non-technical": [
@@ -209,9 +209,9 @@ const STEPS: Record<Persona, readonly StepItem[]> = {
     {
       number: 3,
       icon: Briefcase,
-      title: "Get Actionable Intelligence",
+      title: "Coach & Upskill",
       description:
-        "Review dashboards, receive executive briefings, and make data-driven decisions about your AI development investment.",
+        "Review team patterns, share effective workflows, and use AI-generated learning briefs to help your team build better AI skills.",
     },
   ],
 };
@@ -230,15 +230,15 @@ interface CtaContent {
 
 const CTA: Record<Persona, CtaContent> = {
   technical: {
-    heading: "Start understanding your Claude Code workflow",
+    heading: "Start leveling up your AI workflow today",
     subtext:
       "Set up DevScope in under 5 minutes. Open source, self-hosted, zero overhead on your development flow.",
     buttonLabel: "Get Started Free",
   },
   "non-technical": {
-    heading: "Start measuring your team's AI development ROI",
+    heading: "Start upskilling your team's AI development",
     subtext:
-      "Deploy DevScope in minutes. Self-hosted, open source, and designed for engineering leaders who need real data.",
+      "Deploy DevScope in minutes. Self-hosted, open source, and designed for teams that want to get better at AI-assisted development.",
     buttonLabel: "Get Started Free",
   },
 };
@@ -272,9 +272,9 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
         "Yes! DevScope is fully open source and designed for self-hosting. Deploy with Docker Compose in minutes. Your data stays on your infrastructure.",
     },
     {
-      question: "How do I see my personal insights?",
+      question: "How does it help me improve?",
       answer:
-        "After installing the plugin, open the DevScope dashboard. Your sessions appear in real time with timelines, tool-usage breakdowns, and AI-generated workflow suggestions.",
+        "DevScope analyzes your session patterns and highlights effective workflows, flags anti-patterns like retry loops, and generates AI-powered suggestions to help you build better AI development skills over time.",
     },
     {
       question: "Does it work with any IDE?",
@@ -286,7 +286,7 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
     {
       question: "What is DevScope?",
       answer:
-        "DevScope is an open-source analytics platform that helps engineering leaders understand AI-assisted development. It captures team-wide session activity and turns it into actionable insights — adoption metrics, velocity trends, and team briefings.",
+        "DevScope is an open-source upskilling platform for AI-assisted development. It analyzes team-wide Claude Code sessions to surface effective patterns, flag anti-patterns, and help your team build better AI workflows over time.",
     },
     {
       question: "How does rollout work for my team?",
@@ -294,9 +294,9 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
         "Developers install a lightweight plugin with a single command. It runs silently alongside Claude Code with zero impact on their workflow. No behavior change or training required.",
     },
     {
-      question: "What kind of metrics can I track?",
+      question: "What kind of insights does it provide?",
       answer:
-        "Team velocity, AI adoption rates, sessions per developer, project-level breakdowns, failure patterns, and cost correlations. DevScope also generates AI-powered executive briefings on demand.",
+        "Pattern and anti-pattern reports, adoption trends, skill development curves, tool mastery breakdowns, and project-level insights. DevScope also generates AI-powered team learning briefs on demand.",
     },
     {
       question: "Is the data secure?",
@@ -304,9 +304,9 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
         "DevScope is fully self-hosted — your data never leaves your infrastructure. It captures session metadata only, not source code or prompt content.",
     },
     {
-      question: "Can I see how AI adoption is going?",
+      question: "How does it help upskill my team?",
       answer:
-        "Yes. DevScope includes team activity dashboards, period-over-period analytics, and adoption trends so you can identify what's working and share best practices across the team.",
+        "DevScope identifies which AI workflows succeed and which don't, then generates shareable learning briefs. Teams can see which patterns to adopt, which anti-patterns to avoid, and track skill development over time.",
     },
   ],
 };

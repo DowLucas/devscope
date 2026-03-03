@@ -23,8 +23,8 @@ const fadeUp = {
 const FEATURES = [
   {
     icon: Activity,
-    title: "Real-time session insights",
-    desc: "Understand team activity as it happens across your projects.",
+    title: "Pattern discovery",
+    desc: "Surface effective AI workflows and catch anti-patterns automatically.",
   },
   {
     icon: Terminal,
@@ -33,13 +33,13 @@ const FEATURES = [
   },
   {
     icon: GitBranch,
-    title: "Project & session insights",
-    desc: "Understand how AI coding tools are used across repos.",
+    title: "Skill development",
+    desc: "Track how your AI development skills improve over time.",
   },
   {
     icon: Zap,
-    title: "Proactive blocker detection",
-    desc: "Identify sessions with high failure rates before they snowball.",
+    title: "AI-powered suggestions",
+    desc: "Get concrete tips to build better AI workflows from your session data.",
   },
 ] as const;
 
@@ -99,9 +99,9 @@ export function AuthPage({ view }: { view?: string }) {
             custom={1}
           >
             <h2 className="max-w-sm text-3xl font-bold leading-snug tracking-tight">
-              Understand how your team builds with AI.{" "}
+              Level up your team's AI development skills.{" "}
               <span className="bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
-                In real time.
+                Together.
               </span>
             </h2>
           </motion.div>
@@ -137,8 +137,8 @@ export function AuthPage({ view }: { view?: string }) {
           className="relative z-10 border-l-2 border-white/10 pl-4"
         >
           <p className="text-sm leading-relaxed text-white/60">
-            "DevScope finally gives us the insights we needed into our AI-assisted
-            development workflow. Setup took two minutes."
+            "DevScope helped our team go from using AI haphazardly to having
+            shared patterns and skills. Setup took two minutes."
           </p>
           <footer className="mt-2 text-xs text-white/40">
             — Engineering Manager

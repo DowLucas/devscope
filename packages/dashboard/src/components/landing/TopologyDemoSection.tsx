@@ -64,7 +64,7 @@ export function TopologyDemoSection() {
           </h2>
           <p className="mt-3 text-lg text-muted-foreground max-w-2xl mx-auto">
             See every developer, session, and agent in a real-time topology view.
-            Identify blockers and opportunities at a glance.
+            Spot patterns, catch anti-patterns, and find learning opportunities at a glance.
           </p>
         </motion.div>
 
