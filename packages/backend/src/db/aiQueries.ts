@@ -15,20 +15,30 @@ import type {
 
 export async function createConversation(
   sql: SQL,
-  title: string = "New conversation"
+  title: string = "New conversation",
+  orgId?: string,
+  userId?: string
 ): Promise<AiConversation> {
   const id = crypto.randomUUID();
   await sql`
-    INSERT INTO ai_conversations (id, title)
-    VALUES (${id}, ${title})`;
+    INSERT INTO ai_conversations (id, title, organization_id, user_id)
+    VALUES (${id}, ${title}, ${orgId ?? null}, ${userId ?? null})`;
   const [row] = await sql`SELECT * FROM ai_conversations WHERE id = ${id}`;
   return row as AiConversation;
 }
 
 export async function getConversations(
   sql: SQL,
-  limit: number = 50
+  limit: number = 50,
+  userId?: string
 ): Promise<AiConversation[]> {
+  if (userId) {
+    return (await sql`
+      SELECT * FROM ai_conversations
+      WHERE user_id = ${userId}
+      ORDER BY updated_at DESC
+      LIMIT ${limit}`) as AiConversation[];
+  }
   return (await sql`
     SELECT * FROM ai_conversations
     ORDER BY updated_at DESC
@@ -53,8 +63,12 @@ export async function updateConversationTitle(
     WHERE id = ${id}`;
 }
 
-export async function deleteConversation(sql: SQL, id: string): Promise<void> {
-  await sql`DELETE FROM ai_conversations WHERE id = ${id}`;
+export async function deleteConversation(sql: SQL, id: string, userId?: string): Promise<void> {
+  if (userId) {
+    await sql`DELETE FROM ai_conversations WHERE id = ${id} AND user_id = ${userId}`;
+  } else {
+    await sql`DELETE FROM ai_conversations WHERE id = ${id}`;
+  }
 }
 
 export async function touchConversation(sql: SQL, id: string): Promise<void> {
@@ -117,17 +131,19 @@ export async function createInsight(
     data_context?: Record<string, unknown>;
     source?: string;
     expires_at?: string;
+    orgId?: string;
   }
 ): Promise<AiInsight> {
   const id = crypto.randomUUID();
   const dataContext = JSON.stringify(insight.data_context ?? {});
   const source = insight.source ?? "automated";
   const expiresAt = insight.expires_at ?? null;
+  const orgId = insight.orgId ?? null;
 
   await sql`
-    INSERT INTO ai_insights (id, type, severity, title, narrative, data_context, source, expires_at)
+    INSERT INTO ai_insights (id, type, severity, title, narrative, data_context, source, expires_at, organization_id)
     VALUES (${id}, ${insight.type}, ${insight.severity}, ${insight.title}, ${insight.narrative},
-      ${dataContext}::JSONB, ${source}, ${expiresAt ? sql`${expiresAt}::TIMESTAMPTZ` : sql`NULL`})`;
+      ${dataContext}::JSONB, ${source}, ${expiresAt ? sql`${expiresAt}::TIMESTAMPTZ` : sql`NULL`}, ${orgId})`;
 
   const [row] = await sql`SELECT * FROM ai_insights WHERE id = ${id}`;
   return row as AiInsight;
@@ -135,10 +151,46 @@ export async function createInsight(
 
 export async function getInsights(
   sql: SQL,
-  opts?: { type?: InsightType; severity?: InsightSeverity; limit?: number }
+  opts?: { type?: InsightType; severity?: InsightSeverity; limit?: number; orgId?: string }
 ): Promise<AiInsight[]> {
   const limit = opts?.limit ?? 50;
+  const orgId = opts?.orgId;
 
+  if (orgId && opts?.type && opts?.severity) {
+    return (await sql`
+      SELECT * FROM ai_insights
+      WHERE type = ${opts.type} AND severity = ${opts.severity}
+        AND organization_id = ${orgId}
+        AND (expires_at IS NULL OR expires_at > NOW())
+      ORDER BY created_at DESC
+      LIMIT ${limit}`) as AiInsight[];
+  }
+  if (orgId && opts?.type) {
+    return (await sql`
+      SELECT * FROM ai_insights
+      WHERE type = ${opts.type}
+        AND organization_id = ${orgId}
+        AND (expires_at IS NULL OR expires_at > NOW())
+      ORDER BY created_at DESC
+      LIMIT ${limit}`) as AiInsight[];
+  }
+  if (orgId && opts?.severity) {
+    return (await sql`
+      SELECT * FROM ai_insights
+      WHERE severity = ${opts.severity}
+        AND organization_id = ${orgId}
+        AND (expires_at IS NULL OR expires_at > NOW())
+      ORDER BY created_at DESC
+      LIMIT ${limit}`) as AiInsight[];
+  }
+  if (orgId) {
+    return (await sql`
+      SELECT * FROM ai_insights
+      WHERE organization_id = ${orgId}
+        AND (expires_at IS NULL OR expires_at > NOW())
+      ORDER BY created_at DESC
+      LIMIT ${limit}`) as AiInsight[];
+  }
   if (opts?.type && opts?.severity) {
     return (await sql`
       SELECT * FROM ai_insights
@@ -185,17 +237,22 @@ export async function createReport(
     title: string;
     period_start?: string;
     period_end?: string;
+    orgId?: string;
+    userId?: string;
   }
 ): Promise<AiReport> {
   const id = crypto.randomUUID();
   const periodStart = report.period_start ?? null;
   const periodEnd = report.period_end ?? null;
+  const orgId = report.orgId ?? null;
+  const userId = report.userId ?? null;
 
   await sql`
-    INSERT INTO ai_reports (id, report_type, title, status, period_start, period_end)
+    INSERT INTO ai_reports (id, report_type, title, status, period_start, period_end, organization_id, user_id)
     VALUES (${id}, ${report.report_type}, ${report.title}, 'generating',
       ${periodStart ? sql`${periodStart}::TIMESTAMPTZ` : sql`NULL`},
-      ${periodEnd ? sql`${periodEnd}::TIMESTAMPTZ` : sql`NULL`})`;
+      ${periodEnd ? sql`${periodEnd}::TIMESTAMPTZ` : sql`NULL`},
+      ${orgId}, ${userId})`;
 
   const [row] = await sql`SELECT * FROM ai_reports WHERE id = ${id}`;
   return row as AiReport;
@@ -224,8 +281,16 @@ export async function updateReport(
 
 export async function getReports(
   sql: SQL,
-  limit: number = 20
+  limit: number = 20,
+  orgId?: string
 ): Promise<AiReport[]> {
+  if (orgId) {
+    return (await sql`
+      SELECT * FROM ai_reports
+      WHERE organization_id = ${orgId}
+      ORDER BY created_at DESC
+      LIMIT ${limit}`) as AiReport[];
+  }
   return (await sql`
     SELECT * FROM ai_reports
     ORDER BY created_at DESC
@@ -234,8 +299,13 @@ export async function getReports(
 
 export async function getReport(
   sql: SQL,
-  id: string
+  id: string,
+  orgId?: string
 ): Promise<AiReport | null> {
+  if (orgId) {
+    const [row] = await sql`SELECT * FROM ai_reports WHERE id = ${id} AND organization_id = ${orgId}`;
+    return (row as AiReport) ?? null;
+  }
   const [row] = await sql`SELECT * FROM ai_reports WHERE id = ${id}`;
   return (row as AiReport) ?? null;
 }
@@ -247,12 +317,13 @@ export async function recordTokenUsage(
   source: string,
   model: string,
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
+  orgId?: string
 ): Promise<void> {
   const id = crypto.randomUUID();
   await sql`
-    INSERT INTO ai_token_usage (id, source, model, input_tokens, output_tokens)
-    VALUES (${id}, ${source}, ${model}, ${inputTokens}, ${outputTokens})`;
+    INSERT INTO ai_token_usage (id, source, model, input_tokens, output_tokens, organization_id)
+    VALUES (${id}, ${source}, ${model}, ${inputTokens}, ${outputTokens}, ${orgId ?? null})`;
 }
 
 export async function getTokenUsageSummary(

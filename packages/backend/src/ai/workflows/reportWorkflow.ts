@@ -23,6 +23,7 @@ const ReportState = Annotation.Root({
   periodStart: Annotation<string | null>,
   periodEnd: Annotation<string | null>,
   persona: Annotation<string | null>,
+  developerIds: Annotation<string[] | undefined>,
   data: Annotation<Record<string, unknown>>,
   outline: Annotation<string>,
   content: Annotation<string>,
@@ -49,6 +50,7 @@ async function gatherReportData(
   sql: SQL
 ): Promise<Partial<ReportStateType>> {
   const days = getDaysForType(state.reportType);
+  const devIds = state.developerIds;
 
   // Team-level aggregate data only — no individual developer data sent to LLM.
   const [
@@ -62,13 +64,13 @@ async function gatherReportData(
     effectivePatterns,
     antiPatternSummary,
   ] = await Promise.all([
-    getPeriodComparison(sql, days),
-    getTeamHealth(sql),
-    getTeamActivitySummary(sql, days),
-    getProjectsOverview(sql, days),
-    getToolUsageBreakdown(sql, undefined, days),
-    getSessionStatsSummary(sql, undefined, days),
-    getFailureClusters(sql, days),
+    getPeriodComparison(sql, days, undefined, devIds),
+    getTeamHealth(sql, devIds),
+    getTeamActivitySummary(sql, days, devIds),
+    getProjectsOverview(sql, days, devIds),
+    getToolUsageBreakdown(sql, undefined, days, devIds),
+    getSessionStatsSummary(sql, undefined, days, devIds),
+    getFailureClusters(sql, days, devIds),
     getPatterns(sql, { effectiveness: "effective", limit: 10 }),
     getAntiPatternStats(sql, days),
   ]);
@@ -225,7 +227,8 @@ export async function runReportWorkflow(
   title?: string,
   periodStart?: string,
   periodEnd?: string,
-  persona?: string
+  persona?: string,
+  developerIds?: string[]
 ): Promise<AiReport> {
   const reportTitle =
     title ??
@@ -239,6 +242,7 @@ export async function runReportWorkflow(
     periodStart: periodStart ?? null,
     periodEnd: periodEnd ?? null,
     persona: persona ?? null,
+    developerIds,
     data: {},
     outline: "",
     content: "",

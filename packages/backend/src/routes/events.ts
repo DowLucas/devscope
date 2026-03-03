@@ -11,7 +11,7 @@ import {
   getRecentEvents,
   checkAlertThresholds,
 } from "../db";
-import { broadcast } from "../ws/handler";
+import { broadcast, broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg } from "../services/developerLink";
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 
@@ -88,19 +88,31 @@ export function eventsRoutes(sql: SQL) {
 
     await insertEvent(sql, event);
 
+    // Look up developer's orgs for scoped broadcasting
+    const devOrgs = await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${event.developerId}`;
+
+    function broadcastToDevOrgs(msg: any) {
+      if (devOrgs.length > 0) {
+        for (const row of devOrgs as any[]) {
+          broadcastToOrg(row.organization_id, msg);
+        }
+      } else {
+        broadcast(msg);
+      }
+    }
+
     // Broadcasts after DB insert
     if (broadcastSessionActive) {
-      broadcast({ type: "session.update", data: { sessionId: event.sessionId, status: "active" } });
-      broadcast({ type: "developer.update", data: { developerId: event.developerId } });
+      broadcastToDevOrgs({ type: "session.update", data: { sessionId: event.sessionId, status: "active" } });
+      broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
     } else if (broadcastSessionEnded) {
-      broadcast({ type: "session.update", data: { sessionId: event.sessionId, status: "ended" } });
-      broadcast({ type: "developer.update", data: { developerId: event.developerId } });
+      broadcastToDevOrgs({ type: "session.update", data: { sessionId: event.sessionId, status: "ended" } });
+      broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
     }
 
     // Strip opt-in sensitive fields (promptText, toolInput) from broadcasts.
     // WebSocket goes to all dashboard viewers — we can't scope to self-view here.
-    // Developers can see their own detailed data via the session detail API.
-    broadcast({
+    broadcastToDevOrgs({
       type: "event.new",
       data: {
         ...event,
@@ -113,7 +125,7 @@ export function eventsRoutes(sql: SQL) {
       const toolName = (event.payload as { toolName?: string }).toolName ?? "unknown";
       const alert = await checkAlertThresholds(sql, event.sessionId, toolName);
       if (alert) {
-        broadcast({ type: "alert.triggered", data: alert });
+        broadcastToDevOrgs({ type: "alert.triggered", data: alert });
       }
     }
 

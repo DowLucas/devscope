@@ -316,7 +316,8 @@ export function tickSimulation(baseNodes: Node[], persona?: Persona | null): Nod
 
     switch (agentSimState.phase) {
       case "tool_start": {
-        const toolName = pick(TOOL_NAMES);
+        const rawToolName = pick(TOOL_NAMES);
+        const toolName = isNT ? NT_ACTIVITIES["tool.start"] : rawToolName;
         agentSimState.toolName = toolName;
         agentSimState.event = makeEvent(activeAgent.sessionId, sDef.devId, sDef.devName, sDef.session.projectName, "tool.start", {
           toolName,
@@ -325,8 +326,9 @@ export function tickSimulation(baseNodes: Node[], persona?: Persona | null): Nod
         break;
       }
       case "tool_complete": {
+        const completedLabel = isNT ? NT_ACTIVITIES["tool.complete"] : (agentSimState.toolName ?? "Read");
         agentSimState.event = makeEvent(activeAgent.sessionId, sDef.devId, sDef.devName, sDef.session.projectName, "tool.complete", {
-          toolName: agentSimState.toolName ?? "Read",
+          toolName: completedLabel,
           success: true,
           duration: 200 + Math.floor(Math.random() * 1500),
           agentId: activeAgent.agentId,

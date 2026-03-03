@@ -266,6 +266,20 @@ main() {
     warn "Install: https://jqlang.github.io/jq/download/"
   fi
 
+  if git config user.email &>/dev/null && [[ -n "$(git config user.email)" ]]; then
+    success "git user.email set ($(git config user.email))"
+  else
+    warn "git user.email not set — required for developer identity"
+    warn "Set it: git config --global user.email \"you@example.com\""
+  fi
+
+  if git config user.name &>/dev/null && [[ -n "$(git config user.name)" ]]; then
+    success "git user.name set ($(git config user.name))"
+  else
+    warn "git user.name not set — used for display name in dashboard"
+    warn "Set it: git config --global user.name \"Your Name\""
+  fi
+
   echo ""
 
   if [[ "$prereqs_ok" == "false" ]]; then
