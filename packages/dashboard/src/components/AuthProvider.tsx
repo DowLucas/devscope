@@ -76,7 +76,7 @@ function useListAccounts() {
   return { data: accounts, isPending, refetch };
 }
 
-function useAccountInfo(_opts: { query: { accountId?: string } }) {
+function useAccountInfo(_opts?: { query?: { accountId?: string } }) {
   // better-auth-ui passes `account.accountId` (the provider's ID) but
   // better-auth@1.5's /account-info endpoint uses `findAccount()` which
   // looks up by internal `id` — causing ACCOUNT_NOT_FOUND. Skip the call.
