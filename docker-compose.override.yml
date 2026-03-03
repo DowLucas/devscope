@@ -17,6 +17,11 @@ services:
       AI_DAILY_TOKEN_BUDGET: ${AI_DAILY_TOKEN_BUDGET:-1000000}
       GC_CORS_ORIGIN: ${GC_CORS_ORIGIN:-http://localhost:5173,http://localhost:6767}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:5173}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-devscope-dev-secret-change-in-production}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     volumes:
       - ./packages/backend/src:/app/packages/backend/src
       - ./packages/shared/src:/app/packages/shared/src
@@ -34,7 +39,7 @@ services:
       context: .
       dockerfile: docker/dashboard.Dockerfile
       target: deps
-    command: ["bun", "run", "--filter", "dashboard", "dev", "--", "--host", "0.0.0.0"]
+    command: ["bun", "run", "--filter", "@devscope/dashboard", "dev", "--", "--host", "0.0.0.0"]
     environment:
       VITE_PROXY_TARGET: backend:6767
       VITE_WS_URL: ws://localhost:6767/ws
@@ -46,6 +51,7 @@ services:
       - ./packages/dashboard/tsconfig.app.json:/app/packages/dashboard/tsconfig.app.json
       - ./packages/dashboard/tsconfig.node.json:/app/packages/dashboard/tsconfig.node.json
       - ./packages/dashboard/components.json:/app/packages/dashboard/components.json
+      - ./packages/dashboard/public:/app/packages/dashboard/public
       - ./packages/shared/src:/app/packages/shared/src
     ports:
       - "5173:5173"

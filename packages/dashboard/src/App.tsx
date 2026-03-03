@@ -22,6 +22,8 @@ import { TermsPage } from "@/components/landing/TermsPage";
 import { PrivacyPage } from "@/components/landing/PrivacyPage";
 import { TeamView } from "@/components/team/TeamView";
 import { InviteAcceptPage } from "@/components/team/InviteAcceptPage";
+import { SkillsView } from "@/components/skills/SkillsView";
+import { PlaybooksView } from "@/components/playbooks/PlaybooksView";
 import { useDevscopeSocket } from "@/hooks/useWebSocket";
 import { useActivityStore } from "@/stores/activityStore";
 import { apiFetch } from "@/lib/api";
@@ -70,6 +72,8 @@ function AppContent() {
         <Route path="/dashboard/projects/*?" component={ProjectsView} />
         <Route path="/dashboard/assistant/*?" component={AiView} />
         <Route path="/dashboard/briefings/*?" component={ReportsView} />
+        <Route path="/dashboard/skills/*?" component={SkillsView} />
+        <Route path="/dashboard/playbooks/*?" component={PlaybooksView} />
         <Route path="/dashboard/team/*?" component={TeamView} />
         <Route path="/dashboard/account/*?" component={SettingsPage} />
         {/* Default dashboard view — Activity feed */}

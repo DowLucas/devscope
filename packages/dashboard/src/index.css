@@ -124,6 +124,13 @@
     }
 }
 
+/* Move OAuth social buttons above the email/password form in auth cards */
+[data-slot="card-content"]:has([data-slot="separator"]) {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1.5rem;
+}
+
 @utility scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;

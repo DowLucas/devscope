@@ -1,12 +1,13 @@
 import { type ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Activity, Users, GitBranch, BarChart3, AlertTriangle, Heart, FolderOpen, Sparkles, LayoutDashboard, Clock, Settings, LogOut, UsersRound, Mail, Cog } from "lucide-react";
+import { Activity, Users, GitBranch, BarChart3, AlertTriangle, Heart, FolderOpen, Sparkles, LayoutDashboard, Clock, Settings, LogOut, UsersRound, Mail, Cog, TrendingUp, BookOpen } from "lucide-react";
 import { useActivityStore } from "@/stores/activityStore";
 import { authClient } from "@/lib/auth-client";
 import { useTeamStore } from "@/stores/teamStore";
 import { AlertBanner } from "@/components/failures/AlertBanner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import logoFull from "@/assets/logo-full.png";
 
 interface LayoutProps {
   children: ReactNode;
@@ -100,6 +101,8 @@ const BASE_NAV_GROUPS = [
     items: [
       { path: "/dashboard/assistant", label: "AI Assistant", icon: Sparkles },
       { path: "/dashboard/briefings", label: "Briefings", icon: LayoutDashboard },
+      { path: "/dashboard/skills", label: "Skills", icon: TrendingUp },
+      { path: "/dashboard/playbooks", label: "Playbooks", icon: BookOpen },
     ],
   },
 ];
@@ -109,7 +112,7 @@ function isActive(location: string, path: string): boolean {
   return location === path || location.startsWith(path + "/");
 }
 
-const WIDE_VIEWS = ["/dashboard/topology", "/dashboard/metrics", "/dashboard/team-health", "/dashboard/projects", "/dashboard/incidents", "/dashboard/assistant", "/dashboard/briefings", "/dashboard/account", "/dashboard/team"];
+const WIDE_VIEWS = ["/dashboard/topology", "/dashboard/metrics", "/dashboard/team-health", "/dashboard/projects", "/dashboard/incidents", "/dashboard/assistant", "/dashboard/briefings", "/dashboard/skills", "/dashboard/playbooks", "/dashboard/account", "/dashboard/team"];
 
 function useNavGroups() {
   const admin = useTeamStore((s) => s.isAdmin());
@@ -214,7 +217,7 @@ export function Layout({ children }: LayoutProps) {
 
       <div className="ml-52">
         <header className="shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold tracking-tight">DevScope</h1>
+          <img src={logoFull} alt="DevScope" className="h-5" />
           <div className="flex items-center gap-4 text-sm">
             <span className="flex items-center gap-2">
               <span

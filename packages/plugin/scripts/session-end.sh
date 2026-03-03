@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/_helpers.sh"
 INPUT=$(cat)
 
-END_REASON=$(echo "$INPUT" | jq -r '.source // "other"')
+END_REASON=$(echo "$INPUT" | jq -r '.reason // "other"')
 
 PAYLOAD=$(jq -n --arg er "$END_REASON" '{endReason: $er}')
 

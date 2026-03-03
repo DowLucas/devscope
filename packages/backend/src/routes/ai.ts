@@ -19,7 +19,7 @@ import {
   getTokenUsageSummary,
   getTodayTokenCount,
 } from "../db";
-import { broadcast } from "../ws/handler";
+import { broadcast, broadcastToOrg } from "../ws/handler";
 import type { Content } from "@google/genai";
 import type { InsightType, InsightSeverity, ReportType } from "@devscope/shared";
 
@@ -78,13 +78,19 @@ export function aiRoutes(sql: SQL) {
 
   app.post("/chat", requireAi(), zValidator("json", chatSchema), async (c) => {
     const { question, conversation_id } = c.req.valid("json");
+    const orgId = c.get("orgId" as never) as string | undefined;
+    const user = c.get("user" as never) as any;
+    const userId = user?.id;
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
 
     // Get or create conversation
     let conversationId = conversation_id;
     if (!conversationId) {
       const conv = await createConversation(
         sql,
-        question.slice(0, 100)
+        question.slice(0, 100),
+        orgId,
+        userId
       );
       conversationId = conv.id;
     }
@@ -104,7 +110,7 @@ export function aiRoutes(sql: SQL) {
     }
 
     // Run streaming workflow
-    const stream = await runQueryWorkflowStreaming(sql, question, history);
+    const stream = await runQueryWorkflowStreaming(sql, question, history, devIds);
 
     // Collect full answer for saving
     const reader = stream.getReader();
@@ -169,7 +175,9 @@ export function aiRoutes(sql: SQL) {
 
   app.get("/chat/conversations", async (c) => {
     const limit = Math.min(Number(c.req.query("limit") ?? 50), 100);
-    const conversations = await getConversations(sql, limit);
+    const user = c.get("user" as never) as any;
+    const userId = user?.id;
+    const conversations = await getConversations(sql, limit, userId);
     return c.json(conversations);
   });
 
@@ -181,7 +189,9 @@ export function aiRoutes(sql: SQL) {
 
   app.delete("/chat/conversations/:id", async (c) => {
     const id = c.req.param("id");
-    await deleteConversation(sql, id);
+    const user = c.get("user" as never) as any;
+    const userId = user?.id;
+    await deleteConversation(sql, id, userId);
     return c.json({ ok: true });
   });
 
@@ -191,17 +201,24 @@ export function aiRoutes(sql: SQL) {
     const type = c.req.query("type") as InsightType | undefined;
     const severity = c.req.query("severity") as InsightSeverity | undefined;
     const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
-    const insights = await getInsights(sql, { type, severity, limit });
+    const orgId = c.get("orgId" as never) as string | undefined;
+    const insights = await getInsights(sql, { type, severity, limit, orgId });
     return c.json(insights);
   });
 
   app.post("/insights/generate", requireAi(), async (c) => {
     const days = Math.min(Number(c.req.query("days") ?? 1), 30);
-    const insights = await runInsightWorkflow(sql, days);
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    const orgId = c.get("orgId" as never) as string | undefined;
+    const insights = await runInsightWorkflow(sql, days, devIds);
 
     // Broadcast new insights via WebSocket
     for (const insight of insights) {
-      broadcast({ type: "ai.insight.new" , data: insight });
+      if (orgId) {
+        broadcastToOrg(orgId, { type: "ai.insight.new", data: insight });
+      } else {
+        broadcast({ type: "ai.insight.new", data: insight });
+      }
     }
 
     return c.json(insights);
@@ -211,13 +228,15 @@ export function aiRoutes(sql: SQL) {
 
   app.get("/reports", async (c) => {
     const limit = Math.min(Number(c.req.query("limit") ?? 20), 50);
-    const reports = await getReports(sql, limit);
+    const orgId = c.get("orgId" as never) as string | undefined;
+    const reports = await getReports(sql, limit, orgId);
     return c.json(reports);
   });
 
   app.get("/reports/:id", async (c) => {
     const id = c.req.param("id");
-    const report = await getReport(sql, id);
+    const orgId = c.get("orgId" as never) as string | undefined;
+    const report = await getReport(sql, id, orgId);
     if (!report) return c.json({ error: "Report not found" }, 404);
     return c.json(report);
   });
@@ -233,6 +252,8 @@ export function aiRoutes(sql: SQL) {
   app.post("/reports/generate", requireAi(), zValidator("json", reportSchema), async (c) => {
     const { report_type, title, period_start, period_end, persona } =
       c.req.valid("json");
+    const orgId = c.get("orgId" as never) as string | undefined;
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
 
     // Run async — respond immediately with report ID
     const report = await runReportWorkflow(
@@ -241,10 +262,15 @@ export function aiRoutes(sql: SQL) {
       title,
       period_start,
       period_end,
-      persona
+      persona,
+      devIds
     );
 
-    broadcast({ type: "ai.report.completed" , data: report });
+    if (orgId) {
+      broadcastToOrg(orgId, { type: "ai.report.completed", data: report });
+    } else {
+      broadcast({ type: "ai.report.completed", data: report });
+    }
 
     return c.json(report);
   });

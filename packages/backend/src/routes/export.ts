@@ -44,8 +44,12 @@ export function exportRoutes(sql: SQL) {
       return c.json({ error: `Invalid data type. Must be one of: ${VALID_EXPORT_TYPES.join(", ")}` }, 400);
     }
     const days = clampInt(c.req.query("days"), 30, 365);
-    const developerId = c.req.query("developerId") || undefined;
-    const data = await getExportData(sql, dataType, days, developerId);
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    let developerId = c.req.query("developerId") || undefined;
+    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
+      developerId = undefined;
+    }
+    const data = await getExportData(sql, dataType, days, developerId, devIds);
     const csv = toCsv(data as Record<string, unknown>[]);
     c.header("Content-Type", "text/csv");
     c.header("Content-Disposition", `attachment; filename="${dataType}-export.csv"`);
@@ -58,15 +62,20 @@ export function exportRoutes(sql: SQL) {
       return c.json({ error: `Invalid data type. Must be one of: ${VALID_EXPORT_TYPES.join(", ")}` }, 400);
     }
     const days = clampInt(c.req.query("days"), 30, 365);
-    const developerId = c.req.query("developerId") || undefined;
-    const data = await getExportData(sql, dataType, days, developerId);
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    let developerId = c.req.query("developerId") || undefined;
+    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
+      developerId = undefined;
+    }
+    const data = await getExportData(sql, dataType, days, developerId, devIds);
     c.header("Content-Disposition", `attachment; filename="${dataType}-export.json"`);
     return c.json(data);
   });
 
   app.get("/digests", async (c) => {
     const limit = clampInt(c.req.query("limit"), 20, 500);
-    return c.json(await getDigests(sql, limit));
+    const orgId = c.get("orgId" as never) as string | undefined;
+    return c.json(await getDigests(sql, limit, orgId));
   });
 
   app.post("/digests/generate", zValidator("json", digestGenerateSchema), async (c) => {
@@ -74,7 +83,8 @@ export function exportRoutes(sql: SQL) {
     const periodStart = body.period_start;
     const periodEnd = body.period_end;
     const digestType = body.digest_type;
-    const digest = await generateDigest(sql, periodStart, periodEnd, digestType);
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    const digest = await generateDigest(sql, periodStart, periodEnd, digestType, devIds);
     return c.json(digest, 201);
   });
 

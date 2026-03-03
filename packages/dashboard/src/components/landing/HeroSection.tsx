@@ -127,7 +127,7 @@ export function HeroSection() {
               <span className="size-3 rounded-full bg-red-500" />
               <span className="size-3 rounded-full bg-yellow-500" />
               <span className="size-3 rounded-full bg-green-500" />
-              <span className="ml-3 text-xs text-muted-foreground">
+              <span className="ml-3 text-base text-muted-foreground">
                 DevScope —{" "}
                 {persona === "non-technical"
                   ? "Team Dashboard"

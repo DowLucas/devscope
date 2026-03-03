@@ -1,7 +1,17 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { AuthView } from "@daveyplate/better-auth-ui";
-import { Activity, GitBranch, Terminal, Zap } from "lucide-react";
+import {
+  Activity,
+  GitBranch,
+  Terminal,
+  Zap,
+  BarChart3,
+  Sparkles,
+  Shield,
+  Users,
+} from "lucide-react";
+import logoFull from "@/assets/logo-full.png";
 
 /* ------------------------------------------------------------------ */
 /*  AuthPage — Dual-column authentication layout                       */
@@ -19,8 +29,8 @@ const fadeUp = {
   }),
 };
 
-/** Feature bullet items shown on the left panel. */
-const FEATURES = [
+/** Feature bullet items — technical persona (developers). */
+const TECHNICAL_FEATURES = [
   {
     icon: Activity,
     title: "Pattern discovery",
@@ -28,8 +38,8 @@ const FEATURES = [
   },
   {
     icon: Terminal,
-    title: "Zero-friction plugin",
-    desc: "One command to install. Zero impact on developer workflow.",
+    title: "Zero-friction setup",
+    desc: "One command to install. Runs silently alongside Claude Code.",
   },
   {
     icon: GitBranch,
@@ -43,16 +53,63 @@ const FEATURES = [
   },
 ] as const;
 
+/** Feature bullet items — non-technical persona (managers/leaders). */
+const NON_TECHNICAL_FEATURES = [
+  {
+    icon: BarChart3,
+    title: "Automated team reports",
+    desc: "Weekly digests and sprint analyses generated from session data, ready for standup.",
+  },
+  {
+    icon: Sparkles,
+    title: "Actionable insights",
+    desc: "Burnout risk alerts, pairing recommendations, and velocity trends.",
+  },
+  {
+    icon: Users,
+    title: "Team visibility at a glance",
+    desc: "See who's active, what they're working on, and where they're stuck.",
+  },
+  {
+    icon: Shield,
+    title: "No developer disruption",
+    desc: "Runs silently in the background. Your team won't even notice it.",
+  },
+] as const;
+
+const QUOTES = {
+  technical: {
+    text: "I can finally see what Claude is actually doing across my sessions. It's like having a flight recorder for agentic engineering.",
+    author: "— Senior Developer",
+  },
+  "non-technical": {
+    text: "I used to have no idea what my team was doing with Claude. Now I get a weekly digest and can spot issues before they become problems.",
+    author: "— Engineering Manager",
+  },
+} as const;
+
+function readPersona(): "technical" | "non-technical" | null {
+  try {
+    const v = localStorage.getItem("devscope_persona");
+    if (v === "technical" || v === "non-technical") return v;
+  } catch { /* private browsing */ }
+  return null;
+}
+
 export function AuthPage({ view }: { view?: string }) {
+  const [persona, setPersona] = useState<"technical" | "non-technical" | null>(readPersona);
+
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const invite = params.get("invite");
-    if (invite) {
-      sessionStorage.setItem("devscope_invite_token", invite);
-    }
+    // Re-read on storage changes (e.g. landing page footer switcher in another tab)
+    const onStorage = () => setPersona(readPersona());
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const isSignUp = view === "sign-up";
+  const p = persona ?? "technical";
+  const features = p === "non-technical" ? NON_TECHNICAL_FEATURES : TECHNICAL_FEATURES;
+  const quote = QUOTES[p];
 
   return (
     <div className="grid min-h-svh lg:grid-cols-2">
@@ -82,12 +139,11 @@ export function AuthPage({ view }: { view?: string }) {
           initial="initial"
           animate="animate"
           custom={0}
-          className="relative z-10 flex items-center gap-2.5"
+          className="relative z-10"
         >
-          <div className="flex size-8 items-center justify-center rounded-lg bg-white/10 backdrop-blur-sm">
-            <Activity className="size-4 text-blue-400" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight">DevScope</span>
+          <a href="/">
+            <img src={logoFull} alt="DevScope" className="h-6" />
+          </a>
         </motion.div>
 
         {/* Middle — Headline + features */}
@@ -107,7 +163,7 @@ export function AuthPage({ view }: { view?: string }) {
           </motion.div>
 
           <div className="flex flex-col gap-5">
-            {FEATURES.map((f, i) => (
+            {features.map((f, i) => (
               <motion.div
                 key={f.title}
                 variants={fadeUp}
@@ -141,7 +197,7 @@ export function AuthPage({ view }: { view?: string }) {
             shared patterns and skills. Setup took two minutes."
           </p>
           <footer className="mt-2 text-xs text-white/40">
-            — Engineering Manager
+            {quote.author}
           </footer>
         </motion.blockquote>
       </div>
@@ -151,14 +207,11 @@ export function AuthPage({ view }: { view?: string }) {
       {/* ================================================================ */}
       <div className="flex flex-col items-center justify-center bg-background p-6 md:p-10">
         {/* Mobile-only logo (visible below lg) */}
-        <div className="mb-8 flex items-center gap-2.5 lg:hidden">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-            <Activity className="size-4 text-primary" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight">DevScope</span>
+        <div className="mb-8 lg:hidden">
+          <img src={logoFull} alt="DevScope" className="h-6" />
         </div>
 
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-lg mx-auto">
           {/* Heading */}
           <div className="mb-6 text-center lg:text-left">
             <h1 className="text-2xl font-bold tracking-tight">
@@ -172,20 +225,7 @@ export function AuthPage({ view }: { view?: string }) {
           </div>
 
           {/* Auth form from better-auth-ui */}
-          <AuthView pathname={view || "sign-in"} />
-
-          {/* Footer links */}
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            By continuing, you agree to our{" "}
-            <a href="/terms" className="underline underline-offset-4 hover:text-foreground transition-colors">
-              Terms of Service
-            </a>{" "}
-            and{" "}
-            <a href="/privacy" className="underline underline-offset-4 hover:text-foreground transition-colors">
-              Privacy Policy
-            </a>
-            .
-          </p>
+          <AuthView pathname={view || "sign-in"} className="max-w-lg" />
         </div>
       </div>
     </div>

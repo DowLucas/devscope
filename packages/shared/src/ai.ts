@@ -1,6 +1,6 @@
 // --- AI BI Layer Types ---
 
-export type InsightType = "anomaly" | "trend" | "comparison" | "recommendation";
+export type InsightType = "anomaly" | "trend" | "comparison" | "recommendation" | "coaching";
 export type InsightSeverity = "info" | "warning" | "critical";
 export type ReportStatus = "generating" | "completed" | "failed";
 export type ReportType = "daily" | "weekly" | "custom";
@@ -90,6 +90,70 @@ export interface AiReportGenerateRequest {
   period_end?: string;
 }
 
+// --- Upskilling Types ---
+
+export type PatternEffectiveness = "effective" | "ineffective" | "neutral";
+export type AntiPatternSeverity = "info" | "warning" | "critical";
+export type AntiPatternRule = "retry_loop" | "failure_cascade" | "abandoned_session";
+
+export interface SessionPattern {
+  id: string;
+  name: string;
+  description: string;
+  tool_sequence: string[];
+  avg_success_rate: number;
+  occurrence_count: number;
+  effectiveness: PatternEffectiveness;
+  category: string | null;
+  data_context: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SessionPatternMatch {
+  id: string;
+  session_id: string;
+  pattern_id: string;
+  match_confidence: number;
+  tool_success_rate: number | null;
+  created_at: string;
+}
+
+export interface AntiPattern {
+  id: string;
+  name: string;
+  description: string;
+  detection_rule: string;
+  severity: AntiPatternSeverity;
+  suggestion: string;
+  occurrence_count: number;
+  data_context: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SessionAntiPatternMatch {
+  id: string;
+  session_id: string;
+  anti_pattern_id: string;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface Playbook {
+  id: string;
+  name: string;
+  description: string;
+  tool_sequence: string[];
+  when_to_use: string;
+  success_metrics: Record<string, unknown>;
+  source_pattern_id: string | null;
+  created_by: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- WebSocket message types ---
 
-export type AiWsMessageType = "ai.insight.new" | "ai.report.completed";
+export type AiWsMessageType = "ai.insight.new" | "ai.report.completed" | "ai.pattern.new" | "ai.antipattern.new" | "ai.playbook.new";

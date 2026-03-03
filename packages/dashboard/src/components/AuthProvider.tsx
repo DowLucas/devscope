@@ -1,7 +1,22 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState, createElement } from "react";
 import { useLocation, Link } from "wouter";
 import { AuthUIProvider } from "@daveyplate/better-auth-ui";
 import { authClient } from "@/lib/auth-client";
+
+const TermsLabel = createElement("span", null,
+  "I agree to the ",
+  createElement("a", {
+    href: "/terms",
+    target: "_blank",
+    className: "underline underline-offset-4 hover:text-foreground transition-colors",
+  }, "Terms of Service"),
+  " and ",
+  createElement("a", {
+    href: "/privacy",
+    target: "_blank",
+    className: "underline underline-offset-4 hover:text-foreground transition-colors",
+  }, "Privacy Policy"),
+);
 
 export function useListApiKeys() {
   const { data: session } = authClient.useSession();
@@ -42,6 +57,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       apiKey={true}
       hooks={{ useListApiKeys }}
       account={{ basePath: "/dashboard/account" }}
+      social={{ providers: ["github", "google"] }}
+      credentials={{ confirmPassword: true }}
+      emailVerification={true}
+      additionalFields={{
+        acceptedTerms: {
+          label: TermsLabel,
+          required: true,
+          type: "boolean",
+        },
+      }}
+      signUp={{ fields: ["name", "acceptedTerms"] }}
     >
       {children}
     </AuthUIProvider>

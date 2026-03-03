@@ -30,96 +30,136 @@ export function insightsRoutes(sql: SQL) {
 
   app.get("/team-activity", async (c) => {
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getTeamActivitySummary(sql, days));
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    return c.json(await getTeamActivitySummary(sql, days, devIds));
   });
 
   app.get("/activity", async (c) => {
-    const developerId = c.req.query("developerId") || undefined;
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    let developerId = c.req.query("developerId") || undefined;
+    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
+      developerId = undefined; // Not in org, ignore
+    }
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getDeveloperActivityOverTime(sql, developerId, days));
+    return c.json(await getDeveloperActivityOverTime(sql, developerId, days, devIds));
   });
 
   app.get("/tools", async (c) => {
-    const developerId = c.req.query("developerId") || undefined;
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    let developerId = c.req.query("developerId") || undefined;
+    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
+      developerId = undefined;
+    }
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getToolUsageBreakdown(sql, developerId, days));
+    return c.json(await getToolUsageBreakdown(sql, developerId, days, devIds));
   });
 
   app.get("/sessions", async (c) => {
-    const developerId = c.req.query("developerId") || undefined;
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    let developerId = c.req.query("developerId") || undefined;
+    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
+      developerId = undefined;
+    }
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getSessionStats(sql, developerId, days));
+    return c.json(await getSessionStats(sql, developerId, days, devIds));
   });
 
   app.get("/sessions/summary", async (c) => {
-    const developerId = c.req.query("developerId") || undefined;
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    let developerId = c.req.query("developerId") || undefined;
+    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
+      developerId = undefined;
+    }
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getSessionStatsSummary(sql, developerId, days));
+    return c.json(await getSessionStatsSummary(sql, developerId, days, devIds));
   });
 
   app.get("/projects", async (c) => {
-    const developerId = c.req.query("developerId") || undefined;
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    let developerId = c.req.query("developerId") || undefined;
+    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
+      developerId = undefined;
+    }
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getProjectActivity(sql, developerId, days));
+    return c.json(await getProjectActivity(sql, developerId, days, devIds));
   });
 
   app.get("/hourly", async (c) => {
-    const developerId = c.req.query("developerId") || undefined;
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    let developerId = c.req.query("developerId") || undefined;
+    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
+      developerId = undefined;
+    }
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getHourlyDistribution(sql, developerId, days));
+    return c.json(await getHourlyDistribution(sql, developerId, days, devIds));
   });
 
   app.get("/activity-per-minute", async (c) => {
     const hours = clampInt(c.req.query("hours"), 24, 2160);
-    return c.json(await getActivityPerMinute(sql, hours));
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    return c.json(await getActivityPerMinute(sql, hours, devIds));
   });
 
   // --- Period Comparison ---
   app.get("/period-comparison", async (c) => {
     const days = clampInt(c.req.query("days"), 7, 365);
-    const developerId = c.req.query("developerId") || undefined;
-    return c.json(await getPeriodComparison(sql, days, developerId));
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    let developerId = c.req.query("developerId") || undefined;
+    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
+      developerId = undefined;
+    }
+    return c.json(await getPeriodComparison(sql, days, developerId, devIds));
   });
 
   // --- Failure Analysis ---
   app.get("/failures", async (c) => {
     const days = clampInt(c.req.query("days"), 30, 365);
-    const developerId = c.req.query("developerId") || undefined;
-    return c.json(await getToolFailureRates(sql, days, developerId));
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    let developerId = c.req.query("developerId") || undefined;
+    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
+      developerId = undefined;
+    }
+    return c.json(await getToolFailureRates(sql, days, developerId, devIds));
   });
 
   app.get("/failure-clusters", async (c) => {
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getFailureClusters(sql, days));
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    return c.json(await getFailureClusters(sql, days, devIds));
   });
 
   // --- Team Health ---
   app.get("/team-health", async (c) => {
-    return c.json(await getTeamHealth(sql));
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    return c.json(await getTeamHealth(sql, devIds));
   });
 
   // --- Project Board ---
   app.get("/projects/overview", async (c) => {
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getProjectsOverview(sql, days));
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    return c.json(await getProjectsOverview(sql, days, devIds));
   });
 
   app.get("/projects/:name/contributors", async (c) => {
     const name = c.req.param("name");
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getProjectContributors(sql, name, days));
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    return c.json(await getProjectContributors(sql, name, days, devIds));
   });
 
   app.get("/projects/:name/tools", async (c) => {
     const name = c.req.param("name");
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getProjectToolUsage(sql, name, days));
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    return c.json(await getProjectToolUsage(sql, name, days, devIds));
   });
 
   app.get("/projects/:name/activity", async (c) => {
     const name = c.req.param("name");
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getProjectActivityOverTime(sql, name, days));
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    return c.json(await getProjectActivityOverTime(sql, name, days, devIds));
   });
 
   return app;

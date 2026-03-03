@@ -1,8 +1,10 @@
 import { LandingNav } from "./LandingNav";
 import { FooterSection } from "./FooterSection";
+import { PersonaProvider } from "./PersonaContext";
 
 export function PrivacyPage() {
   return (
+    <PersonaProvider>
     <div className="min-h-screen bg-background text-foreground">
       <LandingNav />
       <main className="pt-14">
@@ -141,5 +143,6 @@ export function PrivacyPage() {
       </main>
       <FooterSection />
     </div>
+    </PersonaProvider>
   );
 }

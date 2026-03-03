@@ -27,6 +27,7 @@ Guidelines:
 const QueryState = Annotation.Root({
   question: Annotation<string>,
   conversationHistory: Annotation<Content[]>,
+  developerIds: Annotation<string[] | undefined>,
   intent: Annotation<"needs_data" | "general">,
   toolCallsQueue: Annotation<Array<{ name: string; args: Record<string, unknown> }>>,
   toolResults: Annotation<Array<{ name: string; result: string }>>,
@@ -114,7 +115,7 @@ async function callTools(
     }
 
     try {
-      const result = await tool.execute(sql, tc.args);
+      const result = await tool.execute(sql, tc.args, state.developerIds);
       results.push({ name: tc.name, result });
     } catch (err) {
       results.push({
@@ -221,13 +222,15 @@ export interface QueryResult {
 export async function runQueryWorkflow(
   sql: SQL,
   question: string,
-  conversationHistory: Content[] = []
+  conversationHistory: Content[] = [],
+  developerIds?: string[]
 ): Promise<QueryResult> {
   const app = createQueryWorkflow(sql);
 
   const result = await app.invoke({
     question,
     conversationHistory,
+    developerIds,
     intent: "general" as const,
     toolCallsQueue: [],
     toolResults: [],
@@ -254,7 +257,8 @@ export async function runQueryWorkflow(
 export async function runQueryWorkflowStreaming(
   sql: SQL,
   question: string,
-  conversationHistory: Content[] = []
+  conversationHistory: Content[] = [],
+  developerIds?: string[]
 ): Promise<ReadableStream<Uint8Array>> {
   const encoder = new TextEncoder();
 
@@ -266,6 +270,7 @@ export async function runQueryWorkflowStreaming(
         const result = await app.invoke({
           question,
           conversationHistory,
+          developerIds,
           intent: "general" as const,
           toolCallsQueue: [],
           toolResults: [],
