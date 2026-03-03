@@ -2,7 +2,8 @@ import type { SQL } from "bun";
 import { isAiAvailable } from "../ai/gemini";
 import { runInsightWorkflow } from "../ai/workflows/insightWorkflow";
 import { cleanupExpiredInsights } from "../db";
-import { broadcast } from "../ws/handler";
+import { broadcastToOrg } from "../ws/handler";
+import { getOrgDeveloperIds } from "../services/developerLink";
 
 const CHECK_INTERVAL_MS = 60_000; // Check every minute
 
@@ -36,15 +37,20 @@ export function startAiInsightGeneration(sql: SQL) {
       lastRunDate = todayStr;
 
       try {
-        console.log("[ai-insights] Running daily insight generation...");
-        const insights = await runInsightWorkflow(sql, 1);
-        console.log(
-          `[ai-insights] Generated ${insights.length} insights`
-        );
+        const orgs = await sql`SELECT id FROM organization`;
 
-        // Broadcast new insights
-        for (const insight of insights) {
-          broadcast({ type: "ai.insight.new" , data: insight });
+        for (const org of orgs as any[]) {
+          const orgId = org.id;
+          const devIds = await getOrgDeveloperIds(sql, orgId);
+          if (devIds.length === 0) continue;
+
+          console.log(`[ai-insights] Running daily insight generation for org ${orgId}...`);
+          const insights = await runInsightWorkflow(sql, 1, devIds);
+          console.log(`[ai-insights] Generated ${insights.length} insights for org ${orgId}`);
+
+          for (const insight of insights) {
+            broadcastToOrg(orgId, { type: "ai.insight.new", data: insight });
+          }
         }
 
         // Cleanup expired insights

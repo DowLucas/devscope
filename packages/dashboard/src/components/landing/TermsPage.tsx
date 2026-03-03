@@ -1,8 +1,10 @@
 import { LandingNav } from "./LandingNav";
 import { FooterSection } from "./FooterSection";
+import { PersonaProvider } from "./PersonaContext";
 
 export function TermsPage() {
   return (
+    <PersonaProvider>
     <div className="min-h-screen bg-background text-foreground">
       <LandingNav />
       <main className="pt-14">
@@ -16,7 +18,7 @@ export function TermsPage() {
             <h2>1. Agreement</h2>
             <p>
               These Terms of Service ("Terms") govern your use of DevScope, a
-              real-time monitoring service for AI-assisted developer sessions,
+              real-time observability platform for agentic engineering sessions,
               operated by <strong>Dow Technology</strong> (enskild firma),
               Sweden. By accessing or using DevScope, you agree to these Terms.
             </p>
@@ -118,5 +120,6 @@ export function TermsPage() {
       </main>
       <FooterSection />
     </div>
+    </PersonaProvider>
   );
 }

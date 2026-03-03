@@ -47,7 +47,7 @@ function truncateResult(data: unknown): string {
 
 export interface ToolDefinition {
   declaration: FunctionDeclaration;
-  execute: (sql: SQL, args: Record<string, unknown>) => Promise<string>;
+  execute: (sql: SQL, args: Record<string, unknown>, developerIds?: string[]) => Promise<string>;
 }
 
 export const toolRegistry: ToolDefinition[] = [
@@ -70,11 +70,12 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getDeveloperActivityOverTime(
         sql,
         args.developerId as string | undefined,
-        clampDays(args.days as number | undefined)
+        clampDays(args.days as number | undefined),
+        developerIds
       );
       return truncateResult(result);
     },
@@ -98,11 +99,12 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getToolUsageBreakdown(
         sql,
         args.developerId as string | undefined,
-        clampDays(args.days as number | undefined)
+        clampDays(args.days as number | undefined),
+        developerIds
       );
       return truncateResult(result);
     },
@@ -126,11 +128,12 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getSessionStats(
         sql,
         args.developerId as string | undefined,
-        clampDays(args.days as number | undefined)
+        clampDays(args.days as number | undefined),
+        developerIds
       );
       return truncateResult(result);
     },
@@ -154,11 +157,12 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getSessionStatsSummary(
         sql,
         args.developerId as string | undefined,
-        clampDays(args.days as number | undefined)
+        clampDays(args.days as number | undefined),
+        developerIds
       );
       return truncateResult(result);
     },
@@ -178,10 +182,11 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getDeveloperLeaderboard(
         sql,
-        clampDays(args.days as number | undefined)
+        clampDays(args.days as number | undefined),
+        developerIds
       );
       return truncateResult(result);
     },
@@ -205,11 +210,12 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getHourlyDistribution(
         sql,
         args.developerId as string | undefined,
-        clampDays(args.days as number | undefined)
+        clampDays(args.days as number | undefined),
+        developerIds
       );
       return truncateResult(result);
     },
@@ -234,11 +240,12 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getPeriodComparison(
         sql,
         clampDays(args.days as number | undefined),
-        args.developerId as string | undefined
+        args.developerId as string | undefined,
+        developerIds
       );
       return truncateResult(result);
     },
@@ -264,11 +271,12 @@ export const toolRegistry: ToolDefinition[] = [
         required: ["developerIds"],
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getDeveloperComparison(
         sql,
         args.developerIds as string[],
-        clampDays(args.days as number | undefined)
+        clampDays(args.days as number | undefined),
+        developerIds
       );
       return truncateResult(result);
     },
@@ -292,11 +300,12 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getToolFailureRates(
         sql,
         clampDays(args.days as number | undefined),
-        args.developerId as string | undefined
+        args.developerId as string | undefined,
+        developerIds
       );
       return truncateResult(result);
     },
@@ -316,10 +325,11 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getFailureClusters(
         sql,
-        clampDays(args.days as number | undefined)
+        clampDays(args.days as number | undefined),
+        developerIds
       );
       return truncateResult(result);
     },
@@ -334,8 +344,8 @@ export const toolRegistry: ToolDefinition[] = [
         properties: {},
       },
     },
-    execute: async (sql) => {
-      const result = await getTeamHealth(sql);
+    execute: async (sql, _args, developerIds) => {
+      const result = await getTeamHealth(sql, developerIds);
       return truncateResult(result);
     },
   },
@@ -354,10 +364,11 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getProjectsOverview(
         sql,
-        clampDays(args.days as number | undefined)
+        clampDays(args.days as number | undefined),
+        developerIds
       );
       return truncateResult(result);
     },
@@ -382,11 +393,12 @@ export const toolRegistry: ToolDefinition[] = [
         required: ["projectName"],
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getProjectContributors(
         sql,
         args.projectName as string,
-        clampDays(args.days as number | undefined)
+        clampDays(args.days as number | undefined),
+        developerIds
       );
       return truncateResult(result);
     },
@@ -411,11 +423,12 @@ export const toolRegistry: ToolDefinition[] = [
         required: ["projectName"],
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, developerIds) => {
       const result = await getProjectActivityOverTime(
         sql,
         args.projectName as string,
-        clampDays(args.days as number | undefined)
+        clampDays(args.days as number | undefined),
+        developerIds
       );
       return truncateResult(result);
     },
@@ -430,8 +443,8 @@ export const toolRegistry: ToolDefinition[] = [
         properties: {},
       },
     },
-    execute: async (sql) => {
-      const result = await getAllDevelopers(sql);
+    execute: async (sql, _args, developerIds) => {
+      const result = await getAllDevelopers(sql, developerIds);
       return truncateResult(result);
     },
   },

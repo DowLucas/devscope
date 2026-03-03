@@ -12,11 +12,13 @@ export function orgScopeMiddleware(sql: SQL) {
     const session = c.get("session" as never) as any;
     const orgId = session?.activeOrganizationId;
 
-    if (orgId) {
-      const devIds = await getOrgDeveloperIds(sql, orgId);
-      c.set("orgId" as never, orgId as never);
-      c.set("orgDeveloperIds" as never, devIds as never);
+    if (!orgId) {
+      return c.json({ error: "No active organization" }, 403);
     }
+
+    const devIds = await getOrgDeveloperIds(sql, orgId);
+    c.set("orgId" as never, orgId as never);
+    c.set("orgDeveloperIds" as never, devIds as never);
 
     return next();
   };

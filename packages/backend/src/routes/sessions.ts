@@ -68,6 +68,11 @@ export function sessionsRoutes(sql: SQL) {
     if (!detail) {
       return c.json({ error: "Session not found" }, 404);
     }
+    // Org-scope validation: check developer belongs to org
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    if (devIds && devIds.length > 0 && !devIds.includes((detail.session as any).developer_id)) {
+      return c.json({ error: "Session not found" }, 404);
+    }
     return c.json({
       session: mapSession(detail.session),
       events: (detail.events as any[]).map((e) => ({

@@ -8,6 +8,7 @@ import { useLocation } from "wouter";
 import { authClient } from "@/lib/auth-client";
 import { apiFetch } from "@/lib/api";
 import { InviteDialog } from "@/components/team/InviteDialog";
+import logoFull from "@/assets/logo-full.png";
 
 const INSTALL_COMMAND =
   "curl -fsSL https://raw.githubusercontent.com/DowLucas/devscope-plugin/main/install.sh | bash";
@@ -199,6 +200,7 @@ export function OnboardingWizard() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="text-center space-y-2"
         >
+          <img src={logoFull} alt="DevScope" className="h-7 mx-auto" />
           <h1 className="text-3xl font-bold tracking-tight">Welcome to DevScope</h1>
           <p className="text-muted-foreground">
             Follow these steps to connect your Claude Code sessions to DevScope.

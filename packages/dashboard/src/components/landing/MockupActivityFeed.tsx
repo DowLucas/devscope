@@ -164,7 +164,7 @@ function EventContent({ event }: { event: FeedEvent }) {
         <span className="truncate">
           <span className="font-medium text-foreground">{event.developer}</span>
           {" started working on "}
-          <span className="font-mono text-[10px] text-muted-foreground">{event.detail}</span>
+          <span className="font-mono text-xs text-muted-foreground">{event.detail}</span>
         </span>
       );
     case "session-end":
@@ -172,7 +172,7 @@ function EventContent({ event }: { event: FeedEvent }) {
         <span className="truncate">
           <span className="font-medium text-foreground">{event.developer}</span>
           {" ended session in "}
-          <span className="font-mono text-[10px] text-muted-foreground">{event.detail}</span>
+          <span className="font-mono text-xs text-muted-foreground">{event.detail}</span>
         </span>
       );
     case "tools":
@@ -186,7 +186,7 @@ function EventContent({ event }: { event: FeedEvent }) {
         <span className="truncate">
           <span className="font-medium text-foreground">{event.developer}</span>
           {" spawned "}
-          <span className="rounded bg-purple-500/20 px-1 py-0.5 text-[9px] font-medium text-purple-400">
+          <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[11px] font-medium text-purple-400">
             {event.detail}
           </span>
         </span>
@@ -212,7 +212,7 @@ function EventContent({ event }: { event: FeedEvent }) {
         <span className="truncate">
           <span className="font-medium text-foreground">{event.developer}</span>
           {" created worktree "}
-          <span className="font-mono text-[10px] text-indigo-400">{event.detail}</span>
+          <span className="font-mono text-xs text-indigo-400">{event.detail}</span>
         </span>
       );
     default:
@@ -268,11 +268,11 @@ export function MockupActivityFeed() {
                 y: { duration: 0.4, ease: "easeOut" },
                 layout: { duration: 0.5, ease: [0.4, 0, 0.2, 1] },
               }}
-              className="relative flex gap-3 pb-3"
+              className="relative flex gap-4 pb-4"
             >
               {/* Vertical connector line */}
               {!isLast && (
-                <div className="absolute left-[11px] top-6 bottom-0 w-px bg-border" />
+                <div className="absolute left-[13px] top-7 bottom-0 w-px bg-border" />
               )}
 
               {/* Dot */}
@@ -280,30 +280,30 @@ export function MockupActivityFeed() {
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ duration: 0.3, ease: "easeOut", delay: 0.1 }}
-                className={`relative z-10 flex size-6 shrink-0 items-center justify-center rounded-full ring-2 ring-background ${color}`}
+                className={`relative z-10 flex size-7 shrink-0 items-center justify-center rounded-full ring-2 ring-background ${color}`}
               >
-                <Icon className={`size-3 ${iconClass}`} />
+                <Icon className={`size-3.5 ${iconClass}`} />
               </motion.div>
 
               {/* Content */}
               <div className="flex-1 min-w-0 pt-0.5">
                 {isPrompt ? (
                   <div>
-                    <div className="flex items-center gap-1.5 text-xs mb-1">
+                    <div className="flex items-center gap-2 text-sm mb-1">
                       <span className="font-medium text-foreground">{event.developer}</span>
-                      <span className="rounded border border-border px-1 py-0 text-[9px] text-muted-foreground">
+                      <span className="rounded border border-border px-1.5 py-0 text-[10px] text-muted-foreground">
                         {event.project}
                       </span>
-                      <span className="ml-auto text-[10px] text-muted-foreground">{timeLabel}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">{timeLabel}</span>
                     </div>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed rounded-md bg-muted/50 border border-border px-2 py-1.5 line-clamp-2">
+                    <p className="text-xs text-muted-foreground leading-relaxed rounded-md bg-muted/50 border border-border px-2.5 py-2 line-clamp-2">
                       {event.detail}
                     </p>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <EventContent event={event} />
-                    <span className="ml-auto shrink-0 text-[10px]">{timeLabel}</span>
+                    <span className="ml-auto shrink-0 text-xs">{timeLabel}</span>
                   </div>
                 )}
               </div>

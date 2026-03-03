@@ -1,5 +1,6 @@
 import { Separator } from "@/components/ui/separator";
 import { usePersona } from "./PersonaContext";
+import logoFull from "@/assets/logo-full.png";
 
 /** Product navigation links — anchor IDs or external URLs. */
 const PRODUCT_LINKS = [
@@ -27,11 +28,11 @@ export function FooterSection() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand */}
           <div>
-            <a href="/" className="text-lg font-bold text-foreground hover:text-foreground/80 transition-colors">
-              DevScope
+            <a href="/" className="inline-block hover:opacity-80 transition-opacity">
+              <img src={logoFull} alt="DevScope" className="h-5" />
             </a>
             <p className="mt-2 text-sm text-muted-foreground">
-              Real-time monitoring for AI-assisted development.
+              Observability for agentic engineering workflows.
             </p>
           </div>
 

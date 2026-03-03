@@ -11,7 +11,7 @@ import {
   getRecentEvents,
   checkAlertThresholds,
 } from "../db";
-import { broadcast } from "../ws/handler";
+import { broadcast, broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg } from "../services/developerLink";
 
 const eventSchema = z.object({
@@ -87,26 +87,36 @@ export function eventsRoutes(sql: SQL) {
 
     await insertEvent(sql, event);
 
-    // Broadcasts after DB insert
-    if (broadcastSessionActive) {
-      broadcast({ type: "session.update", data: { sessionId: event.sessionId, status: "active" } });
-      broadcast({ type: "developer.update", data: { developerId: event.developerId } });
-    } else if (broadcastSessionEnded) {
-      broadcast({ type: "session.update", data: { sessionId: event.sessionId, status: "ended" } });
-      broadcast({ type: "developer.update", data: { developerId: event.developerId } });
+    // Look up developer's orgs for scoped broadcasting
+    const devOrgs = await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${event.developerId}`;
+
+    function broadcastToDevOrgs(msg: any) {
+      if (devOrgs.length > 0) {
+        for (const row of devOrgs as any[]) {
+          broadcastToOrg(row.organization_id, msg);
+        }
+      } else {
+        broadcast(msg);
+      }
     }
 
-    broadcast({
-      type: "event.new",
-      data: event,
-    });
+    // Broadcasts after DB insert
+    if (broadcastSessionActive) {
+      broadcastToDevOrgs({ type: "session.update", data: { sessionId: event.sessionId, status: "active" } });
+      broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
+    } else if (broadcastSessionEnded) {
+      broadcastToDevOrgs({ type: "session.update", data: { sessionId: event.sessionId, status: "ended" } });
+      broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
+    }
+
+    broadcastToDevOrgs({ type: "event.new", data: event });
 
     // Check alert thresholds on tool failures
     if (event.eventType === "tool.fail") {
       const toolName = (event.payload as { toolName?: string }).toolName ?? "unknown";
       const alert = await checkAlertThresholds(sql, event.sessionId, toolName);
       if (alert) {
-        broadcast({ type: "alert.triggered", data: alert });
+        broadcastToDevOrgs({ type: "alert.triggered", data: alert });
       }
     }
 

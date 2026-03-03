@@ -7,6 +7,7 @@ import { useTeamStore } from "@/stores/teamStore";
 import { AlertBanner } from "@/components/failures/AlertBanner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import logoFull from "@/assets/logo-full.png";
 
 interface LayoutProps {
   children: ReactNode;
@@ -214,7 +215,7 @@ export function Layout({ children }: LayoutProps) {
 
       <div className="ml-52">
         <header className="shrink-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold tracking-tight">DevScope</h1>
+          <img src={logoFull} alt="DevScope" className="h-5" />
           <div className="flex items-center gap-4 text-sm">
             <span className="flex items-center gap-2">
               <span

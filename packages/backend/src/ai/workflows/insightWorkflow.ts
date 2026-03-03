@@ -28,6 +28,7 @@ interface DetectedInsight {
 
 const InsightState = Annotation.Root({
   days: Annotation<number>,
+  developerIds: Annotation<string[] | undefined>,
   data: Annotation<InsightData>,
   insights: Annotation<DetectedInsight[]>,
   inputTokens: Annotation<number>,
@@ -41,14 +42,15 @@ async function gatherData(
   sql: SQL
 ): Promise<Partial<InsightStateType>> {
   const days = state.days;
+  const devIds = state.developerIds;
 
   const [periodComparison, teamHealth, failureClusters, leaderboard, projects] =
     await Promise.all([
-      getPeriodComparison(sql, days),
-      getTeamHealth(sql),
-      getFailureClusters(sql, days),
-      getDeveloperLeaderboard(sql, days),
-      getProjectsOverview(sql, days),
+      getPeriodComparison(sql, days, undefined, devIds),
+      getTeamHealth(sql, devIds),
+      getFailureClusters(sql, days, devIds),
+      getDeveloperLeaderboard(sql, days, devIds),
+      getProjectsOverview(sql, days, devIds),
     ]);
 
   return {
@@ -130,12 +132,14 @@ export function createInsightWorkflow(sql: SQL) {
 
 export async function runInsightWorkflow(
   sql: SQL,
-  days: number = 1
+  days: number = 1,
+  developerIds?: string[]
 ): Promise<AiInsight[]> {
   const app = createInsightWorkflow(sql);
 
   const result = await app.invoke({
     days,
+    developerIds,
     data: {
       periodComparison: null,
       teamHealth: null,

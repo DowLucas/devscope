@@ -7,6 +7,7 @@ import { DeveloperNode } from "../flow/DeveloperNode";
 import { SessionNode } from "../flow/SessionNode";
 import { AgentNode } from "../flow/AgentNode";
 import { buildDemoLayout, tickSimulation } from "./demoTopologyData";
+import { usePersona } from "./PersonaContext";
 
 const nodeTypes = {
   developer: DeveloperNode,
@@ -22,11 +23,12 @@ export function TopologyDemoSection() {
   const layout = useMemo(() => buildDemoLayout(), []);
   const [nodes, setNodes] = useState<Node[]>(layout.nodes);
   const edges = layout.edges;
+  const { persona } = usePersona();
 
   // Simulation loop: tick every 1.5–3s (randomized for organic feel)
   const tick = useCallback(() => {
-    setNodes((prev) => tickSimulation(prev));
-  }, []);
+    setNodes((prev) => tickSimulation(prev, persona));
+  }, [persona]);
 
   useEffect(() => {
     // Initial tick after a short delay so the user sees the first state briefly

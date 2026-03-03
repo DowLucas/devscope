@@ -25,10 +25,10 @@ const fadeUp = {
 /** Fallback content used before persona is chosen. */
 const DEFAULT = {
   badge: "Open Source Developer Monitoring",
-  headline: "See what your AI developers are building.",
-  headlineAccent: "In real time.",
+  headline: "Observability for the age of agentic engineering.",
+  headlineAccent: "See everything.",
   subtext:
-    "DevScope gives engineering leaders full visibility into Claude Code sessions across their team. Track activity, catch stuck sessions, and understand how AI is being used — all from a single dashboard.",
+    "Engineering is shifting from writing code to orchestrating AI agents. DevScope gives you full visibility into Claude Code sessions across your team — track activity, catch stuck sessions, and understand agentic workflows from a single dashboard.",
 };
 
 export function HeroSection() {
@@ -127,7 +127,7 @@ export function HeroSection() {
               <span className="size-3 rounded-full bg-red-500" />
               <span className="size-3 rounded-full bg-yellow-500" />
               <span className="size-3 rounded-full bg-green-500" />
-              <span className="ml-3 text-xs text-muted-foreground">
+              <span className="ml-3 text-base text-muted-foreground">
                 DevScope —{" "}
                 {persona === "non-technical"
                   ? "Team Dashboard"

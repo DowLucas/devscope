@@ -39,11 +39,11 @@ const HERO: Record<Persona, HeroContent> = {
       "DevScope gives you deep insight into your Claude Code sessions — see which tools you lean on, where you get stuck, and how to get more from every prompt.",
   },
   "non-technical": {
-    badge: "AI Development Intelligence",
-    headline: "Measure the impact of AI-assisted development.",
+    badge: "Agentic Engineering Intelligence",
+    headline: "Measure the impact of agentic engineering.",
     headlineAccent: "Quantify ROI.",
     subtext:
-      "DevScope gives engineering leaders the business intelligence they need — team velocity, AI adoption metrics, cost-per-session analytics, and executive-ready briefings.",
+      "As engineering shifts to agent-orchestrated workflows, leaders need new metrics. DevScope delivers team velocity, adoption analytics, cost-per-session data, and executive-ready briefings.",
   },
 };
 
@@ -81,7 +81,7 @@ const FEATURES: Record<Persona, FeaturesContent> = {
         icon: GitBranch,
         title: "Project-Level Breakdown",
         description:
-          "See how your sessions map to repositories. Understand which projects get the most AI-assisted development.",
+          "See how your sessions map to repositories. Understand which projects get the most agentic engineering activity.",
       },
       {
         icon: BrainCircuit,
@@ -110,9 +110,9 @@ const FEATURES: Record<Persona, FeaturesContent> = {
     ],
   },
   "non-technical": {
-    heading: "Business intelligence for AI development",
+    heading: "Business intelligence for agentic engineering",
     subheading:
-      "From adoption metrics to executive briefings, DevScope turns AI development activity into actionable insights.",
+      "From adoption metrics to executive briefings, DevScope turns agentic engineering activity into actionable insights.",
     items: [
       {
         icon: TrendingUp,
@@ -122,9 +122,9 @@ const FEATURES: Record<Persona, FeaturesContent> = {
       },
       {
         icon: LineChart,
-        title: "AI Adoption & ROI Metrics",
+        title: "Adoption & ROI Metrics",
         description:
-          "Measure Claude Code adoption rates, session frequency, and correlate AI usage with engineering output.",
+          "Measure agentic engineering adoption rates, session frequency, and correlate agent usage with engineering output.",
       },
       {
         icon: Briefcase,
@@ -136,7 +136,7 @@ const FEATURES: Record<Persona, FeaturesContent> = {
         icon: Target,
         title: "Resource Allocation Insights",
         description:
-          "See which projects consume the most AI-assisted development time and align investment with priorities.",
+          "See which projects consume the most agentic engineering time and align investment with priorities.",
       },
       {
         icon: AlertTriangle,
@@ -211,7 +211,7 @@ const STEPS: Record<Persona, readonly StepItem[]> = {
       icon: Briefcase,
       title: "Get Actionable Intelligence",
       description:
-        "Review dashboards, receive executive briefings, and make data-driven decisions about your AI development investment.",
+        "Review dashboards, receive executive briefings, and make data-driven decisions about your agentic engineering investment.",
     },
   ],
 };
@@ -236,7 +236,7 @@ const CTA: Record<Persona, CtaContent> = {
     buttonLabel: "Get Started Free",
   },
   "non-technical": {
-    heading: "Start measuring your team's AI development ROI",
+    heading: "Start measuring your team's agentic engineering ROI",
     subtext:
       "Deploy DevScope in minutes. Self-hosted, open source, and designed for engineering leaders who need real data.",
     buttonLabel: "Get Started Free",
@@ -286,7 +286,7 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
     {
       question: "What is DevScope?",
       answer:
-        "DevScope is an open-source analytics platform that gives engineering leaders visibility into AI-assisted development. It captures team-wide session activity and turns it into actionable business intelligence — adoption metrics, velocity trends, and executive briefings.",
+        "DevScope is an open-source analytics platform that gives engineering leaders visibility into agentic engineering workflows. It captures team-wide session activity and turns it into actionable business intelligence — adoption metrics, velocity trends, and executive briefings.",
     },
     {
       question: "How does rollout work for my team?",
@@ -296,7 +296,7 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
     {
       question: "What kind of metrics can I track?",
       answer:
-        "Team velocity, AI adoption rates, sessions per developer, project-level breakdowns, failure patterns, and cost correlations. DevScope also generates AI-powered executive briefings on demand.",
+        "Team velocity, adoption rates, sessions per developer, project-level breakdowns, failure patterns, and cost correlations. DevScope also generates AI-powered executive briefings on demand.",
     },
     {
       question: "Is the data secure?",

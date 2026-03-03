@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Loader2, XCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { authClient } from "@/lib/auth-client";
+import logoFull from "@/assets/logo-full.png";
 
 type AcceptStatus = "checking" | "accepting" | "error";
 
@@ -18,7 +19,7 @@ export function InviteAcceptPage({ token }: { token: string }) {
 
     if (!session) {
       sessionStorage.setItem("devscope_invite_token", token);
-      setLocation(`/auth/sign-up?invite=${encodeURIComponent(token)}`);
+      setLocation("/auth/sign-up");
       return;
     }
 
@@ -40,9 +41,9 @@ export function InviteAcceptPage({ token }: { token: string }) {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold tracking-tight">DevScope</h1>
-        <p className="text-muted-foreground mt-1">Developer Session Monitoring</p>
+      <div className="mb-8 text-center flex flex-col items-center gap-2">
+        <img src={logoFull} alt="DevScope" className="h-7" />
+        <p className="text-muted-foreground text-sm">Developer Session Monitoring</p>
       </div>
       <div className="w-full max-w-md">
         <Card>

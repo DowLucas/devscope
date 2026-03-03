@@ -34,4 +34,8 @@ EXPOSE 6767
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD bun -e "fetch('http://localhost:6767/api/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
 
+RUN addgroup --system --gid 1001 devscope && \
+    adduser --system --uid 1001 --ingroup devscope devscope
+USER devscope
+
 CMD ["bun", "run", "packages/backend/src/index.ts"]

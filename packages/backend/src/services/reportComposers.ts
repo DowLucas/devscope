@@ -51,12 +51,13 @@ function makeKpi(
 
 export async function composeExecutiveScorecard(
   sql: SQL,
-  days: number
+  days: number,
+  developerIds?: string[]
 ): Promise<ExecutiveScorecard> {
   const [comparison, summary, projects] = await Promise.all([
-    getPeriodComparison(sql, days),
-    getSessionStatsSummary(sql, undefined, days),
-    getProjectActivity(sql, undefined, days),
+    getPeriodComparison(sql, days, undefined, developerIds),
+    getSessionStatsSummary(sql, undefined, days, developerIds),
+    getProjectActivity(sql, undefined, days, developerIds),
   ]);
 
   const kpis: KpiMetric[] = [
@@ -97,13 +98,14 @@ export async function composeExecutiveScorecard(
 
 export async function composeManagerSummary(
   sql: SQL,
-  days: number
+  days: number,
+  developerIds?: string[]
 ): Promise<ManagerSummary> {
   const [comparison, teamHealth, clusters, burnout] = await Promise.all([
-    getPeriodComparison(sql, days),
-    getTeamHealth(sql),
-    getFailureClusters(sql, days),
-    getBurnoutRiskSignals(sql, days),
+    getPeriodComparison(sql, days, undefined, developerIds),
+    getTeamHealth(sql, developerIds),
+    getFailureClusters(sql, days, developerIds),
+    getBurnoutRiskSignals(sql, days, developerIds),
   ]);
 
   return {
@@ -140,12 +142,13 @@ export async function composeManagerSummary(
 
 export async function composeRoiMetrics(
   sql: SQL,
-  days: number
+  days: number,
+  developerIds?: string[]
 ): Promise<AiRoiMetrics> {
   const [comparison, efficiency, projects] = await Promise.all([
-    getPeriodComparison(sql, days),
-    getAiRoiEfficiency(sql, days),
-    getProjectActivity(sql, undefined, days),
+    getPeriodComparison(sql, days, undefined, developerIds),
+    getAiRoiEfficiency(sql, days, developerIds),
+    getProjectActivity(sql, undefined, days, developerIds),
   ]);
 
   const totalSessionTime = projects.reduce((sum, p) => sum + p.session_count, 0);

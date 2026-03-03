@@ -155,6 +155,45 @@ See [`.env.production.example`](.env.production.example) for the full list.
 | `/api/health` | GET | Health check |
 | `/ws` | WS | Real-time event stream |
 
+## Troubleshooting
+
+### Plugin not sending events
+
+**Missing git identity** — the plugin derives your developer ID from `git config user.email`. If it's not set, events can't be attributed:
+
+```bash
+git config --global user.email "you@example.com"
+git config --global user.name "Your Name"
+```
+
+**Config not found** — verify your config exists and has the right URL:
+
+```bash
+cat ~/.config/devscope/config
+```
+
+**Server unreachable** — test the connection:
+
+```bash
+curl -sf https://devscope.sh/api/health   # cloud
+curl -sf http://localhost:6767/api/health  # self-hosted
+```
+
+### Dashboard shows no data
+
+- Check that the plugin is installed and enabled: `claude plugin list`
+- Verify WebSocket connects (browser console should show `ws` or `wss` connection)
+- Ensure `GC_CORS_ORIGIN` includes your dashboard URL (self-hosted only)
+
+### Plugin update not taking effect
+
+Claude Code caches plugins by version. After updating:
+
+```bash
+claude plugin update devscope
+# Restart Claude Code for changes to take effect
+```
+
 ## Contributing
 
 Contributions are welcome! Whether it's bug reports, feature requests, or pull requests — we appreciate your help.
