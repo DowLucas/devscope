@@ -21,6 +21,8 @@ import {
   getAntiPatterns,
   getAntiPatternStats,
 } from "../db";
+import { getPatterns, getPatternStats } from "../db/patternQueries";
+import { getAntiPatterns, getAntiPatternStats } from "../db/antiPatternQueries";
 
 const MAX_DAYS = 365;
 const MAX_RESULT_SIZE = 15_000; // 15KB
@@ -494,6 +496,86 @@ export const toolRegistry: ToolDefinition[] = [
         clampDays(args.days as number | undefined)
       );
       return truncateResult(result);
+    },
+  },
+  {
+    declaration: {
+      name: "getSessionPatterns",
+      description:
+        "Get discovered session patterns — recurring tool usage sequences. Shows effectiveness, occurrence count, and success rates.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          effectiveness: {
+            type: Type.STRING,
+            description: "Filter by effectiveness: 'effective', 'ineffective', or 'neutral'",
+          },
+          category: {
+            type: Type.STRING,
+            description: "Filter by category: 'workflow', 'debugging', 'refactoring', 'exploration', 'testing'",
+          },
+        },
+      },
+    },
+    execute: async (sql, args) => {
+      const result = await getPatterns(sql, {
+        effectiveness: args.effectiveness as string | undefined,
+        category: args.category as string | undefined,
+        limit: 20,
+      });
+      return truncateResult(result);
+    },
+  },
+  {
+    declaration: {
+      name: "getAntiPatternData",
+      description:
+        "Get detected anti-patterns — problematic tool usage patterns like retry loops, failure cascades, and abandoned sessions.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          severity: {
+            type: Type.STRING,
+            description: "Filter by severity: 'info', 'warning', or 'critical'",
+          },
+          detection_rule: {
+            type: Type.STRING,
+            description: "Filter by rule: 'retry_loop', 'failure_cascade', or 'abandoned_session'",
+          },
+        },
+      },
+    },
+    execute: async (sql, args) => {
+      const result = await getAntiPatterns(sql, {
+        severity: args.severity as string | undefined,
+        detection_rule: args.detection_rule as string | undefined,
+        limit: 20,
+      });
+      return truncateResult(result);
+    },
+  },
+  {
+    declaration: {
+      name: "getPatternAndAntiPatternStats",
+      description:
+        "Get summary statistics for patterns and anti-patterns: counts, effectiveness breakdown, and recent match activity.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          days: {
+            type: Type.NUMBER,
+            description: "Number of days for recent activity stats (default 30)",
+          },
+        },
+      },
+    },
+    execute: async (sql, args) => {
+      const days = clampDays(args.days as number | undefined);
+      const [patternStats, antiPatternStats] = await Promise.all([
+        getPatternStats(sql, days),
+        getAntiPatternStats(sql, days),
+      ]);
+      return truncateResult({ patterns: patternStats, antiPatterns: antiPatternStats });
     },
   },
 ];

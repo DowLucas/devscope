@@ -19,7 +19,6 @@ export function startPatternAnalysis(sql: SQL) {
     return;
   }
 
-  // Pattern + anti-pattern analysis runs daily at this hour (default: 1 AM)
   const scheduleHour = Math.min(
     Math.max(Number(process.env.PATTERN_ANALYSIS_SCHEDULE ?? 1), 0),
     23
@@ -32,24 +31,26 @@ export function startPatternAnalysis(sql: SQL) {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
     const currentHour = now.getHours();
-    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon
+    const dayOfWeek = now.getDay();
 
-    // Daily pattern + anti-pattern analysis
     if (todayStr !== lastRunDate && currentHour >= scheduleHour) {
       lastRunDate = todayStr;
 
+      // Daily: pattern analysis + anti-pattern detection
       try {
-        // 1. Pattern analysis
         console.log("[pattern-analysis] Running daily pattern analysis...");
         const patterns = await runPatternWorkflow(sql, 1);
-        console.log(`[pattern-analysis] Discovered/updated ${patterns.length} patterns`);
+        console.log(`[pattern-analysis] Discovered ${patterns.length} patterns`);
 
         for (const pattern of patterns) {
           broadcast({ type: "ai.pattern.new", data: pattern });
         }
+      } catch (err) {
+        console.error("[pattern-analysis] Pattern workflow failed:", err);
+      }
 
-        // 2. Anti-pattern detection
-        console.log("[pattern-analysis] Running daily anti-pattern detection...");
+      try {
+        console.log("[pattern-analysis] Running anti-pattern detection...");
         const antiPatterns = await runAntiPatternWorkflow(sql, 1);
         console.log(`[pattern-analysis] Detected ${antiPatterns.length} anti-patterns`);
 
@@ -57,15 +58,11 @@ export function startPatternAnalysis(sql: SQL) {
           broadcast({ type: "ai.antipattern.new", data: ap });
         }
       } catch (err) {
-        console.error("[pattern-analysis] Daily analysis failed:", err);
+        console.error("[pattern-analysis] Anti-pattern workflow failed:", err);
       }
 
-      // 3. Weekly playbook refresh (Mondays)
-      // Proper ISO week number calculation
-      const jan4 = new Date(now.getFullYear(), 0, 4);
-      const startOfWeek = new Date(jan4.getTime() - ((jan4.getDay() || 7) - 1) * 86400000);
-      const isoWeekNum = Math.ceil(((now.getTime() - startOfWeek.getTime()) / 86400000 + 1) / 7);
-      const weekStr = `${now.getFullYear()}-W${isoWeekNum}`;
+      // Weekly: playbook generation (Mondays)
+      const weekStr = `${now.getFullYear()}-W${Math.ceil((now.getDate() + 6 - dayOfWeek) / 7)}`;
       if (dayOfWeek === 1 && weekStr !== lastPlaybookWeek) {
         lastPlaybookWeek = weekStr;
 
@@ -78,7 +75,7 @@ export function startPatternAnalysis(sql: SQL) {
             broadcast({ type: "ai.playbook.new", data: pb });
           }
         } catch (err) {
-          console.error("[pattern-analysis] Playbook generation failed:", err);
+          console.error("[pattern-analysis] Playbook workflow failed:", err);
         }
       }
     }
@@ -86,6 +83,6 @@ export function startPatternAnalysis(sql: SQL) {
 
   g.__gc_pattern_analysis_interval = setInterval(check, CHECK_INTERVAL_MS);
   console.log(
-    `[pattern-analysis] Scheduled daily at hour ${scheduleHour} (patterns + anti-patterns), weekly playbooks on Mondays`
+    `[pattern-analysis] Scheduled daily at hour ${scheduleHour} (check interval: 60s)`
   );
 }

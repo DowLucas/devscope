@@ -14,7 +14,7 @@ import { insightsRoutes } from "./routes/insights";
 import { alertsRoutes } from "./routes/alerts";
 import { exportRoutes } from "./routes/export";
 import { teamsRoutes } from "./routes/teams";
-import { addClient, removeClient, getClientCount, broadcastToOrg } from "./ws/handler";
+import { addClient, removeClient, getClientCount } from "./ws/handler";
 import { startStaleSessionCleanup } from "./jobs/cleanupStaleSessions";
 import { startDigestGeneration } from "./jobs/digestGeneration";
 import { startAiInsightGeneration } from "./jobs/aiInsights";
@@ -26,26 +26,10 @@ import { skillsRoutes } from "./routes/skills";
 import { playbooksRoutes } from "./routes/playbooks";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
-import { csrfMiddleware } from "./middleware/csrf";
 import { getPublicStats } from "./db/queries";
 import type { Context, Next } from "hono";
 
 const sql = await initializeDatabase();
-
-// Refuse to start with default secrets in production
-const isProduction = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT;
-if (isProduction) {
-  const dangerousDefaults = ["devscope-dev-secret-change-in-production", "changeme", "changeme123!"];
-  if (dangerousDefaults.includes(process.env.BETTER_AUTH_SECRET ?? "")) {
-    console.error("[devscope] FATAL: BETTER_AUTH_SECRET is set to a default value. Set a secure random secret in production.");
-    process.exit(1);
-  }
-  if (dangerousDefaults.includes(process.env.DEVSCOPE_ADMIN_PASSWORD ?? "")) {
-    console.error("[devscope] FATAL: DEVSCOPE_ADMIN_PASSWORD is set to a default value. Set a secure password in production.");
-    process.exit(1);
-  }
-}
-
 await seedDefaultAdmin(sql);
 startStaleSessionCleanup(sql);
 startDigestGeneration(sql);
@@ -70,9 +54,9 @@ const allowedOrigins = corsRaw.split(",").map((o) => o.trim()).filter(Boolean);
 app.use(
   "/api/*",
   cors({
-    origin: (origin) => allowedOrigins.includes(origin) ? origin : "",
+    origin: (origin) => (allowedOrigins.includes(origin) ? origin : allowedOrigins[0]),
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "x-api-key", "x-requested-with"],
+    allowHeaders: ["Content-Type", "Authorization", "x-api-key"],
     credentials: true,
   })
 );
@@ -85,8 +69,6 @@ app.use("/api/*", async (c, next) => {
   if (c.req.path.startsWith("/api/auth/")) return next();
   return bodyLimit({ maxSize: 256 * 1024 })(c, next);
 });
-
-app.use("/api/*", csrfMiddleware());
 
 // --- Public routes (no auth, rate-limited) ---
 app.use("/api/public/*", rateLimitMiddleware({ maxRequests: 30, windowMs: 60_000 }));
@@ -102,8 +84,6 @@ app.get("/api/public/stats", async (c) => {
 });
 
 // --- better-auth handler (pass raw Request untouched) ---
-app.use("/api/auth/sign-in/*", rateLimitMiddleware({ maxRequests: 10, windowMs: 60_000, prefix: "signin" }));
-app.use("/api/auth/sign-up/*", rateLimitMiddleware({ maxRequests: 5, windowMs: 60_000, prefix: "signup" }));
 app.all("/api/auth/*", (c) => auth.handler(c.req.raw));
 
 // --- Auth middleware helpers ---
@@ -164,16 +144,6 @@ app.use("/api/patterns/*", orgScopeMiddleware(sql));
 app.use("/api/patterns", orgScopeMiddleware(sql));
 app.use("/api/playbooks/*", orgScopeMiddleware(sql));
 app.use("/api/playbooks", orgScopeMiddleware(sql));
-app.use("/api/skills/*", orgScopeMiddleware(sql));
-app.use("/api/skills", orgScopeMiddleware(sql));
-app.use("/api/alerts/*", orgScopeMiddleware(sql));
-app.use("/api/alerts", orgScopeMiddleware(sql));
-app.use("/api/export/*", orgScopeMiddleware(sql));
-app.use("/api/export", orgScopeMiddleware(sql));
-app.use("/api/ai/*", orgScopeMiddleware(sql));
-app.use("/api/ai", orgScopeMiddleware(sql));
-app.use("/api/reports/*", orgScopeMiddleware(sql));
-app.use("/api/reports", orgScopeMiddleware(sql));
 
 app.route("/api/events", eventsRoutes(sql));
 app.route("/api/sessions", sessionsRoutes(sql));
@@ -191,8 +161,6 @@ app.route("/api/playbooks", playbooksRoutes(sql));
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })
 );
-
-app.use("/api/verify-connection", rateLimitMiddleware({ maxRequests: 10, windowMs: 60_000, prefix: "verify" }));
 
 app.post("/api/verify-connection", async (c) => {
   const key = c.req.header("x-api-key");
@@ -224,37 +192,32 @@ app.get(
     if (!session) {
       return c.text("Unauthorized", 401);
     }
-    // Store orgId for use in onOpen
-    c.set("wsOrgId" as never, (session.session as any).activeOrganizationId as never);
     return next();
   },
-  upgradeWebSocket((c) => {
-    const orgId = (c as any).get?.("wsOrgId") as string | undefined;
-    return {
-      onOpen(_event, ws) {
-        addClient(ws, orgId);
-        console.log("[ws] Client connected (" + getClientCount() + " total)");
-      },
-      onMessage(event, _ws) {
-        try {
-          const msg = JSON.parse(String(event.data));
-          if (msg.type === "subscribe") {
-            console.log("[ws] Client subscribed");
-          }
-        } catch {
-          // Ignore non-JSON messages
+  upgradeWebSocket(() => ({
+    onOpen(_event, ws) {
+      addClient(ws);
+      console.log("[ws] Client connected (" + getClientCount() + " total)");
+    },
+    onMessage(event, _ws) {
+      try {
+        const msg = JSON.parse(String(event.data));
+        if (msg.type === "subscribe") {
+          console.log("[ws] Client subscribed");
         }
-      },
-      onClose(_event, ws) {
-        removeClient(ws);
-        console.log("[ws] Client disconnected (" + getClientCount() + " total)");
-      },
-      onError(_event, ws) {
-        removeClient(ws);
-        console.log("[ws] Client error (" + getClientCount() + " total)");
-      },
-    };
-  })
+      } catch {
+        // Ignore non-JSON messages
+      }
+    },
+    onClose(_event, ws) {
+      removeClient(ws);
+      console.log("[ws] Client disconnected (" + getClientCount() + " total)");
+    },
+    onError(_event, ws) {
+      removeClient(ws);
+      console.log("[ws] Client error (" + getClientCount() + " total)");
+    },
+  }))
 );
 
 // --- Static file serving (Railway / single-container production) ---

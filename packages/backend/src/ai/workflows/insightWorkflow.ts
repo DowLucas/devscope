@@ -7,11 +7,10 @@ import {
   getFailureClusters,
   getTeamActivitySummary,
   getProjectsOverview,
-  getPatternStats,
-  getAntiPatternTrends,
-  recordTokenUsage,
-  createInsight,
 } from "../../db";
+import { recordTokenUsage, createInsight } from "../../db";
+import { getPatternStats } from "../../db/patternQueries";
+import { getAntiPatternTrends } from "../../db/antiPatternQueries";
 import type { AiInsight, InsightType, InsightSeverity } from "@devscope/shared";
 
 interface InsightData {
@@ -33,7 +32,6 @@ interface DetectedInsight {
 
 const InsightState = Annotation.Root({
   days: Annotation<number>,
-  developerIds: Annotation<string[] | undefined>,
   data: Annotation<InsightData>,
   insights: Annotation<DetectedInsight[]>,
   inputTokens: Annotation<number>,
@@ -47,15 +45,14 @@ async function gatherData(
   sql: SQL
 ): Promise<Partial<InsightStateType>> {
   const days = state.days;
-  const devIds = state.developerIds;
 
   const [periodComparison, teamHealth, failureClusters, teamActivity, projects, patternStats, antiPatternTrends] =
     await Promise.all([
-      getPeriodComparison(sql, days, undefined, devIds),
-      getTeamHealth(sql, devIds),
-      getFailureClusters(sql, days, devIds),
-      getTeamActivitySummary(sql, days, devIds),
-      getProjectsOverview(sql, days, devIds),
+      getPeriodComparison(sql, days),
+      getTeamHealth(sql),
+      getFailureClusters(sql, days),
+      getTeamActivitySummary(sql, days),
+      getProjectsOverview(sql, days),
       getPatternStats(sql, days),
       getAntiPatternTrends(sql, days),
     ]);
@@ -79,8 +76,7 @@ Analyze the following data and identify significant insights. Focus on:
 2. Trends: week-over-week changes that indicate improving or declining team velocity
 3. Tool Health: tools with high failure rates that need attention
 4. Recommendations: actionable suggestions for improving team workflow and tooling
-5. Pattern Health: are effective workflow patterns being adopted more? Are anti-patterns declining?
-6. Coaching Opportunities: specific suggestions based on pattern/anti-pattern data (e.g. "Sessions using Read-before-Edit had fewer failures")
+5. Coaching: skill-building opportunities based on pattern adoption and anti-pattern trends
 
 IMPORTANT: Focus on team-level patterns only. Do NOT include individual developer names, rankings, or performance comparisons.
 
@@ -145,14 +141,12 @@ export function createInsightWorkflow(sql: SQL) {
 
 export async function runInsightWorkflow(
   sql: SQL,
-  days: number = 1,
-  developerIds?: string[]
+  days: number = 1
 ): Promise<AiInsight[]> {
   const app = createInsightWorkflow(sql);
 
   const result = await app.invoke({
     days,
-    developerIds,
     data: {
       periodComparison: null,
       teamHealth: null,

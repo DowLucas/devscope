@@ -7,17 +7,18 @@ import { recordTokenUsage } from "../../db";
 import type { SessionPattern, Playbook } from "@devscope/shared";
 
 interface GeneratedPlaybook {
-  source_pattern_name: string;
   name: string;
   description: string;
   tool_sequence: string[];
   when_to_use: string;
   success_metrics: Record<string, unknown>;
+  source_pattern_name: string;
 }
 
 const PlaybookState = Annotation.Root({
   topPatterns: Annotation<SessionPattern[]>,
   generatedPlaybooks: Annotation<GeneratedPlaybook[]>,
+  persistedPlaybooks: Annotation<Playbook[]>,
   inputTokens: Annotation<number>,
   outputTokens: Annotation<number>,
 });
@@ -31,27 +32,24 @@ async function gatherTopPatterns(
   const patterns = await getPatterns(sql, {
     effectiveness: "effective",
     minOccurrences: 3,
-    limit: 15,
+    limit: 10,
   });
-
   return { topPatterns: patterns };
 }
 
-const PLAYBOOK_PROMPT = `You are converting effective developer workflow patterns into team playbooks.
-Each pattern below was discovered from real Claude Code sessions and has proven effective.
+const PLAYBOOK_PROMPT = `You are an expert at creating developer workflow playbooks.
 
-For each pattern that would make a good reusable playbook, generate:
-- source_pattern_name: the original pattern name (for linking)
-- name: action-oriented playbook name (e.g. "The TDD Loop", "Safe Refactor Workflow", "Explore-then-Act")
-- description: 2-3 sentence explanation of the workflow and why it works
-- tool_sequence: the canonical tool sequence (from the pattern)
-- when_to_use: 1-2 sentences describing when to apply this playbook
-- success_metrics: { avg_success_rate: number, typical_sessions: number }
+Given these high-performing tool usage patterns, create shareable playbooks that teams can adopt.
+For each playbook:
+- name: A clear, actionable name (e.g., "Test-Driven Bug Fix", "Codebase Exploration")
+- description: A 2-3 sentence explanation of the workflow and its benefits
+- tool_sequence: The recommended ordered list of tools
+- when_to_use: When a developer should use this playbook (1-2 sentences)
+- success_metrics: Key metrics to track (e.g., {"target_success_rate": 0.85, "max_retries": 2})
+- source_pattern_name: Which pattern this playbook is based on
 
-Only create playbooks for patterns that are clearly useful, replicable, and worth sharing.
-Skip patterns that are too generic or context-specific.
-Return a JSON array. Return empty array if no good playbooks can be made.
-Respond with ONLY valid JSON — no markdown, no code fences.`;
+Only create playbooks for patterns that are genuinely useful and teachable.
+Respond with ONLY valid JSON — an array of playbook objects. No markdown, no code fences.`;
 
 async function generatePlaybooks(
   state: PlaybookStateType
@@ -60,7 +58,7 @@ async function generatePlaybooks(
     return { generatedPlaybooks: [] };
   }
 
-  const patternData = state.topPatterns.map(p => ({
+  const patternData = state.topPatterns.map((p) => ({
     name: p.name,
     description: p.description,
     tool_sequence: p.tool_sequence,
@@ -69,7 +67,7 @@ async function generatePlaybooks(
     category: p.category,
   }));
 
-  const dataStr = JSON.stringify(patternData, null, 2);
+  const dataStr = JSON.stringify(patternData, null, 2).slice(0, 25_000);
 
   const response = await callGemini(
     [
@@ -84,15 +82,21 @@ async function generatePlaybooks(
 
   let playbooks: GeneratedPlaybook[] = [];
   try {
-    const cleaned = response.text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+    const cleaned = response.text
+      .replace(/```json?\n?/g, "")
+      .replace(/```/g, "")
+      .trim();
     const parsed = JSON.parse(cleaned);
     if (Array.isArray(parsed)) {
       playbooks = parsed.filter(
-        (p: any) => p.name && p.description && p.tool_sequence
+        (p: any) => p.name && p.tool_sequence && p.when_to_use
       );
     }
   } catch {
-    console.error("[playbooks] Failed to parse Gemini response:", response.text.slice(0, 200));
+    console.error(
+      "[playbook-workflow] Failed to parse Gemini response:",
+      response.text.slice(0, 200)
+    );
   }
 
   return {
@@ -106,28 +110,25 @@ async function persistPlaybooks(
   state: PlaybookStateType,
   sql: SQL
 ): Promise<Partial<PlaybookStateType>> {
-  for (const pb of state.generatedPlaybooks) {
-    // Find the source pattern ID
-    const sourcePattern = state.topPatterns.find(
-      p => p.name === pb.source_pattern_name
-    );
+  const persisted: Playbook[] = [];
 
-    try {
-      await createPlaybook(sql, {
-        name: pb.name,
-        description: pb.description,
-        tool_sequence: pb.tool_sequence,
-        when_to_use: pb.when_to_use,
-        success_metrics: pb.success_metrics ?? {},
-        source_pattern_id: sourcePattern?.id,
-        created_by: "auto",
-      });
-    } catch {
-      // Ignore duplicates
-    }
+  // Find source pattern IDs by name
+  const patternMap = new Map(state.topPatterns.map((p) => [p.name, p.id]));
+
+  for (const gp of state.generatedPlaybooks) {
+    const playbook = await createPlaybook(sql, {
+      name: gp.name,
+      description: gp.description,
+      tool_sequence: gp.tool_sequence,
+      when_to_use: gp.when_to_use,
+      success_metrics: gp.success_metrics,
+      source_pattern_id: patternMap.get(gp.source_pattern_name) ?? undefined,
+      created_by: "auto",
+    });
+    persisted.push(playbook);
   }
 
-  return {};
+  return { persistedPlaybooks: persisted };
 }
 
 export function createPlaybookWorkflow(sql: SQL) {
@@ -149,6 +150,7 @@ export async function runPlaybookWorkflow(sql: SQL): Promise<Playbook[]> {
   const result = await app.invoke({
     topPatterns: [],
     generatedPlaybooks: [],
+    persistedPlaybooks: [],
     inputTokens: 0,
     outputTokens: 0,
   });
@@ -161,6 +163,5 @@ export async function runPlaybookWorkflow(sql: SQL): Promise<Playbook[]> {
     result.outputTokens
   );
 
-  const { getPlaybooks } = await import("../../db/playbookQueries");
-  return getPlaybooks(sql);
+  return result.persistedPlaybooks;
 }

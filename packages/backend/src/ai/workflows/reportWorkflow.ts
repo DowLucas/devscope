@@ -9,8 +9,10 @@ import {
   getToolUsageBreakdown,
   getSessionStatsSummary,
   getFailureClusters,
-  getPatterns,
-  getAntiPatternStats,
+} from "../../db";
+import { getPatterns } from "../../db/patternQueries";
+import { getAntiPatternStats } from "../../db/antiPatternQueries";
+import {
   recordTokenUsage,
   createReport,
   updateReport,
@@ -23,7 +25,6 @@ const ReportState = Annotation.Root({
   periodStart: Annotation<string | null>,
   periodEnd: Annotation<string | null>,
   persona: Annotation<string | null>,
-  developerIds: Annotation<string[] | undefined>,
   data: Annotation<Record<string, unknown>>,
   outline: Annotation<string>,
   content: Annotation<string>,
@@ -50,7 +51,6 @@ async function gatherReportData(
   sql: SQL
 ): Promise<Partial<ReportStateType>> {
   const days = getDaysForType(state.reportType);
-  const devIds = state.developerIds;
 
   // Team-level aggregate data only — no individual developer data sent to LLM.
   const [
@@ -64,14 +64,14 @@ async function gatherReportData(
     effectivePatterns,
     antiPatternSummary,
   ] = await Promise.all([
-    getPeriodComparison(sql, days, undefined, devIds),
-    getTeamHealth(sql, devIds),
-    getTeamActivitySummary(sql, days, devIds),
-    getProjectsOverview(sql, days, devIds),
-    getToolUsageBreakdown(sql, undefined, days, devIds),
-    getSessionStatsSummary(sql, undefined, days, devIds),
-    getFailureClusters(sql, days, devIds),
-    getPatterns(sql, { effectiveness: "effective", limit: 10 }),
+    getPeriodComparison(sql, days),
+    getTeamHealth(sql),
+    getTeamActivitySummary(sql, days),
+    getProjectsOverview(sql, days),
+    getToolUsageBreakdown(sql, undefined, days),
+    getSessionStatsSummary(sql, undefined, days),
+    getFailureClusters(sql, days),
+    getPatterns(sql, { effectiveness: "effective", limit: 5 }),
     getAntiPatternStats(sql, days),
   ]);
 
@@ -125,9 +125,9 @@ IMPORTANT: This report should focus on TEAM-LEVEL metrics only. Do NOT include i
 - Project health and progress
 - Tool adoption and failure patterns (which tools need fixing?)
 - Sessions with high failure rates (tooling problems, not people problems)
-- Skills & Patterns: effective workflow patterns the team uses well, common anti-patterns to avoid, and coaching suggestions
+- Skills & Patterns: effective workflow patterns the team is adopting, and anti-patterns to address
 
-Based on this data, create a detailed outline for the report. Include a "Skills & Patterns" section.
+Based on this data, create a detailed outline for the report.
 
 Data:
 ${dataStr}
@@ -180,7 +180,6 @@ Requirements:
 - Include specific numbers and percentages
 - Start with a Summary section
 - Include sections for: Team Velocity, Project Health, Tool Performance, Skills & Patterns, Sessions Needing Attention, Recommendations
-- In the Skills & Patterns section: highlight top effective workflow patterns with success rates, flag common anti-patterns with frequency and avoidance tips, and provide 2-3 concrete coaching suggestions based on the data (e.g. "Sessions that used Read before Edit had fewer failures")
 - End with Action Items focused on improving tooling and workflow
 - NEVER include individual developer names, rankings, or performance comparisons
 - Focus on team-level patterns, not individual behavior
@@ -227,8 +226,7 @@ export async function runReportWorkflow(
   title?: string,
   periodStart?: string,
   periodEnd?: string,
-  persona?: string,
-  developerIds?: string[]
+  persona?: string
 ): Promise<AiReport> {
   const reportTitle =
     title ??
@@ -242,7 +240,6 @@ export async function runReportWorkflow(
     periodStart: periodStart ?? null,
     periodEnd: periodEnd ?? null,
     persona: persona ?? null,
-    developerIds,
     data: {},
     outline: "",
     content: "",

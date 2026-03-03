@@ -5,76 +5,80 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
+  ResponsiveContainer,
 } from "recharts";
-import { ChartCard } from "@/components/insights/ChartCard";
-import { ChartTooltip } from "@/components/insights/charts/ChartTooltip";
-import { CHART_COLORS, AXIS_STYLE, GRID_STYLE } from "@/components/insights/charts/chartConfig";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSkillStore } from "@/stores/skillStore";
 
-interface PatternAdoptionChartProps {
-  data: {
-    week: string;
-    effective_count: number;
-    ineffective_count: number;
-    neutral_count: number;
-  }[];
-  loading: boolean;
-}
+export function PatternAdoptionChart() {
+  const { patterns } = useSkillStore();
 
-export function PatternAdoptionChart({ data, loading }: PatternAdoptionChartProps) {
-  const chartData = data.map((d) => ({
-    ...d,
-    week: d.week.slice(0, 10),
+  if (patterns.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Pattern Adoption</CardTitle>
+        </CardHeader>
+        <CardContent className="h-64 flex items-center justify-center text-sm text-muted-foreground">
+          No pattern adoption data yet
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const data = patterns.map((p) => ({
+    week: p.week.slice(5),
+    Effective: p.effective_count,
+    Neutral: p.neutral_count,
+    Ineffective: p.ineffective_count,
   }));
 
   return (
-    <ChartCard
-      title="Pattern Adoption"
-      description="Effective vs ineffective pattern usage by week"
-    >
-      {loading ? null : (
-        <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={chartData}>
-            <CartesianGrid {...GRID_STYLE} />
-            <XAxis
-              dataKey="week"
-              {...AXIS_STYLE}
-              tickFormatter={(v: string) => v.slice(5)}
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Pattern Adoption</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={280}>
+          <AreaChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis dataKey="week" tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+              }}
             />
-            <YAxis {...AXIS_STYLE} />
-            <Tooltip content={ChartTooltip} />
             <Legend />
             <Area
               type="monotone"
-              dataKey="effective_count"
-              name="Effective"
+              dataKey="Effective"
               stackId="1"
-              fill={CHART_COLORS.secondary}
-              stroke={CHART_COLORS.secondary}
-              fillOpacity={0.6}
+              stroke="#10b981"
+              fill="#10b981"
+              fillOpacity={0.3}
             />
             <Area
               type="monotone"
-              dataKey="neutral_count"
-              name="Neutral"
+              dataKey="Neutral"
               stackId="1"
-              fill={CHART_COLORS.tertiary}
-              stroke={CHART_COLORS.tertiary}
-              fillOpacity={0.4}
+              stroke="#6b7280"
+              fill="#6b7280"
+              fillOpacity={0.3}
             />
             <Area
               type="monotone"
-              dataKey="ineffective_count"
-              name="Ineffective"
+              dataKey="Ineffective"
               stackId="1"
-              fill={CHART_COLORS.destructive}
-              stroke={CHART_COLORS.destructive}
-              fillOpacity={0.6}
+              stroke="#ef4444"
+              fill="#ef4444"
+              fillOpacity={0.3}
             />
           </AreaChart>
         </ResponsiveContainer>
-      )}
-    </ChartCard>
+      </CardContent>
+    </Card>
   );
 }

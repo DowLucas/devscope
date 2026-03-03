@@ -1,52 +1,80 @@
-import { Target, TrendingUp, AlertTriangle, Zap } from "lucide-react";
-import { MetricCard } from "@/components/ui/metric-card";
+import { Wrench, Zap, TrendingUp, AlertTriangle } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { useSkillStore } from "@/stores/skillStore";
 
-interface SkillSummaryCardsProps {
-  summary: {
-    tool_mastery_rate: number;
-    anti_pattern_count: number;
-    effective_patterns_used: number;
-    avg_session_quality: number;
-    period_weeks: number;
-  } | null;
-  loading: boolean;
+interface MetricCardProps {
+  icon: typeof Wrench;
+  label: string;
+  value: string | number;
+  subtitle: string;
+  color: string;
 }
 
-export function SkillSummaryCards({ summary, loading }: SkillSummaryCardsProps) {
+function MetricCard({ icon: Icon, label, value, subtitle, color }: MetricCardProps) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg ${color}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">{label}</p>
+            <p className="text-2xl font-bold">{value}</p>
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function SkillSummaryCards() {
+  const { summary, loading } = useSkillStore();
+
   if (loading || !summary) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-[120px] rounded-lg bg-card animate-pulse" />
+          <Card key={i}>
+            <CardContent className="p-4 h-24 animate-pulse bg-muted/10" />
+          </Card>
         ))}
       </div>
     );
   }
 
+  const personal = summary.personal;
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <MetricCard
+        icon={Wrench}
         label="Tool Mastery"
-        value={`${Math.round(summary.tool_mastery_rate * 100)}%`}
-        icon={Target}
-        status={summary.tool_mastery_rate >= 0.8 ? "green" : summary.tool_mastery_rate >= 0.6 ? "yellow" : "red"}
+        value={personal?.tools_used ?? 0}
+        subtitle="tools used"
+        color="bg-blue-500/15 text-blue-400"
       />
       <MetricCard
-        label="Session Quality"
-        value={`${Math.round(summary.avg_session_quality * 100)}%`}
         icon={Zap}
-        status={summary.avg_session_quality >= 0.8 ? "green" : summary.avg_session_quality >= 0.6 ? "yellow" : "red"}
+        label="Session Quality"
+        value={personal ? `${Math.round(personal.recent_quality * 100)}%` : "—"}
+        subtitle={`${personal?.recent_sessions ?? 0} recent sessions`}
+        color="bg-emerald-500/15 text-emerald-400"
       />
       <MetricCard
-        label="Effective Patterns"
-        value={summary.effective_patterns_used}
         icon={TrendingUp}
+        label="Effective Patterns"
+        value={summary.patterns.effective_count}
+        subtitle={`of ${summary.patterns.total_patterns} total`}
+        color="bg-purple-500/15 text-purple-400"
       />
       <MetricCard
-        label={`Anti-Patterns (${summary.period_weeks}w)`}
-        value={summary.anti_pattern_count}
         icon={AlertTriangle}
-        status={summary.anti_pattern_count === 0 ? "green" : summary.anti_pattern_count <= 3 ? "yellow" : "red"}
+        label="Anti-Patterns"
+        value={summary.antiPatterns.critical_count}
+        subtitle={`critical (${summary.antiPatterns.warning_count} warnings)`}
+        color="bg-amber-500/15 text-amber-400"
       />
     </div>
   );

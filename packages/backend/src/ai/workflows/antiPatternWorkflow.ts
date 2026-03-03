@@ -1,22 +1,34 @@
 import type { SQL } from "bun";
 import { StateGraph, Annotation, END, START } from "@langchain/langgraph";
 import { callGemini, TEMPERATURE } from "../gemini";
-import { getRecentSessionSequences, type SessionSequence } from "../../db/patternQueries";
+import { getRecentSessionSequences } from "../../db/patternQueries";
 import { upsertAntiPattern, createAntiPatternMatch } from "../../db/antiPatternQueries";
 import { recordTokenUsage } from "../../db";
 import { detectAllAntiPatterns, type DetectedAntiPattern } from "../detection/antiPatternRules";
+import type { SessionSequence } from "../../db/patternQueries";
 import type { AntiPattern } from "@devscope/shared";
 
-interface SessionAntiPatternHit {
+interface SessionDetection {
   session_id: string;
   detections: DetectedAntiPattern[];
+}
+
+interface ClassifiedAntiPattern {
+  name: string;
+  description: string;
+  detection_rule: string;
+  severity: string;
+  suggestion: string;
+  session_ids: string[];
+  details: Record<string, unknown>;
 }
 
 const AntiPatternState = Annotation.Root({
   days: Annotation<number>,
   sequences: Annotation<SessionSequence[]>,
-  ruleBasedHits: Annotation<SessionAntiPatternHit[]>,
-  classifiedHits: Annotation<SessionAntiPatternHit[]>,
+  ruleDetections: Annotation<SessionDetection[]>,
+  classifiedPatterns: Annotation<ClassifiedAntiPattern[]>,
+  persistedAntiPatterns: Annotation<AntiPattern[]>,
   inputTokens: Annotation<number>,
   outputTokens: Annotation<number>,
 });
@@ -27,62 +39,56 @@ async function fetchSessions(
   state: AntiPatternStateType,
   sql: SQL
 ): Promise<Partial<AntiPatternStateType>> {
-  const sequences = await getRecentSessionSequences(sql, state.days, 200);
+  const sequences = await getRecentSessionSequences(sql, state.days);
   return { sequences };
 }
 
 function detectRuleBased(
   state: AntiPatternStateType
 ): Partial<AntiPatternStateType> {
-  const hits: SessionAntiPatternHit[] = [];
+  const detections: SessionDetection[] = [];
 
   for (const seq of state.sequences) {
-    const detections = detectAllAntiPatterns(seq.tools, true);
-    if (detections.length > 0) {
-      hits.push({ session_id: seq.session_id, detections });
+    const detected = detectAllAntiPatterns(seq.tools, true);
+    if (detected.length > 0) {
+      detections.push({ session_id: seq.session_id, detections: detected });
     }
   }
 
-  return { ruleBasedHits: hits };
+  return { ruleDetections: detections };
 }
 
-const CLASSIFY_PROMPT = `You are reviewing detected anti-patterns in Claude Code developer sessions.
-For each detection below, confirm or refine it:
-1. Confirm the severity is appropriate (info/warning/critical)
-2. Improve the suggestion to be more specific and actionable
-3. If a detection is a false positive (e.g. intentional retries), mark severity as "info"
+const CLASSIFY_PROMPT = `You are an expert at identifying anti-patterns in developer tool usage.
 
-For each detection, return:
-- session_id: the session ID
-- rule: the detection rule
-- name: refined name
-- description: refined description
-- severity: "info" | "warning" | "critical"
-- suggestion: improved, specific suggestion
+Given these detected anti-patterns from rule-based analysis, refine them:
+1. Merge duplicates across sessions into single anti-patterns
+2. Improve the descriptions and suggestions with specific, actionable advice
+3. Adjust severity if needed (info, warning, critical)
 
-Return a JSON array. Respond with ONLY valid JSON — no markdown, no code fences.`;
+For each anti-pattern, provide:
+- name: A clear, concise name
+- description: What went wrong and why it matters
+- detection_rule: The original rule (retry_loop, failure_cascade, abandoned_session)
+- severity: info | warning | critical
+- suggestion: Specific, actionable advice for the developer
+- session_ids: Which sessions exhibited this pattern
+- details: Any relevant metrics
+
+Respond with ONLY valid JSON — an array of anti-pattern objects. No markdown, no code fences.`;
 
 async function classifyWithAi(
   state: AntiPatternStateType
 ): Promise<Partial<AntiPatternStateType>> {
-  if (state.ruleBasedHits.length === 0) {
-    return { classifiedHits: [] };
+  if (state.ruleDetections.length === 0) {
+    return { classifiedPatterns: [] };
   }
 
-  // Prepare data for classification
-  const hitsData = state.ruleBasedHits.map(h => ({
-    session_id: h.session_id,
-    detections: h.detections.map(d => ({
-      rule: d.rule,
-      name: d.name,
-      description: d.description,
-      severity: d.severity,
-      suggestion: d.suggestion,
-      details: d.details,
-    })),
+  const detectionData = state.ruleDetections.map((d) => ({
+    session_id: d.session_id,
+    detections: d.detections,
   }));
 
-  const dataStr = JSON.stringify(hitsData, null, 2).slice(0, 25_000);
+  const dataStr = JSON.stringify(detectionData, null, 2).slice(0, 30_000);
 
   const response = await callGemini(
     [
@@ -95,46 +101,38 @@ async function classifyWithAi(
     { temperature: TEMPERATURE.insight }
   );
 
-  let classified: any[] = [];
+  let classified: ClassifiedAntiPattern[] = [];
   try {
-    const cleaned = response.text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
-    classified = JSON.parse(cleaned);
-    if (!Array.isArray(classified)) classified = [];
+    const cleaned = response.text
+      .replace(/```json?\n?/g, "")
+      .replace(/```/g, "")
+      .trim();
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) {
+      classified = parsed.filter(
+        (p: any) => p.name && p.detection_rule && p.severity
+      );
+    }
   } catch {
-    console.error("[anti-pattern] Failed to parse Gemini response:", response.text.slice(0, 200));
-    // Fall back to rule-based results as-is
-    return {
-      classifiedHits: state.ruleBasedHits,
-      inputTokens: state.inputTokens + response.inputTokens,
-      outputTokens: state.outputTokens + response.outputTokens,
-    };
+    // If AI classification fails, fall back to rule-based detections
+    console.error(
+      "[anti-pattern-workflow] Failed to parse Gemini response, using rule-based results"
+    );
+    classified = state.ruleDetections.flatMap((d) =>
+      d.detections.map((det) => ({
+        name: det.name,
+        description: det.description,
+        detection_rule: det.rule,
+        severity: det.severity,
+        suggestion: det.suggestion,
+        session_ids: [d.session_id],
+        details: det.details,
+      }))
+    );
   }
 
-  // Merge AI classifications back into rule-based hits
-  const refinedHits: SessionAntiPatternHit[] = state.ruleBasedHits.map(hit => {
-    const aiResults = classified.filter((c: any) => c.session_id === hit.session_id);
-    if (aiResults.length === 0) return hit;
-
-    const validRules = ["retry_loop", "failure_cascade", "abandoned_session"] as const;
-    const refinedDetections = hit.detections.map(d => {
-      const aiMatch = aiResults.find((a: any) => a.rule === d.rule);
-      if (!aiMatch) return d;
-      const validSeverities = ["info", "warning", "critical"] as const;
-      return {
-        ...d,
-        rule: validRules.includes(aiMatch.rule) ? aiMatch.rule : "ai_detected",
-        name: aiMatch.name ?? d.name,
-        description: aiMatch.description ?? d.description,
-        severity: validSeverities.includes(aiMatch.severity) ? aiMatch.severity : d.severity,
-        suggestion: aiMatch.suggestion ?? d.suggestion,
-      };
-    });
-
-    return { session_id: hit.session_id, detections: refinedDetections };
-  });
-
   return {
-    classifiedHits: refinedHits,
+    classifiedPatterns: classified,
     inputTokens: state.inputTokens + response.inputTokens,
     outputTokens: state.outputTokens + response.outputTokens,
   };
@@ -144,26 +142,27 @@ async function persist(
   state: AntiPatternStateType,
   sql: SQL
 ): Promise<Partial<AntiPatternStateType>> {
-  for (const hit of state.classifiedHits) {
-    for (const detection of hit.detections) {
-      const antiPattern = await upsertAntiPattern(sql, {
-        name: detection.name,
-        description: detection.description,
-        detection_rule: detection.rule,
-        severity: detection.severity,
-        suggestion: detection.suggestion,
-        data_context: detection.details,
-      });
+  const persisted: AntiPattern[] = [];
 
-      try {
-        await createAntiPatternMatch(sql, hit.session_id, antiPattern.id, detection.details);
-      } catch {
-        // Ignore duplicate or FK constraint violations
-      }
+  for (const cp of state.classifiedPatterns) {
+    const ap = await upsertAntiPattern(sql, {
+      name: cp.name,
+      description: cp.description,
+      detection_rule: cp.detection_rule,
+      severity: cp.severity,
+      suggestion: cp.suggestion,
+      occurrence_count: cp.session_ids.length,
+      data_context: cp.details,
+    });
+
+    for (const sessionId of cp.session_ids) {
+      await createAntiPatternMatch(sql, sessionId, ap.id, cp.details);
     }
+
+    persisted.push(ap);
   }
 
-  return {};
+  return { persistedAntiPatterns: persisted };
 }
 
 export function createAntiPatternWorkflow(sql: SQL) {
@@ -190,20 +189,20 @@ export async function runAntiPatternWorkflow(
   const result = await app.invoke({
     days,
     sequences: [],
-    ruleBasedHits: [],
-    classifiedHits: [],
+    ruleDetections: [],
+    classifiedPatterns: [],
+    persistedAntiPatterns: [],
     inputTokens: 0,
     outputTokens: 0,
   });
 
   await recordTokenUsage(
     sql,
-    "anti-patterns",
+    "anti_patterns",
     "gemini-2.0-flash",
     result.inputTokens,
     result.outputTokens
   );
 
-  const { getAntiPatterns } = await import("../../db/antiPatternQueries");
-  return getAntiPatterns(sql, { limit: 20 });
+  return result.persistedAntiPatterns;
 }

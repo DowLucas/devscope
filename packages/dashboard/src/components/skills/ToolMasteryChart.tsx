@@ -5,80 +5,91 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Legend,
+  ResponsiveContainer,
 } from "recharts";
-import { ChartCard } from "@/components/insights/ChartCard";
-import { ChartTooltip } from "@/components/insights/charts/ChartTooltip";
-import { AXIS_STYLE, GRID_STYLE } from "@/components/insights/charts/chartConfig";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSkillStore } from "@/stores/skillStore";
 
 const TOOL_COLORS = [
-  "oklch(0.488 0.243 264.376)",
-  "oklch(0.696 0.17 162.48)",
-  "oklch(0.769 0.188 70.08)",
-  "oklch(0.627 0.265 303.9)",
-  "oklch(0.645 0.246 16.439)",
-  "oklch(0.5 0.2 200)",
-  "oklch(0.6 0.15 100)",
-  "oklch(0.7 0.2 50)",
+  "#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ef4444",
+  "#06b6d4", "#ec4899", "#84cc16",
 ];
 
-interface ToolMasteryChartProps {
-  data: { week: string; tool_name: string; success_rate: number; total: number }[];
-  loading: boolean;
-}
+export function ToolMasteryChart() {
+  const { mastery } = useSkillStore();
 
-export function ToolMasteryChart({ data, loading }: ToolMasteryChartProps) {
-  // Pivot: group by week, one line per tool
-  const toolNames = [...new Set(data.map((d) => d.tool_name))].slice(0, 8);
-  const weekMap = new Map<string, Record<string, string | number>>();
-
-  for (const row of data) {
-    if (!toolNames.includes(row.tool_name)) continue;
-    const week = row.week.slice(0, 10);
-    if (!weekMap.has(week)) weekMap.set(week, { week });
-    weekMap.get(week)![row.tool_name] = Math.round(row.success_rate * 100);
+  if (mastery.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Tool Mastery</CardTitle>
+        </CardHeader>
+        <CardContent className="h-64 flex items-center justify-center text-sm text-muted-foreground">
+          No tool mastery data yet
+        </CardContent>
+      </Card>
+    );
   }
 
-  const chartData = Array.from(weekMap.values()).sort((a, b) =>
-    a.week < b.week ? -1 : 1
+  // Pivot: group by week, columns per tool
+  const weekMap = new Map<string, Record<string, string | number>>();
+  const toolNames = new Set<string>();
+
+  for (const entry of mastery) {
+    toolNames.add(entry.tool_name);
+    if (!weekMap.has(entry.week)) {
+      weekMap.set(entry.week, { week: entry.week });
+    }
+    weekMap.get(entry.week)![entry.tool_name] = Math.round(entry.success_rate * 100);
+  }
+
+  const data = Array.from(weekMap.values()).sort((a, b) =>
+    String(a.week).localeCompare(String(b.week))
   );
+  const tools = Array.from(toolNames).slice(0, 8);
 
   return (
-    <ChartCard
-      title="Tool Mastery Over Time"
-      description="Success rate per tool by week"
-    >
-      {loading ? null : (
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={chartData}>
-            <CartesianGrid {...GRID_STYLE} />
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm">Tool Mastery</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <XAxis
               dataKey="week"
-              {...AXIS_STYLE}
-              tickFormatter={(v: string) => v.slice(5)}
+              tick={{ fontSize: 11 }}
+              tickFormatter={(v) => String(v).slice(5)}
             />
             <YAxis
-              {...AXIS_STYLE}
+              tick={{ fontSize: 11 }}
               domain={[0, 100]}
-              tickFormatter={(v: number) => `${v}%`}
+              tickFormatter={(v) => `${v}%`}
             />
-            <Tooltip content={ChartTooltip} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+              }}
+              formatter={(value) => [`${value}%`]}
+            />
             <Legend />
-            {toolNames.map((tool, i) => (
+            {tools.map((tool, i) => (
               <Line
                 key={tool}
                 type="monotone"
                 dataKey={tool}
-                name={tool}
                 stroke={TOOL_COLORS[i % TOOL_COLORS.length]}
                 strokeWidth={2}
-                dot={false}
+                dot={{ r: 3 }}
+                connectNulls
               />
             ))}
           </LineChart>
         </ResponsiveContainer>
-      )}
-    </ChartCard>
+      </CardContent>
+    </Card>
   );
 }

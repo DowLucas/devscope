@@ -4,98 +4,102 @@ import {
   getDeveloperToolMastery,
   getDeveloperPatternAdoption,
   getDeveloperSessionQuality,
+  getPatternStats,
 } from "../db/patternQueries";
-import { getDeveloperAntiPatterns } from "../db/antiPatternQueries";
+import {
+  getDeveloperAntiPatterns,
+  getAntiPatternStats,
+} from "../db/antiPatternQueries";
+import { auth } from "../auth";
+import crypto from "crypto";
 
-/**
- * Resolve the authenticated user's developer ID.
- * The plugin derives developer ID as SHA256(git config user.email),
- * so we look up the developer by matching the auth user's email.
- */
+function clampInt(val: string | undefined, def: number, max: number): number {
+  if (!val) return def;
+  const n = Number(val);
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), max) : def;
+}
+
 async function resolveDeveloperId(sql: SQL, userEmail: string): Promise<string | null> {
-  const [dev] = await sql`
-    SELECT id FROM developers WHERE email = ${userEmail} LIMIT 1`;
+  // Developer ID is SHA256 of email (same as plugin)
+  const hash = crypto.createHash("sha256").update(userEmail).digest("hex");
+  const [dev] = await sql`SELECT id FROM developers WHERE id = ${hash} LIMIT 1`;
   return (dev as any)?.id ?? null;
 }
 
 export function skillsRoutes(sql: SQL) {
   const app = new Hono();
 
-  // All routes are developer self-view only
-  app.use("*", async (c, next) => {
-    const user = c.get("user" as never) as any;
-    if (!user?.email) {
+  // Resolve developer ID from auth session
+  app.use("/*", async (c, next) => {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session?.user?.email) {
       return c.json({ error: "Unauthorized" }, 401);
     }
-
-    const developerId = await resolveDeveloperId(sql, user.email);
-    if (!developerId) {
-      return c.json({ error: "No developer profile found for your account" }, 404);
-    }
-
-    c.set("developerId" as never, developerId as never);
+    const devId = await resolveDeveloperId(sql, session.user.email);
+    c.set("developerId" as never, devId as never);
     return next();
   });
 
   app.get("/mastery", async (c) => {
-    const developerId = c.get("developerId" as never) as string;
-    const weeks = Number(c.req.query("weeks") ?? 12);
-    const mastery = await getDeveloperToolMastery(sql, developerId, weeks);
-    return c.json(mastery);
+    const devId = c.get("developerId" as never) as string | null;
+    if (!devId) return c.json([]);
+    const weeks = clampInt(c.req.query("weeks"), 12, 52);
+    return c.json(await getDeveloperToolMastery(sql, devId, weeks));
   });
 
   app.get("/patterns", async (c) => {
-    const developerId = c.get("developerId" as never) as string;
-    const weeks = Number(c.req.query("weeks") ?? 12);
-    const patterns = await getDeveloperPatternAdoption(sql, developerId, weeks);
-    return c.json(patterns);
+    const devId = c.get("developerId" as never) as string | null;
+    if (!devId) return c.json([]);
+    const weeks = clampInt(c.req.query("weeks"), 12, 52);
+    return c.json(await getDeveloperPatternAdoption(sql, devId, weeks));
   });
 
   app.get("/anti-patterns", async (c) => {
-    const developerId = c.get("developerId" as never) as string;
-    const weeks = Number(c.req.query("weeks") ?? 12);
-    const antiPatterns = await getDeveloperAntiPatterns(sql, developerId, weeks);
-    return c.json(antiPatterns);
+    const devId = c.get("developerId" as never) as string | null;
+    if (!devId) return c.json([]);
+    const weeks = clampInt(c.req.query("weeks"), 12, 52);
+    return c.json(await getDeveloperAntiPatterns(sql, devId, weeks));
   });
 
   app.get("/quality", async (c) => {
-    const developerId = c.get("developerId" as never) as string;
-    const weeks = Number(c.req.query("weeks") ?? 12);
-    const quality = await getDeveloperSessionQuality(sql, developerId, weeks);
-    return c.json(quality);
+    const devId = c.get("developerId" as never) as string | null;
+    if (!devId) return c.json([]);
+    const weeks = clampInt(c.req.query("weeks"), 12, 52);
+    return c.json(await getDeveloperSessionQuality(sql, devId, weeks));
   });
 
   app.get("/summary", async (c) => {
-    const developerId = c.get("developerId" as never) as string;
-
-    const [mastery, patterns, antiPatterns, quality] = await Promise.all([
-      getDeveloperToolMastery(sql, developerId, 4),
-      getDeveloperPatternAdoption(sql, developerId, 4),
-      getDeveloperAntiPatterns(sql, developerId, 4),
-      getDeveloperSessionQuality(sql, developerId, 4),
+    const devId = c.get("developerId" as never) as string | null;
+    const [patternStats, antiPatternStats] = await Promise.all([
+      getPatternStats(sql),
+      getAntiPatternStats(sql),
     ]);
 
-    // Compute summary metrics
-    const recentMastery = mastery.length > 0
-      ? mastery.reduce((sum, m) => sum + m.success_rate * m.total, 0) /
-        Math.max(mastery.reduce((sum, m) => sum + m.total, 0), 1)
-      : 0;
+    let personalStats = null;
+    if (devId) {
+      const [mastery, quality] = await Promise.all([
+        getDeveloperToolMastery(sql, devId, 4),
+        getDeveloperSessionQuality(sql, devId, 4),
+      ]);
 
-    const totalAntiPatterns = antiPatterns.reduce((sum, w) => sum + w.count, 0);
-    const totalEffective = patterns.reduce((sum, w) => sum + w.effective_count, 0);
-    const totalIneffective = patterns.reduce((sum, w) => sum + w.ineffective_count, 0);
+      const recentQuality = quality.length > 0 ? quality[quality.length - 1] : null;
+      const toolCount = new Set(mastery.map((m) => m.tool_name)).size;
+      const avgSuccessRate = mastery.length > 0
+        ? Math.round((mastery.reduce((sum, m) => sum + m.success_rate, 0) / mastery.length) * 1000) / 1000
+        : 0;
 
-    const avgQuality = quality.length > 0
-      ? quality.reduce((sum, q) => sum + q.avg_success_rate, 0) / quality.length
-      : 0;
+      personalStats = {
+        tools_used: toolCount,
+        avg_success_rate: avgSuccessRate,
+        recent_sessions: recentQuality?.sessions ?? 0,
+        recent_quality: recentQuality?.avg_success_rate ?? 0,
+      };
+    }
 
     return c.json({
-      tool_mastery_rate: Math.round(recentMastery * 1000) / 1000,
-      anti_pattern_count: totalAntiPatterns,
-      effective_patterns_used: totalEffective,
-      ineffective_patterns_used: totalIneffective,
-      avg_session_quality: Math.round(avgQuality * 1000) / 1000,
-      period_weeks: 4,
+      patterns: patternStats,
+      antiPatterns: antiPatternStats,
+      personal: personalStats,
     });
   });
 

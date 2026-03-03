@@ -90,12 +90,11 @@ export interface AiReportGenerateRequest {
   period_end?: string;
 }
 
-// --- Upskilling Platform Types ---
+// --- Upskilling Types ---
 
-export type PatternEffectiveness = "effective" | "neutral" | "ineffective";
-export type AntiPatternRule = "retry_loop" | "failure_cascade" | "abandoned_session" | "ai_detected";
+export type PatternEffectiveness = "effective" | "ineffective" | "neutral";
 export type AntiPatternSeverity = "info" | "warning" | "critical";
-export type PlaybookStatus = "active" | "draft" | "archived";
+export type AntiPatternRule = "retry_loop" | "failure_cascade" | "abandoned_session";
 
 export interface SessionPattern {
   id: string;
@@ -124,7 +123,7 @@ export interface AntiPattern {
   id: string;
   name: string;
   description: string;
-  detection_rule: AntiPatternRule;
+  detection_rule: string;
   severity: AntiPatternSeverity;
   suggestion: string;
   occurrence_count: number;
@@ -149,17 +148,12 @@ export interface Playbook {
   when_to_use: string;
   success_metrics: Record<string, unknown>;
   source_pattern_id: string | null;
-  status: PlaybookStatus;
-  created_by: string | null;
+  created_by: string;
+  status: string;
   created_at: string;
   updated_at: string;
 }
 
 // --- WebSocket message types ---
 
-export type AiWsMessageType =
-  | "ai.insight.new"
-  | "ai.report.completed"
-  | "ai.pattern.new"
-  | "ai.antipattern.new"
-  | "ai.playbook.new";
+export type AiWsMessageType = "ai.insight.new" | "ai.report.completed" | "ai.pattern.new" | "ai.antipattern.new" | "ai.playbook.new";
