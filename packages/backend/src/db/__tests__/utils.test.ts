@@ -1,22 +1,13 @@
-import { describe, expect, test, mock, beforeEach } from "bun:test";
-
-// Track calls to Sql.unsafe
-let unsafeCalls: string[] = [];
-
-mock.module("bun", () => ({
-  sql: {
-    unsafe: (str: string) => {
-      unsafeCalls.push(str);
-      return { __raw: str };
-    },
-  },
-}));
-
-// Import after mock is set up
+import { describe, expect, test, beforeEach, spyOn } from "bun:test";
+import { sql as Sql } from "bun";
 import { inList } from "../utils";
 
+const unsafeSpy = spyOn(Sql, "unsafe").mockImplementation(
+  (str: string) => ({ __raw: str }) as any
+);
+
 beforeEach(() => {
-  unsafeCalls = [];
+  unsafeSpy.mockClear();
 });
 
 describe("inList", () => {
@@ -24,27 +15,27 @@ describe("inList", () => {
 
   test("single valid hex ID produces correct escaped SQL fragment", () => {
     inList(["abc123"]);
-    expect(unsafeCalls).toHaveLength(1);
-    expect(unsafeCalls[0]).toBe("'abc123'");
+    expect(unsafeSpy).toHaveBeenCalledTimes(1);
+    expect(unsafeSpy.mock.calls[0][0]).toBe("'abc123'");
   });
 
   test("multiple valid hex IDs joined with commas", () => {
     inList(["aaa", "bbb", "ccc"]);
-    expect(unsafeCalls).toHaveLength(1);
-    expect(unsafeCalls[0]).toBe("'aaa','bbb','ccc'");
+    expect(unsafeSpy).toHaveBeenCalledTimes(1);
+    expect(unsafeSpy.mock.calls[0][0]).toBe("'aaa','bbb','ccc'");
   });
 
   test("long SHA-256 hex string is accepted", () => {
     const sha = "a".repeat(64);
     inList([sha]);
-    expect(unsafeCalls).toHaveLength(1);
-    expect(unsafeCalls[0]).toBe(`'${sha}'`);
+    expect(unsafeSpy).toHaveBeenCalledTimes(1);
+    expect(unsafeSpy.mock.calls[0][0]).toBe(`'${sha}'`);
   });
 
   test("all hex digits 0-9 a-f are accepted", () => {
     inList(["0123456789abcdef"]);
-    expect(unsafeCalls).toHaveLength(1);
-    expect(unsafeCalls[0]).toBe("'0123456789abcdef'");
+    expect(unsafeSpy).toHaveBeenCalledTimes(1);
+    expect(unsafeSpy.mock.calls[0][0]).toBe("'0123456789abcdef'");
   });
 
   test("returns the result of Sql.unsafe", () => {
@@ -74,7 +65,7 @@ describe("inList", () => {
     expect(() => inList(["abc_def"])).toThrow("inList: invalid ID format: abc_def");
   });
 
-  test("throws for ID with mixed case hex (uppercase G-Z)", () => {
+  test("throws for ID with non-hex lowercase letters (g-z)", () => {
     expect(() => inList(["abcxyz"])).toThrow("inList: invalid ID format: abcxyz");
   });
 
@@ -92,7 +83,7 @@ describe("inList", () => {
     );
   });
 
-  test("throws on first invalid when valid IDs precede it", () => {
+  test("throws when last ID is invalid", () => {
     expect(() => inList(["deadbeef", "cafebabe", "not-hex"])).toThrow(
       "inList: invalid ID format: not-hex"
     );
@@ -100,27 +91,19 @@ describe("inList", () => {
 
   test("does not call Sql.unsafe when validation fails", () => {
     try {
-      inList(["valid", "INVALID"]);
-    } catch {
-      // expected
-    }
-    // "valid" alone would not pass (contains 'v', 'l', 'i', 'd' — wait, 'v' is not hex)
-    // Let's use a truly valid first ID
-    unsafeCalls = [];
-    try {
       inList(["aabbcc", "INVALID"]);
     } catch {
       // expected
     }
-    expect(unsafeCalls).toHaveLength(0);
+    expect(unsafeSpy).not.toHaveBeenCalled();
   });
 
   // --- Empty array ---
 
   test("empty array passes validation and calls Sql.unsafe with empty string", () => {
     inList([]);
-    expect(unsafeCalls).toHaveLength(1);
-    expect(unsafeCalls[0]).toBe("");
+    expect(unsafeSpy).toHaveBeenCalledTimes(1);
+    expect(unsafeSpy.mock.calls[0][0]).toBe("");
   });
 
   // --- SQL injection prevention ---
@@ -140,7 +123,6 @@ describe("inList", () => {
   });
 
   test("rejects unicode lookalike characters", () => {
-    // Full-width 'a' (U+FF41) looks like 'a' but is not ASCII hex
     expect(() => inList(["\uff41bc"])).toThrow("inList: invalid ID format");
   });
 });
