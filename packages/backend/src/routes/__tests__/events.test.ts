@@ -277,10 +277,11 @@ describe("POST /events", () => {
       "/home/user/project",
       "my-project",
       null, // permissionMode not set in default payload
+      null, // privacyMode not set in default payload
     );
   });
 
-  test("passes permissionMode from session.start payload to createSession", async () => {
+  test("passes permissionMode and privacyMode from session.start payload to createSession", async () => {
     const sql = makeMockSql([], []);
     const app = buildApp(sql);
 
@@ -288,7 +289,7 @@ describe("POST /events", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
-        validEvent({ payload: { permissionMode: "plan" } }),
+        validEvent({ payload: { permissionMode: "plan", privacyMode: "redacted" } }),
       ),
     });
 
@@ -299,6 +300,7 @@ describe("POST /events", () => {
       "/home/user/project",
       "my-project",
       "plan",
+      "redacted",
     );
   });
 
