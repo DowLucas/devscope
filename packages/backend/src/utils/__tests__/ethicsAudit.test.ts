@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "bun:test";
+import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { logEthicsEvent, flushEthicsAudit } from "../ethicsAudit";
 
 // Mock SQL with a tracking array for inserts
@@ -27,17 +27,22 @@ function createMockSql() {
 }
 
 describe("ethicsAudit", () => {
-  // Flush any leftover pending events between tests
   beforeEach(async () => {
     await flushEthicsAudit();
   });
 
-  test("logEthicsEvent accumulates events without immediate flush", () => {
-    const { sql } = createMockSql();
+  afterEach(async () => {
+    await flushEthicsAudit();
+  });
 
-    // Should not throw
+  test("logEthicsEvent accumulates events without immediate flush", () => {
+    const { sql, wasBeginCalled } = createMockSql();
+
     logEthicsEvent(sql, "org-1", "sensitive_fields_stripped", { fields: ["promptText"] });
     logEthicsEvent(sql, "org-1", "privacy_mode_activated", { session_id: "s-1" });
+
+    // Events should be buffered, not flushed immediately
+    expect(wasBeginCalled()).toBe(false);
   });
 
   test("flushEthicsAudit flushes pending events", async () => {

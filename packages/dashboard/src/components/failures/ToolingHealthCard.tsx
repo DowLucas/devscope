@@ -36,7 +36,17 @@ export function ToolingHealthCard() {
         setError(true);
         return;
       }
-      const items: ToolingHealthSummary[] = await res.json();
+      const raw = await res.json();
+      // Normalize camelCase/snake_case variants
+      const items: ToolingHealthSummary[] = (raw as Record<string, unknown>[]).map((r) => ({
+        tool_name: String(r.tool_name ?? r.toolName ?? ""),
+        project_name: (r.project_name ?? r.projectName ?? null) as string | null,
+        total_calls: Number(r.total_calls ?? r.totalCalls ?? 0),
+        failure_count: Number(r.failure_count ?? r.failureCount ?? 0),
+        failure_rate: Number(r.failure_rate ?? r.failureRate ?? 0),
+        avg_duration_ms: Number(r.avg_duration_ms ?? r.avgDurationMs ?? 0),
+        trend: String(r.trend ?? "stable") as "improving" | "stable" | "degrading",
+      }));
       // Group by tool, pick highest failure rate per tool
       const byTool = new Map<string, ToolingHealthSummary>();
       for (const item of items) {

@@ -1745,13 +1745,15 @@ export async function getConsentOverview(
   const [counts] = await sql`
     SELECT
       COUNT(*)::INT AS total,
-      COUNT(*) FILTER (WHERE share_details = TRUE)::INT AS sharing
-    FROM developers
-    WHERE id IN (${inList(developerIds)})`;
+      COUNT(*) FILTER (WHERE d.share_details = TRUE)::INT AS sharing
+    FROM developers d
+    JOIN organization_developer od ON od.developer_id = d.id AND od.organization_id = ${orgId}
+    WHERE d.id IN (${inList(developerIds)})`;
 
   const [privacyCounts] = await sql`
     SELECT COUNT(DISTINCT s.id)::INT AS cnt
     FROM sessions s
+    JOIN organization_developer od ON od.developer_id = s.developer_id AND od.organization_id = ${orgId}
     WHERE s.developer_id IN (${inList(developerIds)})
       AND s.privacy_mode = 'redacted'
       AND s.started_at >= NOW() - '30 days'::INTERVAL`;

@@ -19,6 +19,7 @@ export function EthicsAuditLog() {
   const [summary, setSummary] = useState<EthicsAuditSummary[]>([]);
   const [entries, setEntries] = useState<EthicsAuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -27,10 +28,29 @@ export function EthicsAuditLog() {
         apiFetch("/api/ethics/summary?days=7"),
         apiFetch(`/api/ethics/audit?limit=50${filter ? `&event_type=${filter}` : ""}`),
       ]);
-      if (summaryRes.ok) setSummary(await summaryRes.json());
-      if (entriesRes.ok) setEntries(await entriesRes.json());
+      if (!summaryRes.ok || !entriesRes.ok) {
+        setError("Failed to load audit data");
+        return;
+      }
+      const rawSummary = await summaryRes.json();
+      const rawEntries = await entriesRes.json();
+      // Normalize camelCase fallbacks
+      type R = Record<string, unknown>;
+      setSummary((rawSummary as R[]).map((s) => ({
+        event_type: String(s.event_type ?? s.eventType ?? "") as EthicsAuditSummary["event_type"],
+        count: Number(s.count ?? 0),
+        last_occurred: (s.last_occurred ?? s.lastOccurred ?? null) as string | null,
+      })));
+      setEntries((rawEntries as R[]).map((e) => ({
+        id: String(e.id),
+        organization_id: (e.organization_id ?? e.organizationId ?? null) as string | null,
+        event_type: String(e.event_type ?? e.eventType ?? "") as EthicsAuditEntry["event_type"],
+        details: (e.details ?? null) as Record<string, unknown> | null,
+        created_at: String(e.created_at ?? e.createdAt ?? ""),
+      })));
     } catch (err) {
       console.error("[EthicsAuditLog]", err);
+      setError(err instanceof Error ? err.message : "Failed to load audit data");
     } finally {
       setLoading(false);
     }
@@ -52,6 +72,16 @@ export function EthicsAuditLog() {
         </div>
         <Skeleton className="h-64 rounded-xl" />
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-center text-sm text-muted-foreground">
+          {error}
+        </CardContent>
+      </Card>
     );
   }
 
@@ -132,8 +162,13 @@ export function EthicsAuditLog() {
 }
 
 function formatDetails(details: Record<string, unknown>): string {
-  if (details.fields) return `Fields: ${(details.fields as string[]).join(", ")}`;
+  if (details.fields) {
+    const fields = Array.isArray(details.fields) ? details.fields.map(String) : [String(details.fields)];
+    return `Fields: ${fields.join(", ")}`;
+  }
   if (details.action) return String(details.action);
-  if (details.events_deleted) return `${details.events_deleted} events deleted, ${details.sessions_anonymized} anonymized`;
-  return Object.entries(details).map(([k, v]) => `${k}: ${v}`).slice(0, 2).join(", ");
+  if (details.events_deleted != null && details.sessions_anonymized != null) {
+    return `${details.events_deleted} events deleted, ${details.sessions_anonymized} anonymized`;
+  }
+  return Object.entries(details).map(([k, v]) => `${k}: ${String(v)}`).slice(0, 2).join(", ");
 }

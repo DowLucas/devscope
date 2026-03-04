@@ -12,14 +12,30 @@ import { useTeamStore } from "@/stores/teamStore";
 export function ConsentOverview() {
   const [overview, setOverview] = useState<ConsentOverviewType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchOverview = useCallback(async () => {
     try {
       const res = await apiFetch("/api/privacy/consent/overview");
       if (!res.ok) throw new Error(`Failed to load overview: ${res.status}`);
-      setOverview(await res.json());
+      const raw = await res.json() as Record<string, unknown>;
+      // Normalize camelCase fallbacks
+      const cats = (raw.data_categories ?? raw.dataCategories ?? []) as Record<string, unknown>[];
+      setOverview({
+        total_developers: Number(raw.total_developers ?? raw.totalDevelopers ?? 0),
+        sharing_details: Number(raw.sharing_details ?? raw.sharingDetails ?? 0),
+        privacy_mode_count: Number(raw.privacy_mode_count ?? raw.privacyModeCount ?? 0),
+        data_categories: cats.map((c) => ({
+          name: String(c.name ?? ""),
+          description: String(c.description ?? ""),
+          collected: Boolean(c.collected),
+          opt_in_required: Boolean(c.opt_in_required ?? c.optInRequired ?? false),
+        })),
+      });
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load consent overview";
       console.error("[ConsentOverview]", err);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -40,7 +56,15 @@ export function ConsentOverview() {
     );
   }
 
-  if (!overview) return null;
+  if (error || !overview) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-center text-sm text-muted-foreground">
+          {error ?? "No consent data available."}
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
