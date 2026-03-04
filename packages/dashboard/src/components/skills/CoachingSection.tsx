@@ -45,7 +45,7 @@ export function CoachingSection({ topPatterns, coaching, aiCoaching, loading }: 
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold">Coaching</h2>
+      <h2 className="text-lg font-semibold">Claude Code Tips</h2>
 
       {hasAiCoaching && <CoachingCards data={aiCoaching!} />}
 
@@ -56,7 +56,7 @@ export function CoachingSection({ topPatterns, coaching, aiCoaching, loading }: 
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Anti-Patterns to Address
+                Areas for Improvement
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -88,7 +88,7 @@ export function CoachingSection({ topPatterns, coaching, aiCoaching, loading }: 
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Recommended Playbooks
+              Recommended Workflows
             </CardTitle>
           </CardHeader>
           <CardContent>

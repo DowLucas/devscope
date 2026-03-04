@@ -37,18 +37,24 @@ async function gatherTopPatterns(
   return { topPatterns: patterns };
 }
 
-const PLAYBOOK_PROMPT = `You are converting effective developer workflow patterns into team playbooks.
-Each pattern below was discovered from real Claude Code sessions and has proven effective.
+const PLAYBOOK_PROMPT = `You are creating Claude Code usage guides for developers based on proven effective strategies.
+Each pattern below was discovered from real Claude Code sessions and represents a developer approach that consistently leads to good outcomes.
+
+Your playbooks should teach DEVELOPERS how to use Claude Code more effectively — they are guides for humans, not instructions for Claude.
 
 For each pattern that would make a good reusable playbook, generate:
 - source_pattern_name: the original pattern name (for linking)
-- name: action-oriented playbook name (e.g. "The TDD Loop", "Safe Refactor Workflow", "Explore-then-Act")
-- description: 2-3 sentence explanation of the workflow and why it works
+- name: developer-action-oriented playbook name that describes what the DEVELOPER does (e.g. "Research Before Refactoring", "Test-Driven Development with Claude", "Focused Debug Sessions")
+  - BAD names: "Read-Edit Loop", "Bash-then-Read" (these describe tool sequences)
+  - GOOD names: "Explore First, Then Edit", "Incremental Testing Workflow" (these describe developer strategies)
+- description: 2-3 sentences explaining the developer strategy, WHY it works, and how it helps get better results from Claude Code
 - tool_sequence: the canonical tool sequence (from the pattern)
-- when_to_use: 1-2 sentences describing when to apply this playbook
+- when_to_use: 1-2 sentences describing when a developer should use this approach with Claude Code
 - success_metrics: { avg_success_rate: number, typical_sessions: number }
 
-Only create playbooks for patterns that are clearly useful, replicable, and worth sharing.
+IMPORTANT: Do not include individual developer names, rankings, or performance comparisons in any playbook. All guidance must be team-level and behavior-focused.
+
+Only create playbooks for strategies that are clearly useful, replicable, and would help developers improve their Claude Code usage.
 Skip patterns that are too generic or context-specific.
 Return a JSON array. Return empty array if no good playbooks can be made.
 Respond with ONLY valid JSON — no markdown, no code fences.`;

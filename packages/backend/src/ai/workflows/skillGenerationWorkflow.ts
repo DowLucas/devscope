@@ -56,26 +56,29 @@ async function gatherData(
 // --- Node 2: Generate skills via Gemini ---
 
 const SKILL_GEN_PROMPT = `You are generating reusable Claude Code plugin skills (SKILL.md format) from team session data.
+These skills encode proven developer strategies as reusable workflows that Claude Code can follow.
 
 A SKILL.md file has:
 - A YAML frontmatter with: name (kebab-case), description (when to use this skill)
 - A list of trigger_phrases (short phrases that should activate this skill)
 - A markdown body with imperative instructions for Claude Code to follow
 
+The goal is to capture the team's most effective Claude Code usage patterns as repeatable skills. Each skill should encode a developer workflow strategy that has proven to produce good results (based on the pattern data).
+
 For each skill you generate, provide:
-- name: human-readable skill name (e.g. "Safe Database Migration", "TDD Red-Green-Refactor")
-- description: 1-2 sentences explaining when to use this skill
-- trigger_phrases: 3-5 short trigger phrases (e.g. "migrate database", "run migration", "schema change")
-- skill_body: the full SKILL.md body in markdown — imperative, step-by-step instructions that Claude Code can follow. Reference specific tool sequences and patterns discovered from the data. Include guardrails from anti-pattern solutions.
+- name: human-readable skill name that describes the developer workflow (e.g. "Safe Database Migration", "Research-First Refactoring", "Incremental Test-Fix Cycle")
+- description: 1-2 sentences explaining when a developer would invoke this skill and what problem it solves
+- trigger_phrases: 3-5 short trigger phrases (e.g. "migrate database", "refactor safely", "debug step by step")
+- skill_body: the full SKILL.md body in markdown — step-by-step instructions that implement the developer's proven strategy. Reference specific tool sequences and patterns discovered from the data. Include guardrails from common mistakes (anti-patterns) the team has encountered.
 - source_pattern_names: which patterns this skill is derived from
 - source_anti_pattern_names: which anti-patterns this skill helps prevent
-- rationale: 1 sentence explaining why this skill is valuable for the team
+- rationale: 1 sentence explaining why this skill helps developers get better results from Claude Code
 
 Rules:
 - Generate 2-5 skills maximum
 - Each skill must be derived from actual patterns in the data — don't invent generic skills
-- Skill bodies should be actionable and specific, not vague advice
-- Include anti-pattern prevention steps where relevant
+- Skill bodies should be actionable and specific, encoding the team's proven workflows
+- Include guardrails against common mistakes (from anti-pattern data) where relevant
 - Focus on team-level workflows — never reference individual developers
 - Avoid duplicating these existing skills: {existing_skills}
 - Return a JSON array. Return empty array if no good skills can be generated.
@@ -108,6 +111,12 @@ async function generateSkills(
   const sessionSample = state.sessionSequences.slice(0, 30).map(s => ({
     tool_names: s.tool_names.slice(0, 30),
     success_rate: s.success_rate,
+    prompt_count: s.prompt_count,
+    avg_prompt_length: s.avg_prompt_length,
+    continuation_ratio: s.continuation_ratio,
+    agent_delegations: s.agent_delegations,
+    agent_types: s.agent_types,
+    ...(s.prompt_features ? { prompt_features: s.prompt_features } : {}),
   }));
 
   const prompt = SKILL_GEN_PROMPT.replace(

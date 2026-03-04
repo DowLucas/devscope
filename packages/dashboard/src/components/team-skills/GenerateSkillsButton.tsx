@@ -13,12 +13,12 @@ export function GenerateSkillsButton() {
       {generating ? (
         <>
           <Loader2 className="h-4 w-4 animate-spin" />
-          Generating Skills...
+          Generating Workflow Skills...
         </>
       ) : (
         <>
           <Sparkles className="h-4 w-4" />
-          Generate Skills
+          Generate Workflow Skills
         </>
       )}
     </button>

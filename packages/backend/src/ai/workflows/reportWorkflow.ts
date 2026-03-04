@@ -121,13 +121,13 @@ Report type: ${state.reportType}
 Title: ${state.title}${personaGuidance}
 
 IMPORTANT: This report should focus on TEAM-LEVEL metrics only. Do NOT include individual developer names, rankings, or performance comparisons. Focus on:
-- Team velocity trends (sessions, prompts, tool calls)
+- Team Claude Code usage trends (sessions, completion rates, feature adoption)
 - Project health and progress
-- Tool adoption and failure patterns (which tools need fixing?)
-- Sessions with high failure rates (tooling problems, not people problems)
-- Skills & Patterns: effective workflow patterns the team uses well, common anti-patterns to avoid, and coaching suggestions
+- Claude Code usage patterns (which features are being leveraged effectively?)
+- Sessions with high failure rates (what prompting strategies could help?)
+- Claude Code Skills: effective developer strategies, common usage pitfalls, and tips for getting better results from Claude Code
 
-Based on this data, create a detailed outline for the report. Include a "Skills & Patterns" section.
+Based on this data, create a detailed outline for the report. Include a "Claude Code Skills" section.
 
 Data:
 ${dataStr}
@@ -177,14 +177,14 @@ ${dataStr}
 
 Requirements:
 - Use proper Markdown with headers (##, ###), bullet points, and bold for emphasis
-- Include specific numbers and percentages
+- Include specific numbers and percentages from the provided data ONLY. Do not fabricate or estimate metrics that are not present — if data is unavailable, state "insufficient data" instead
 - Start with a Summary section
-- Include sections for: Team Velocity, Project Health, Tool Performance, Skills & Patterns, Sessions Needing Attention, Recommendations
-- In the Skills & Patterns section: highlight top effective workflow patterns with success rates, flag common anti-patterns with frequency and avoidance tips, and provide 2-3 concrete coaching suggestions based on the data (e.g. "Sessions that used Read before Edit had fewer failures")
-- End with Action Items focused on improving tooling and workflow
+- Include sections for: Team Usage Overview, Project Health, Claude Code Effectiveness, Developer Strategies, Sessions Needing Attention, Recommendations
+- In the Developer Strategies section: highlight top effective developer approaches with success rates, flag common usage pitfalls with frequency and tips for improvement, and provide 2-3 concrete Claude Code usage tips based on the data (e.g. "Sessions where developers explored the codebase first had fewer failures — try asking Claude to research before editing")
+- End with Action Items focused on improving Claude Code usage and developer workflow
 - NEVER include individual developer names, rankings, or performance comparisons
 - Focus on team-level patterns, not individual behavior
-- Keep the tone collaborative — this is about improving team workflow, not evaluating individuals
+- Keep the tone collaborative — this is about helping the team use Claude Code more effectively, not evaluating individuals
 - Total length: 500-1500 words${personaRequirements}`,
           },
         ],

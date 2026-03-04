@@ -2,6 +2,7 @@ import type { SQL } from "bun";
 import { sql as Sql } from "bun";
 import type { SessionPattern, SessionPatternMatch } from "@devscope/shared";
 import { inList } from "./utils";
+import { extractPromptFeatures, type PromptFeatures } from "../ai/detection/promptFeatures";
 
 // --- Tool Sequence Extraction ---
 
@@ -30,6 +31,17 @@ export async function getSessionToolSequence(
   return rows as ToolEvent[];
 }
 
+export interface PromptEvent {
+  prompt_length: number;
+  is_continuation: boolean;
+}
+
+export interface AgentEvent {
+  agent_type: string;
+  agent_id: string;
+  event_type: string; // agent.start or agent.stop
+}
+
 export interface SessionSequence {
   session_id: string;
   developer_id: string;
@@ -37,6 +49,13 @@ export interface SessionSequence {
   tools: ToolEvent[];
   tool_names: string[];
   success_rate: number;
+  prompt_count: number;
+  avg_prompt_length: number;
+  continuation_ratio: number;
+  agent_delegations: number;
+  agent_types: string[];
+  duration_minutes: number;
+  prompt_features: PromptFeatures | null;
 }
 
 export async function getRecentSessionSequences(
@@ -48,7 +67,8 @@ export async function getRecentSessionSequences(
   let sessionsQuery;
   if (developerIds && developerIds.length > 0) {
     sessionsQuery = sql`
-      SELECT s.id as session_id, s.developer_id, s.project_name
+      SELECT s.id as session_id, s.developer_id, s.project_name,
+        ROUND(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::FLOAT as duration_minutes
       FROM sessions s
       WHERE s.status = 'ended'
         AND s.ended_at >= NOW() - make_interval(days => ${days})
@@ -57,7 +77,8 @@ export async function getRecentSessionSequences(
       LIMIT ${limit}`;
   } else {
     sessionsQuery = sql`
-      SELECT s.id as session_id, s.developer_id, s.project_name
+      SELECT s.id as session_id, s.developer_id, s.project_name,
+        ROUND(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::FLOAT as duration_minutes
       FROM sessions s
       WHERE s.status = 'ended'
         AND s.ended_at >= NOW() - make_interval(days => ${days})
@@ -66,22 +87,124 @@ export async function getRecentSessionSequences(
   }
 
   const sessions = await sessionsQuery;
+  if (sessions.length === 0) return [];
+
+  const sessionIds = sessions.map((s: any) => s.session_id as string);
+
+  // Batch-fetch all event data in 4 queries instead of 4×N
+  const [allTools, allPrompts, allAgents, allPromptTexts] = await Promise.all([
+    sql`
+      SELECT
+        e.session_id,
+        e.payload->>'toolName' as tool_name,
+        e.event_type,
+        CASE WHEN e.event_type = 'tool.complete' THEN TRUE ELSE FALSE END as success,
+        e.created_at
+      FROM events e
+      WHERE e.session_id IN (${inList(sessionIds)})
+        AND e.event_type IN ('tool.complete', 'tool.fail')
+        AND e.payload->>'toolName' IS NOT NULL
+      ORDER BY e.created_at ASC`,
+    sql`
+      SELECT
+        e.session_id,
+        COALESCE((e.payload->>'promptLength')::INT, 0) as prompt_length,
+        COALESCE((e.payload->>'isContinuation')::BOOLEAN, FALSE) as is_continuation
+      FROM events e
+      WHERE e.session_id IN (${inList(sessionIds)})
+        AND e.event_type = 'prompt.submit'
+      ORDER BY e.created_at ASC`,
+    sql`
+      SELECT
+        e.session_id,
+        e.payload->>'agentType' as agent_type,
+        e.payload->>'agentId' as agent_id,
+        e.event_type
+      FROM events e
+      WHERE e.session_id IN (${inList(sessionIds)})
+        AND e.event_type IN ('agent.start', 'agent.stop')
+      ORDER BY e.created_at ASC`,
+    sql`
+      SELECT e.session_id, e.payload->>'promptText' as prompt_text
+      FROM events e
+      WHERE e.session_id IN (${inList(sessionIds)})
+        AND e.event_type = 'prompt.submit'
+      ORDER BY e.created_at ASC`,
+  ]);
+
+  // Group results by session_id
+  const toolsBySession = new Map<string, ToolEvent[]>();
+  for (const row of allTools as any[]) {
+    const sid = row.session_id;
+    if (!toolsBySession.has(sid)) toolsBySession.set(sid, []);
+    toolsBySession.get(sid)!.push({ tool_name: row.tool_name, event_type: row.event_type, success: row.success, created_at: row.created_at });
+  }
+
+  const promptsBySession = new Map<string, PromptEvent[]>();
+  for (const row of allPrompts as any[]) {
+    const sid = row.session_id;
+    if (!promptsBySession.has(sid)) promptsBySession.set(sid, []);
+    promptsBySession.get(sid)!.push({ prompt_length: row.prompt_length, is_continuation: row.is_continuation });
+  }
+
+  const agentsBySession = new Map<string, AgentEvent[]>();
+  for (const row of allAgents as any[]) {
+    const sid = row.session_id;
+    if (!agentsBySession.has(sid)) agentsBySession.set(sid, []);
+    agentsBySession.get(sid)!.push({ agent_type: row.agent_type, agent_id: row.agent_id, event_type: row.event_type });
+  }
+
+  const promptTextsBySession = new Map<string, (string | null)[]>();
+  for (const row of allPromptTexts as any[]) {
+    const sid = row.session_id;
+    if (!promptTextsBySession.has(sid)) promptTextsBySession.set(sid, []);
+    promptTextsBySession.get(sid)!.push(row.prompt_text ?? null);
+  }
+
   const sequences: SessionSequence[] = [];
 
   for (const session of sessions) {
-    const tools = await getSessionToolSequence(sql, (session as any).session_id);
+    const sid = (session as any).session_id;
+    const tools = toolsBySession.get(sid) ?? [];
+    const prompts = promptsBySession.get(sid) ?? [];
+    const agents = agentsBySession.get(sid) ?? [];
+    const promptTexts = promptTextsBySession.get(sid) ?? [];
+
     if (tools.length < 3) continue; // Skip trivial sessions
 
     const successCount = tools.filter(t => t.success).length;
     const successRate = tools.length > 0 ? successCount / tools.length : 0;
 
+    const promptCount = prompts.length;
+    const avgPromptLength = promptCount > 0
+      ? Math.round(prompts.reduce((sum, p) => sum + p.prompt_length, 0) / promptCount)
+      : 0;
+    const continuationCount = prompts.filter(p => p.is_continuation).length;
+    const continuationRatio = promptCount > 0
+      ? Math.round((continuationCount / promptCount) * 1000) / 1000
+      : 0;
+
+    const agentStarts = agents.filter(a => a.event_type === "agent.start");
+    const agentTypes = [...new Set(agentStarts.map(a => a.agent_type).filter(Boolean))];
+
+    // Extract prompt features locally (never sends raw text to LLM)
+    const hasAnyText = promptTexts.some(t => t !== null);
+    const promptFeatures = hasAnyText ? extractPromptFeatures(promptTexts) : null;
+
     sequences.push({
-      session_id: (session as any).session_id,
+      session_id: sid,
       developer_id: (session as any).developer_id,
       project_name: (session as any).project_name ?? "",
       tools,
       tool_names: tools.map(t => t.tool_name),
       success_rate: Math.round(successRate * 1000) / 1000,
+      prompt_count: promptCount,
+      avg_prompt_length: avgPromptLength,
+      continuation_ratio: continuationRatio,
+      agent_delegations: agentStarts.length,
+      agent_types: agentTypes,
+      duration_minutes: (session as any).duration_minutes ?? 0,
+      prompt_features: promptFeatures,
     });
   }
 
