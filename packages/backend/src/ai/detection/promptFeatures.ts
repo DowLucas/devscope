@@ -28,7 +28,11 @@ export interface PromptFeatures {
 
 const FILE_PATH_PATTERN = /(?:\/[\w.-]+){2,}|[\w.-]+\/[\w.-]+\.[\w]+/;
 const CODE_IDENTIFIER_PATTERN = /\b[a-z][a-zA-Z0-9]{2,}(?:[A-Z][a-zA-Z0-9]*)+\b|\b[A-Z][a-zA-Z0-9]{2,}\b/;
+// Mixed anchoring: "?" matches anywhere (mid-sentence questions), while keyword
+// alternatives are start-anchored (^) so "how do I..." only matches at the beginning.
 const QUESTION_PATTERN = /\?|^(how|why|what|where|when|which|can you|could you|is there|does|do)\b/i;
+// Start-anchored (^): only matches when the prompt begins with a directive verb,
+// avoiding false positives on mid-sentence occurrences like "I need to fix...".
 const DIRECTIVE_PATTERN = /^(fix|add|create|refactor|update|remove|delete|change|move|rename|implement|write|build|set up|install|configure|migrate|convert|replace|extract|split|merge|optimize|debug|test|run|deploy|push|commit)\b/i;
 const ERROR_PATTERN = /error:|Error:|ERROR|stack trace|traceback|exception|failed|TypeError|ReferenceError|SyntaxError|at .+:\d+:\d+/;
 const SLASH_COMMAND_PATTERN = /\/(?:commit|clear|help|review|init|config|compact|memory|status|cost|doctor|bug|login|logout)\b/;

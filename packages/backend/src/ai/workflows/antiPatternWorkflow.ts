@@ -68,6 +68,8 @@ For each detection, return:
 - severity: "info" | "warning" | "critical"
 - suggestion: developer-facing advice referencing Claude Code best practices
 
+IMPORTANT: Do not reference individual developers by name, rank, or performance comparisons. All suggestions must be team-level and behavior-focused.
+
 Return a JSON array. Respond with ONLY valid JSON — no markdown, no code fences.`;
 
 async function classifyWithAi(

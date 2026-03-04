@@ -71,6 +71,8 @@ Key signals to consider:
   - avg_specificity: 0-1 score of how specific/detailed the prompts are
   - slash_commands: Whether the developer uses Claude Code slash commands (/commit, /clear, etc.)
 
+IMPORTANT: Focus on team-level patterns only. Do not reference individual developers by name, rank, or performance comparisons. All pattern descriptions must be anonymous and team-oriented.
+
 Focus on patterns that appear in 2+ sessions. Merge similar patterns.
 Return a JSON array. Return an empty array if no meaningful patterns found.
 Respond with ONLY valid JSON — no markdown, no code fences, no other text.`;

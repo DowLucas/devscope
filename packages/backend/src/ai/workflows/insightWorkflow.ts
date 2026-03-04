@@ -74,13 +74,12 @@ async function gatherData(
 }
 
 const INSIGHT_PROMPT = `You are a Claude Code usage analyst helping a development team get more out of Claude Code (an AI coding assistant).
-Analyze the following data and identify significant insights about how the team uses Claude Code. Focus on:
-1. Anomalies: unusual spikes or drops in Claude Code usage, failure rates, or session patterns
-2. Trends: week-over-week changes in how effectively the team uses Claude Code
-3. Usage Patterns: which Claude Code features are being used well or underutilized (agents, tools, slash commands)
-4. Recommendations: actionable Claude Code tips for the team (better prompting, task structuring, feature usage)
-5. Pattern Health: are effective developer strategies being adopted more? Are problematic usage patterns declining?
-6. Claude Code Tips: specific best-practice suggestions (e.g. "Sessions where developers explored the codebase first had 20% fewer failures — try asking Claude to research before editing")
+Analyze the following data and identify significant insights about how the team uses Claude Code. Each insight must use one of these exact types:
+1. "anomaly": unusual spikes or drops in Claude Code usage, failure rates, or session patterns
+2. "trend": week-over-week changes in how effectively the team uses Claude Code, or whether effective strategies are being adopted more over time
+3. "comparison": comparisons of Claude Code feature utilization — which features are used well or underutilized (agents, tools, slash commands)
+4. "recommendation": actionable Claude Code tips for the team (better prompting, task structuring, feature usage)
+5. "coaching": specific best-practice suggestions (e.g. "Sessions where developers explored the codebase first had 20% fewer failures — try asking Claude to research before editing")
 
 IMPORTANT: All insights should be about improving how DEVELOPERS use Claude Code, not about coaching Claude Code itself.
 IMPORTANT: Focus on team-level patterns only. Do NOT include individual developer names, rankings, or performance comparisons.

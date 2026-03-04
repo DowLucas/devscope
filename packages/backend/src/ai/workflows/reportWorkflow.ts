@@ -177,7 +177,7 @@ ${dataStr}
 
 Requirements:
 - Use proper Markdown with headers (##, ###), bullet points, and bold for emphasis
-- Include specific numbers and percentages
+- Include specific numbers and percentages from the provided data ONLY. Do not fabricate or estimate metrics that are not present — if data is unavailable, state "insufficient data" instead
 - Start with a Summary section
 - Include sections for: Team Usage Overview, Project Health, Claude Code Effectiveness, Developer Strategies, Sessions Needing Attention, Recommendations
 - In the Developer Strategies section: highlight top effective developer approaches with success rates, flag common usage pitfalls with frequency and tips for improvement, and provide 2-3 concrete Claude Code usage tips based on the data (e.g. "Sessions where developers explored the codebase first had fewer failures — try asking Claude to research before editing")

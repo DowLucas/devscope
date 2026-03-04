@@ -52,6 +52,8 @@ For each pattern that would make a good reusable playbook, generate:
 - when_to_use: 1-2 sentences describing when a developer should use this approach with Claude Code
 - success_metrics: { avg_success_rate: number, typical_sessions: number }
 
+IMPORTANT: Do not include individual developer names, rankings, or performance comparisons in any playbook. All guidance must be team-level and behavior-focused.
+
 Only create playbooks for strategies that are clearly useful, replicable, and would help developers improve their Claude Code usage.
 Skip patterns that are too generic or context-specific.
 Return a JSON array. Return empty array if no good playbooks can be made.

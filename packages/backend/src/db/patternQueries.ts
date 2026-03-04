@@ -131,16 +131,89 @@ export async function getRecentSessionSequences(
   }
 
   const sessions = await sessionsQuery;
+  if (sessions.length === 0) return [];
+
+  const sessionIds = sessions.map((s: any) => s.session_id as string);
+
+  // Batch-fetch all event data in 4 queries instead of 4×N
+  const [allTools, allPrompts, allAgents, allPromptTexts] = await Promise.all([
+    sql`
+      SELECT
+        e.session_id,
+        e.payload->>'toolName' as tool_name,
+        e.event_type,
+        CASE WHEN e.event_type = 'tool.complete' THEN TRUE ELSE FALSE END as success,
+        e.created_at
+      FROM events e
+      WHERE e.session_id IN (${inList(sessionIds)})
+        AND e.event_type IN ('tool.complete', 'tool.fail')
+        AND e.payload->>'toolName' IS NOT NULL
+      ORDER BY e.created_at ASC`,
+    sql`
+      SELECT
+        e.session_id,
+        COALESCE((e.payload->>'promptLength')::INT, 0) as prompt_length,
+        COALESCE((e.payload->>'isContinuation')::BOOLEAN, FALSE) as is_continuation
+      FROM events e
+      WHERE e.session_id IN (${inList(sessionIds)})
+        AND e.event_type = 'prompt.submit'
+      ORDER BY e.created_at ASC`,
+    sql`
+      SELECT
+        e.session_id,
+        e.payload->>'agentType' as agent_type,
+        e.payload->>'agentId' as agent_id,
+        e.event_type
+      FROM events e
+      WHERE e.session_id IN (${inList(sessionIds)})
+        AND e.event_type IN ('agent.start', 'agent.stop')
+      ORDER BY e.created_at ASC`,
+    sql`
+      SELECT e.session_id, e.payload->>'promptText' as prompt_text
+      FROM events e
+      WHERE e.session_id IN (${inList(sessionIds)})
+        AND e.event_type = 'prompt.submit'
+      ORDER BY e.created_at ASC`,
+  ]);
+
+  // Group results by session_id
+  const toolsBySession = new Map<string, ToolEvent[]>();
+  for (const row of allTools as any[]) {
+    const sid = row.session_id;
+    if (!toolsBySession.has(sid)) toolsBySession.set(sid, []);
+    toolsBySession.get(sid)!.push({ tool_name: row.tool_name, event_type: row.event_type, success: row.success, created_at: row.created_at });
+  }
+
+  const promptsBySession = new Map<string, PromptEvent[]>();
+  for (const row of allPrompts as any[]) {
+    const sid = row.session_id;
+    if (!promptsBySession.has(sid)) promptsBySession.set(sid, []);
+    promptsBySession.get(sid)!.push({ prompt_length: row.prompt_length, is_continuation: row.is_continuation });
+  }
+
+  const agentsBySession = new Map<string, AgentEvent[]>();
+  for (const row of allAgents as any[]) {
+    const sid = row.session_id;
+    if (!agentsBySession.has(sid)) agentsBySession.set(sid, []);
+    agentsBySession.get(sid)!.push({ agent_type: row.agent_type, agent_id: row.agent_id, event_type: row.event_type });
+  }
+
+  const promptTextsBySession = new Map<string, (string | null)[]>();
+  for (const row of allPromptTexts as any[]) {
+    const sid = row.session_id;
+    if (!promptTextsBySession.has(sid)) promptTextsBySession.set(sid, []);
+    promptTextsBySession.get(sid)!.push(row.prompt_text ?? null);
+  }
+
   const sequences: SessionSequence[] = [];
 
   for (const session of sessions) {
     const sid = (session as any).session_id;
-    const [tools, prompts, agents, promptTexts] = await Promise.all([
-      getSessionToolSequence(sql, sid),
-      getSessionPromptEvents(sql, sid),
-      getSessionAgentEvents(sql, sid),
-      getSessionPromptTexts(sql, sid),
-    ]);
+    const tools = toolsBySession.get(sid) ?? [];
+    const prompts = promptsBySession.get(sid) ?? [];
+    const agents = agentsBySession.get(sid) ?? [];
+    const promptTexts = promptTextsBySession.get(sid) ?? [];
+
     if (tools.length < 3) continue; // Skip trivial sessions
 
     const successCount = tools.filter(t => t.success).length;
