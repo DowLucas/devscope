@@ -18,24 +18,27 @@ export function useDebouncedToolState(
   currentToolName: string | null,
   latestEvent: DevscopeEvent | null,
 ): DebouncedToolState {
-  const [visual, setVisual] = useState<DebouncedToolState>({
-    isToolRunning,
-    currentToolName,
-    displayEvent: latestEvent,
-  });
-
+  const [prevRunning, setPrevRunning] = useState(isToolRunning);
+  const [debouncedStopped, setDebouncedStopped] = useState(!isToolRunning);
   const runStartRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Track tool start/stop transitions during render (React-safe state adjustment)
+  if (isToolRunning && !prevRunning) {
+    setPrevRunning(true);
+    if (debouncedStopped) setDebouncedStopped(false);
+  }
+  if (!isToolRunning && prevRunning) {
+    setPrevRunning(false);
+  }
+
   useEffect(() => {
     if (isToolRunning) {
-      // Immediately show running state
       runStartRef.current = Date.now();
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-      setVisual({ isToolRunning: true, currentToolName, displayEvent: latestEvent });
     } else {
       // Tool stopped — hold visual for remainder of MIN_DISPLAY_MS
       const elapsed = Date.now() - runStartRef.current;
@@ -43,7 +46,7 @@ export function useDebouncedToolState(
 
       const commit = () => {
         timerRef.current = null;
-        setVisual({ isToolRunning: false, currentToolName, displayEvent: latestEvent });
+        setDebouncedStopped(true);
       };
 
       if (remaining > 0 && runStartRef.current > 0) {
@@ -59,7 +62,13 @@ export function useDebouncedToolState(
         timerRef.current = null;
       }
     };
-  }, [isToolRunning, currentToolName, latestEvent]);
+  }, [isToolRunning]);
 
-  return visual;
+  const visualRunning = isToolRunning || !debouncedStopped;
+
+  return {
+    isToolRunning: visualRunning,
+    currentToolName: visualRunning ? currentToolName : null,
+    displayEvent: visualRunning ? latestEvent : null,
+  };
 }

@@ -7,10 +7,12 @@ export function useInsightsData<T>(
   days?: number
 ) {
   const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const fetchKey = `${endpoint}:${developerId ?? ""}:${days ?? ""}`;
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const loading = loadedKey !== fetchKey;
 
   useEffect(() => {
-    setLoading(true);
+    const key = fetchKey;
     const params = new URLSearchParams();
     if (developerId) params.set("developerId", developerId);
     if (days) params.set("days", String(days));
@@ -22,10 +24,10 @@ export function useInsightsData<T>(
       .then((r) => r.json())
       .then((d) => {
         setData(d as T);
-        setLoading(false);
+        setLoadedKey(key);
       })
-      .catch(() => setLoading(false));
-  }, [endpoint, developerId, days]);
+      .catch(() => setLoadedKey(key));
+  }, [endpoint, developerId, days, fetchKey]);
 
   return { data, loading };
 }

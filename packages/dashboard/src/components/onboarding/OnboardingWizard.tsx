@@ -74,7 +74,7 @@ export function OnboardingWizard() {
         // Set the joined org as active and populate the store
         try {
           const listRes = await authClient.organization.list();
-          const orgs = (listRes as any)?.data;
+          const orgs = (listRes as { data?: { id: string; name: string; slug: string; logo?: string | null }[] })?.data;
           if (orgs && orgs.length > 0) {
             const org = orgs[0];
             await authClient.organization.setActive({ organizationId: org.id });
@@ -108,7 +108,7 @@ export function OnboardingWizard() {
         name: teamName.trim(),
         slug,
       });
-      const org = (res as any)?.data;
+      const org = (res as { data?: { id: string; name: string; slug: string; logo?: string | null } })?.data;
       if (org?.id) {
         // Set as active so the session carries the org context
         await authClient.organization.setActive({ organizationId: org.id });
@@ -136,7 +136,7 @@ export function OnboardingWizard() {
     setCreating(true);
     try {
       const res = await authClient.apiKey.create({ name: keyName || undefined });
-      const key = (res as any)?.data?.key;
+      const key = (res as { data?: { key?: string } })?.data?.key;
       if (!key) throw new Error("No key returned");
       setGeneratedKey(key);
     } catch {

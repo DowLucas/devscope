@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
-import { useActivityStore } from "@/stores/activityStore";
+import { useActivityStore, type ActiveAgent } from "@/stores/activityStore";
 import { apiFetch } from "@/lib/api";
+import type { Developer, Session } from "@devscope/shared";
 
 const RECONNECT_BASE_MS = 3000;
 const RECONNECT_MAX_MS = 30000;
@@ -61,14 +62,14 @@ export function useDevscopeSocket() {
               Promise.all([
                 apiFetch("/api/developers").then((r) => r.json()),
                 apiFetch("/api/sessions/active").then((r) => r.json()),
-              ]).then(([devs, sessions]: [any, any[]]) => {
+              ]).then(([devs, sessions]: [Developer[], (Session & { activeAgents?: ActiveAgent[] })[]]) => {
                 if (isStale()) return;
                 const apiAgents = sessions
-                  .flatMap((s: any) => s.activeAgents ?? [])
-                  .filter((a: any) => a.agentId != null);
+                  .flatMap((s) => s.activeAgents ?? [])
+                  .filter((a) => a.agentId != null);
                 // Merge: API is authoritative, but preserve real-time agents
                 // not yet reflected in API (race between broadcast and DB insert)
-                const apiAgentIds = new Set(apiAgents.map((a: any) => a.agentId));
+                const apiAgentIds = new Set(apiAgents.map((a) => a.agentId));
                 const realtimeOnly = useActivityStore.getState().activeAgents
                   .filter((a) => !apiAgentIds.has(a.agentId));
                 useActivityStore.setState({

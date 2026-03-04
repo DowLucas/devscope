@@ -15,6 +15,7 @@ export function ClaudeBrand() {
  * Takes a plain string and returns JSX with every occurrence of
  * "Claude Code" rendered in Claude's brand color.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function brandify(text: string): ReactNode {
   const parts = text.split(/(Claude Code)/g);
   if (parts.length === 1) return text;

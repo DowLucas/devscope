@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect } from "react";
 import { useLocation } from "wouter";
 import { authClient } from "@/lib/auth-client";
-import { useListApiKeys } from "@/components/AuthProvider";
+import { useListApiKeys } from "@/hooks/useListApiKeys";
 import { useTeamStore } from "@/stores/teamStore";
 import { useTeamInit } from "@/hooks/useTeam";
 

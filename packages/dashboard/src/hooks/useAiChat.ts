@@ -141,7 +141,6 @@ export function useAiChat() {
       activeConversationId,
       isStreaming,
       setActiveConversationId,
-      setMessages,
       addMessage,
       appendStreamingContent,
       clearStreamingContent,

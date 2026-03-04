@@ -161,6 +161,7 @@ describe("GET /sessions", () => {
       endedAt: null,
       status: "active",
       permissionMode: "default",
+      privacyMode: null,
       developerName: "Alice",
       developerEmail: "alice@example.com",
       eventCount: 5,

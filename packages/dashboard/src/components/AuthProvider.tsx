@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState, createElement
 import { useLocation, Link } from "wouter";
 import { AuthUIProvider } from "@daveyplate/better-auth-ui";
 import { authClient } from "@/lib/auth-client";
+import { useListApiKeys } from "@/hooks/useListApiKeys";
 
 const TermsLabel = createElement("span", null,
   "I agree to the ",
@@ -18,39 +19,11 @@ const TermsLabel = createElement("span", null,
   }, "Privacy Policy"),
 );
 
-export function useListApiKeys() {
-  const { data: session } = authClient.useSession();
-  const [apiKeys, setApiKeys] = useState<any[] | undefined>(undefined);
-  const [isPending, setIsPending] = useState(true);
-  const fetchRef = useRef(0);
-
-  const refetch = useCallback(async () => {
-    const id = ++fetchRef.current;
-    setIsPending(true);
-    try {
-      const res = await authClient.apiKey.list();
-      if (id !== fetchRef.current) return;
-      const data = (res as any)?.data;
-      setApiKeys(Array.isArray(data) ? data : data?.apiKeys ?? []);
-    } catch {
-      if (id === fetchRef.current) setApiKeys([]);
-    } finally {
-      if (id === fetchRef.current) setIsPending(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (session) refetch();
-  }, [session, refetch]);
-
-  return { data: apiKeys, isPending, refetch };
-}
-
 const ALL_SOCIAL_PROVIDERS = ["github", "google"] as const;
 
 function useListAccounts() {
   const { data: session } = authClient.useSession();
-  const [accounts, setAccounts] = useState<any[] | undefined>(undefined);
+  const [accounts, setAccounts] = useState<Record<string, unknown>[] | undefined>(undefined);
   const [isPending, setIsPending] = useState(true);
   const fetchRef = useRef(0);
 
@@ -60,7 +33,7 @@ function useListAccounts() {
     try {
       const res = await authClient.listAccounts();
       if (id !== fetchRef.current) return;
-      const data = (res as any)?.data;
+      const data = (res as unknown as { data?: Record<string, unknown>[] })?.data;
       setAccounts(Array.isArray(data) ? data : []);
     } catch {
       if (id === fetchRef.current) setAccounts([]);
@@ -76,7 +49,7 @@ function useListAccounts() {
   return { data: accounts, isPending, refetch };
 }
 
-function useAccountInfo(_opts?: { query?: { accountId?: string } }) {
+function useAccountInfo() {
   // better-auth-ui passes `account.accountId` (the provider's ID) but
   // better-auth@1.5's /account-info endpoint uses `findAccount()` which
   // looks up by internal `id` — causing ACCOUNT_NOT_FOUND. Skip the call.
@@ -94,9 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     authClient.listAccounts().then((res) => {
-      const data = (res as any)?.data;
+      const data = (res as unknown as { data?: Record<string, unknown>[] })?.data;
       if (Array.isArray(data)) {
-        setLinkedProviders(new Set(data.map((a: any) => a.providerId)));
+        setLinkedProviders(new Set(data.map((a) => String(a.providerId ?? ""))));
       }
     }).catch(() => {});
   }, [session]);
@@ -109,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // won't match any known provider so no extra row appears.
   const socialProviders = useMemo(() => {
     const unlinked = ALL_SOCIAL_PROVIDERS.filter((p) => !linkedProviders.has(p));
-    return unlinked.length > 0 ? unlinked : ["_placeholder" as any];
+    return unlinked.length > 0 ? unlinked : ["_placeholder" as (typeof ALL_SOCIAL_PROVIDERS)[number]];
   }, [linkedProviders]);
 
   return (
@@ -118,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       navigate={setLocation}
       Link={Link}
       apiKey={false}
-      hooks={{ useListApiKeys, useListAccounts, useAccountInfo }}
+      hooks={{ useListApiKeys, useListAccounts, useAccountInfo } as Parameters<typeof AuthUIProvider>[0]["hooks"]}
       account={{ basePath: "/dashboard/account" }}
       social={{ providers: socialProviders }}
       credentials={{ confirmPassword: true }}

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Key, Copy, Check, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
-import { useListApiKeys } from "@/components/AuthProvider";
+import { useListApiKeys } from "@/hooks/useListApiKeys";
 import {
   Card,
   CardHeader,
@@ -105,11 +105,19 @@ function SetupSnippet({ apiKey }: { apiKey: string }) {
   );
 }
 
+interface ApiKeyInfo {
+  id: string;
+  name: string | null;
+  start: string;
+  expiresAt: string | null;
+  [key: string]: unknown;
+}
+
 function KeyRow({
   apiKey,
   onDelete,
 }: {
-  apiKey: any;
+  apiKey: ApiKeyInfo;
   onDelete: (id: string) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
@@ -175,7 +183,7 @@ export function ApiKeysCard() {
       const res = await authClient.apiKey.create({
         name: keyName || undefined,
       });
-      const key = (res as any)?.data?.key;
+      const key = (res as { data?: { key?: string } })?.data?.key;
       if (!key) throw new Error("No key returned");
       setCreatedKey(key);
       setShowCreate(false);
@@ -302,7 +310,7 @@ export function ApiKeysCard() {
           </div>
         ) : apiKeys && apiKeys.length > 0 ? (
           <div className="space-y-2">
-            {apiKeys.map((key: any) => (
+            {apiKeys.map((key) => (
               <KeyRow key={key.id} apiKey={key} onDelete={handleDelete} />
             ))}
           </div>

@@ -176,7 +176,7 @@ export const useSkillStore = create<SkillState>((set, get) => ({
       const res = await apiFetch(`/api/skills/insights?weeks=${w}`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Failed to generate insights" }));
-        set({ insightsLoading: false, error: (err as any).error ?? "Failed to generate insights" });
+        set({ insightsLoading: false, error: (err as { error?: string }).error ?? "Failed to generate insights" });
         return;
       }
       const data = await res.json();

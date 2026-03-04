@@ -19,25 +19,34 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   const [turns, setTurns] = useState<SessionTurn[]>([]);
   const [titles, setTitles] = useState<SessionTitle[]>([]);
   const [isSelfView, setIsSelfView] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
+  const loading = loadedSessionId !== sessionId;
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    setLoading(true);
+    const currentId = sessionId;
     apiFetch(`/api/sessions/${sessionId}`)
       .then((r) => r.json())
       .then((d: SessionDetailType & { isSelfView?: boolean }) => {
         setData(d);
         setTurns(buildTurns(d.events));
         setIsSelfView(d.isSelfView ?? false);
-        setLoading(false);
+        setLoadedSessionId(currentId);
       })
-      .catch(() => setLoading(false));
+      .catch(() => setLoadedSessionId(currentId));
 
     apiFetch(`/api/sessions/${sessionId}/titles`)
       .then((r) => r.json())
       .then((t: SessionTitle[]) => setTitles(t))
       .catch(() => {});
   }, [sessionId]);
+
+  const endTime = data?.session?.endedAt ? parseUTC(data.session.endedAt) : null;
+  useEffect(() => {
+    if (endTime) return;
+    const id = setInterval(() => setNow(Date.now()), 10_000);
+    return () => clearInterval(id);
+  }, [endTime]);
 
   if (loading) {
     return (
@@ -57,8 +66,8 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
 
   const { session } = data;
   const startTime = parseUTC(session.startedAt);
-  const endTime = session.endedAt ? parseUTC(session.endedAt) : null;
-  const durationMs = endTime ? endTime.getTime() - startTime.getTime() : Date.now() - startTime.getTime();
+  const sessionEndTime = session.endedAt ? parseUTC(session.endedAt) : null;
+  const durationMs = sessionEndTime ? sessionEndTime.getTime() - startTime.getTime() : now - startTime.getTime();
   const durationMin = Math.round(durationMs / 60000);
 
   const totalTools = turns.reduce((sum, t) => sum + t.toolCalls.length, 0);
@@ -88,7 +97,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {(session as any).privacyMode === "redacted" && (
+                {(session as typeof session & { privacyMode?: string }).privacyMode === "redacted" && (
                   <Badge variant="outline" className="gap-1 text-amber-400 border-amber-400/30">
                     <Lock className="h-3 w-3" />
                     Redacted
@@ -150,7 +159,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
         </Card>
       )}
 
-      {titles.length === 0 && data && (data as any).session?.status === "active" && (
+      {titles.length === 0 && data && data.session?.status === "active" && (
         <div className="flex items-center gap-2 rounded-lg bg-muted/30 border border-border px-3 py-2 text-xs text-muted-foreground">
           Session title generating...
         </div>

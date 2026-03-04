@@ -126,7 +126,7 @@ export const useTeamSkillStore = create<TeamSkillState>((set, get) => ({
       const res = await apiFetch("/api/team-skills/generate", { method: "POST" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Failed to generate skills" }));
-        set({ generating: false, error: (err as any).error ?? "Failed to generate skills" });
+        set({ generating: false, error: (err as { error?: string }).error ?? "Failed to generate skills" });
         return;
       }
       set({ generating: false });
@@ -142,7 +142,7 @@ export const useTeamSkillStore = create<TeamSkillState>((set, get) => ({
       const res = await apiFetch(`/api/team-skills/${id}/refine`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Failed to refine skill" }));
-        set({ refining: null, error: (err as any).error ?? "Failed to refine skill" });
+        set({ refining: null, error: (err as { error?: string }).error ?? "Failed to refine skill" });
         return;
       }
       set({ refining: null });
