@@ -19,8 +19,7 @@ Real-time monitoring dashboard for [Claude Code](https://docs.anthropic.com/en/d
 
 **[devscope.sh](https://devscope.sh)** — try the hosted version, no setup required.
 
-<!-- TODO: Replace with actual screenshot -->
-<!-- ![DevScope Dashboard](docs/images/dashboard-screenshot.png) -->
+![DevScope Dashboard](docs/images/dashboard-screenshot.png)
 
 ## Features
 
