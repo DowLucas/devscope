@@ -4,6 +4,12 @@ import { TeamSkillCard } from "./TeamSkillCard";
 import { TeamSkillDetail } from "./TeamSkillDetail";
 import { GenerateSkillsButton } from "./GenerateSkillsButton";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Loader2, BookOpen, CheckCircle, Zap, Archive } from "lucide-react";
 
 const STATUS_FILTERS = [
@@ -26,6 +32,7 @@ export function TeamSkillsSection() {
     fetchStats,
     fetchSkillDetail,
     setStatusFilter,
+    clearSelectedSkill,
   } = useTeamSkillStore();
 
   useEffect(() => {
@@ -148,8 +155,23 @@ export function TeamSkillsSection() {
         </div>
       )}
 
-      {/* Detail panel */}
-      {selectedSkill && <TeamSkillDetail />}
+      {/* Detail modal */}
+      <Dialog
+        open={!!selectedSkill}
+        onOpenChange={(open) => {
+          if (!open) clearSelectedSkill();
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogTitle className="sr-only">
+            {selectedSkill?.name ?? "Skill Detail"}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Details and actions for the selected skill
+          </DialogDescription>
+          <TeamSkillDetail />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

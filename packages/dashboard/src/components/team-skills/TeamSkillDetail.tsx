@@ -3,13 +3,11 @@ import { useTeamSkillStore } from "@/stores/teamSkillStore";
 import { SkillStatusBadge } from "./SkillStatusBadge";
 import { SkillMdPreview } from "./SkillMdPreview";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   CheckCircle,
   RefreshCw,
   Download,
   Archive,
-  X,
   Loader2,
   Pencil,
   Save,
@@ -26,7 +24,6 @@ export function TeamSkillDetail() {
     exportSkill,
     archiveSkill,
     updateSkill,
-    clearSelectedSkill,
   } = useTeamSkillStore();
 
   const [editing, setEditing] = useState(false);
@@ -83,91 +80,82 @@ export function TeamSkillDetail() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <CardTitle className="text-lg truncate">{skill.name}</CardTitle>
-            <SkillStatusBadge status={skill.status} />
-          </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 pr-6">
+        <div className="flex items-center gap-3 min-w-0">
+          <h2 className="text-lg font-semibold truncate">{skill.name}</h2>
+          <SkillStatusBadge status={skill.status} />
+        </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Edit / Save */}
-            {editing ? (
-              <button
-                onClick={saveEdits}
-                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-              >
-                <Save className="h-3.5 w-3.5" />
-                Save
-              </button>
-            ) : (
-              <button
-                onClick={startEditing}
-                className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Edit
-              </button>
-            )}
-
-            {/* Approve */}
-            {skill.status === "draft" && (
-              <button
-                onClick={() => approveSkill(skill.id)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors"
-              >
-                <CheckCircle className="h-3.5 w-3.5" />
-                Approve
-              </button>
-            )}
-
-            {/* Refine */}
-            {(skill.status === "active" || skill.status === "approved") && (
-              <button
-                onClick={() => refineSkill(skill.id)}
-                disabled={isRefining}
-                className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors disabled:opacity-50"
-              >
-                {isRefining ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                Refine
-              </button>
-            )}
-
-            {/* Export */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* Edit / Save */}
+          {editing ? (
             <button
-              onClick={handleExport}
+              onClick={saveEdits}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <Save className="h-3.5 w-3.5" />
+              Save
+            </button>
+          ) : (
+            <button
+              onClick={startEditing}
               className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
             >
-              <Download className="h-3.5 w-3.5" />
-              Export
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
             </button>
+          )}
 
-            {/* Archive */}
+          {/* Approve */}
+          {skill.status === "draft" && (
             <button
-              onClick={handleArchive}
-              className="inline-flex items-center gap-1.5 rounded-md border border-destructive/50 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+              onClick={() => approveSkill(skill.id)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-blue-500/50 px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors"
             >
-              <Archive className="h-3.5 w-3.5" />
-              Archive
+              <CheckCircle className="h-3.5 w-3.5" />
+              Approve
             </button>
+          )}
 
-            {/* Close */}
+          {/* Refine */}
+          {(skill.status === "active" || skill.status === "approved") && (
             <button
-              onClick={clearSelectedSkill}
-              className="inline-flex items-center justify-center rounded-md border p-1.5 hover:bg-accent transition-colors"
+              onClick={() => refineSkill(skill.id)}
+              disabled={isRefining}
+              className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors disabled:opacity-50"
             >
-              <X className="h-4 w-4" />
+              {isRefining ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              Refine
             </button>
-          </div>
+          )}
+
+          {/* Export */}
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </button>
+
+          {/* Archive */}
+          <button
+            onClick={handleArchive}
+            className="inline-flex items-center gap-1.5 rounded-md border border-destructive/50 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Archive className="h-3.5 w-3.5" />
+            Archive
+          </button>
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-6">
+      <div className="space-y-6">
         {/* Skill preview / editor */}
         {editing ? (
           <div className="space-y-4">
@@ -262,7 +250,7 @@ export function TeamSkillDetail() {
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
