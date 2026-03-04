@@ -34,6 +34,25 @@ const eventSchema = z.object({
   payload: z.record(z.unknown()),
 });
 
+/**
+ * Sanitize a timestamp string before inserting into PostgreSQL.
+ * Fixes malformed timestamps like "2026-03-04T07:50:30.3NZ" produced by
+ * plugins using `date +%3N` on macOS where %N (nanoseconds) is unsupported
+ * and outputs the literal character "N".
+ */
+function sanitizeTimestamp(timestamp: string): string {
+  const d = new Date(timestamp);
+  if (!isNaN(d.getTime())) return d.toISOString();
+
+  // Fix fractional seconds containing non-digit chars (e.g. ".3NZ" → ".3Z")
+  const fixed = timestamp.replace(/\.(\d+)[A-Za-z]*Z$/, ".$1Z");
+  const d2 = new Date(fixed);
+  if (!isNaN(d2.getTime())) return d2.toISOString();
+
+  // Last resort: use current time
+  return new Date().toISOString();
+}
+
 function clampInt(val: string | undefined, def: number, max: number): number {
   if (!val) return def;
   const n = Number(val);
@@ -45,6 +64,7 @@ export function eventsRoutes(sql: SQL) {
 
   app.post("/", zValidator("json", eventSchema), async (c) => {
     const event = c.req.valid("json") as unknown as DevscopeEvent;
+    event.timestamp = sanitizeTimestamp(event.timestamp);
 
     await upsertDeveloper(sql, event.developerId, event.developerName, event.developerEmail ?? "");
 
