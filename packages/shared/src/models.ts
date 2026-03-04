@@ -82,6 +82,7 @@ export interface SessionTurn {
   response?: {
     toolsUsed: string[];
     responseLength?: number;
+    responseText?: string;
     timestamp: string;
   };
 }

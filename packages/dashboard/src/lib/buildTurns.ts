@@ -89,6 +89,7 @@ export function buildTurns(events: RawEvent[]): SessionTurn[] {
         turn.response = {
           toolsUsed: (p.toolsUsed as string[]) ?? [],
           responseLength: p.responseLength as number | undefined,
+          responseText: p.responseText as string | undefined,
           timestamp: event.created_at,
         };
         // Close current turn

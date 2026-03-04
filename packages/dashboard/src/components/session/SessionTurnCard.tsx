@@ -1,10 +1,41 @@
 import { useState } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { MessageSquare, ChevronDown, ChevronRight, Bot } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ToolChainTimeline } from "./ToolChainTimeline";
 import type { SessionTurn } from "@devscope/shared";
 import { parseUTC } from "@/lib/utils";
+
+const PREVIEW_LENGTH = 300;
+
+function ResponseTextBlock({ text }: { text: string }) {
+  const [showFull, setShowFull] = useState(false);
+  const isLong = text.length > PREVIEW_LENGTH;
+  const displayed = isLong && !showFull ? text.slice(0, PREVIEW_LENGTH) + "…" : text;
+
+  return (
+    <div className="mt-2 rounded-md bg-muted/40 border border-border px-3 py-2 text-sm text-foreground/80">
+      <AnimatePresence initial={false}>
+        <motion.p
+          key={showFull ? "full" : "preview"}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="whitespace-pre-wrap break-words"
+        >
+          {displayed}
+        </motion.p>
+      </AnimatePresence>
+      {isLong && (
+        <button
+          onClick={() => setShowFull(!showFull)}
+          className="mt-1 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+        >
+          {showFull ? "Show less" : "Show full"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 interface SessionTurnCardProps {
   turn: SessionTurn;
@@ -99,14 +130,19 @@ export function SessionTurnCard({ turn, index, isSelfView = false }: SessionTurn
           )}
 
           {turn.response && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground border-t border-border pt-2">
-              <span>Response</span>
-              {turn.response.responseLength != null && (
-                <Badge variant="outline" className="text-[10px] px-1 py-0">
-                  {(turn.response.responseLength / 1000).toFixed(1)}k chars
-                </Badge>
+            <div className="border-t border-border pt-2 space-y-1">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Response</span>
+                {turn.response.responseLength != null && (
+                  <Badge variant="outline" className="text-[10px] px-1 py-0">
+                    {(turn.response.responseLength / 1000).toFixed(1)}k chars
+                  </Badge>
+                )}
+                <span className="ml-auto">{parseUTC(turn.response.timestamp).toLocaleTimeString()}</span>
+              </div>
+              {isSelfView && turn.response.responseText && (
+                <ResponseTextBlock text={turn.response.responseText} />
               )}
-              <span className="ml-auto">{parseUTC(turn.response.timestamp).toLocaleTimeString()}</span>
             </div>
           )}
         </div>
