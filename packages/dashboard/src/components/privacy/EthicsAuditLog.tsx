@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ButtonGroup, ButtonGroupItem } from "@/components/ui/button-group";
 import { apiFetch } from "@/lib/api";
 import type { EthicsAuditSummary, EthicsAuditEntry } from "@devscope/shared";
 
@@ -23,6 +24,7 @@ export function EthicsAuditLog() {
   const [filter, setFilter] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
+    setError(null);
     try {
       const [summaryRes, entriesRes] = await Promise.all([
         apiFetch("/api/ethics/summary?days=7"),
@@ -78,8 +80,15 @@ export function EthicsAuditLog() {
   if (error) {
     return (
       <Card>
-        <CardContent className="py-6 text-center text-sm text-muted-foreground">
-          {error}
+        <CardContent className="py-6 text-center space-y-3">
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <button
+            type="button"
+            onClick={fetchData}
+            className="text-xs text-primary hover:underline"
+          >
+            Retry
+          </button>
         </CardContent>
       </Card>
     );
@@ -100,25 +109,20 @@ export function EthicsAuditLog() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm">Audit Log</CardTitle>
             <div className="flex gap-1.5">
-              <button
-                onClick={() => setFilter(null)}
-                className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                  !filter ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                All
-              </button>
-              {Object.entries(EVENT_TYPE_META).map(([type, meta]) => (
-                <button
-                  key={type}
-                  onClick={() => setFilter(type)}
-                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                    filter === type ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  {meta.label}
-                </button>
-              ))}
+              <ButtonGroup>
+                <ButtonGroupItem active={!filter} onClick={() => setFilter(null)}>
+                  All
+                </ButtonGroupItem>
+                {Object.entries(EVENT_TYPE_META).map(([type, meta]) => (
+                  <ButtonGroupItem
+                    key={type}
+                    active={filter === type}
+                    onClick={() => setFilter(type)}
+                  >
+                    {meta.label}
+                  </ButtonGroupItem>
+                ))}
+              </ButtonGroup>
             </div>
           </div>
         </CardHeader>
@@ -162,9 +166,8 @@ export function EthicsAuditLog() {
 }
 
 function formatDetails(details: Record<string, unknown>): string {
-  if (details.fields) {
-    const fields = Array.isArray(details.fields) ? details.fields.map(String) : [String(details.fields)];
-    return `Fields: ${fields.join(", ")}`;
+  if (Array.isArray(details.fields) && details.fields.length > 0) {
+    return `Fields: ${details.fields.map(String).join(", ")}`;
   }
   if (details.action) return String(details.action);
   if (details.events_deleted != null && details.sessions_anonymized != null) {

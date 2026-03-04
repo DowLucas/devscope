@@ -39,7 +39,7 @@ export function ToolingHealthCard() {
       const raw = await res.json();
       // Normalize camelCase/snake_case variants
       const items: ToolingHealthSummary[] = (raw as Record<string, unknown>[]).map((r) => ({
-        tool_name: String(r.tool_name ?? r.toolName ?? ""),
+        tool_name: String(r.tool_name ?? r.toolName ?? "unknown"),
         project_name: (r.project_name ?? r.projectName ?? null) as string | null,
         total_calls: Number(r.total_calls ?? r.totalCalls ?? 0),
         failure_count: Number(r.failure_count ?? r.failureCount ?? 0),
