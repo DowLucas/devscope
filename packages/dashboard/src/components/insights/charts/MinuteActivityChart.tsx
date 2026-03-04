@@ -54,20 +54,25 @@ function tickInterval(_hours: number, dataLength: number): number {
 export function MinuteActivityChart() {
   const [hours, setHours] = useState(24);
   const [data, setData] = useState<MinuteActivityPoint[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [fetchedHours, setFetchedHours] = useState<number | null>(null);
+  const loading = fetchedHours !== hours;
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const eventsLength = useActivityStore((s) => s.events.length);
   const prevEventsLength = useRef(eventsLength);
 
   // Fetch data on mount and when range changes
   useEffect(() => {
-    setLoading(true);
+    const currentHours = hours;
     const params = hours !== 24 ? `?hours=${hours}` : "";
     apiFetch(`/api/insights/activity-per-minute${params}`)
       .then((r) => r.json())
-      .then((d) => setData(d as MinuteActivityPoint[]))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .then((d) => {
+        setData(d as MinuteActivityPoint[]);
+        setFetchedHours(currentHours);
+      })
+      .catch(() => {
+        setFetchedHours(currentHours);
+      });
   }, [hours]);
 
   // Bump the last bucket when new WS events arrive (only for short ranges)

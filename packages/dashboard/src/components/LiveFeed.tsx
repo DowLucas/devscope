@@ -23,7 +23,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useActivityStore } from "@/stores/activityStore";
-import { useListApiKeys } from "@/components/AuthProvider";
+import { useListApiKeys } from "@/hooks/useListApiKeys";
 import { timeAgo } from "@/lib/utils";
 import type { DevscopeEvent } from "@devscope/shared";
 

@@ -221,13 +221,11 @@ function EventContent({ event }: { event: FeedEvent }) {
 }
 
 export function MockupActivityFeed() {
-  const [events, setEvents] = useState<FeedEvent[]>([]);
-  const [now, setNow] = useState(Date.now());
+  const [events, setEvents] = useState<FeedEvent[]>(() => [generateEvent()]);
+  const [now, setNow] = useState(() => Date.now());
   const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   useEffect(() => {
-    // Seed with one immediate event
-    setEvents([generateEvent()]);
 
     // Add new events on interval
     intervalRef.current = setInterval(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Loader2, XCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,6 +11,7 @@ export function InviteAcceptPage({ token }: { token: string }) {
   const [status, setStatus] = useState<AcceptStatus>("checking");
   const [error, setError] = useState("");
   const [, setLocation] = useLocation();
+  const acceptingRef = useRef(false);
 
   const { data: session, isPending } = authClient.useSession();
 
@@ -23,7 +24,8 @@ export function InviteAcceptPage({ token }: { token: string }) {
       return;
     }
 
-    setStatus("accepting");
+    if (acceptingRef.current) return;
+    acceptingRef.current = true;
 
     authClient.organization
       .acceptInvitation({ invitationId: token })
@@ -48,11 +50,11 @@ export function InviteAcceptPage({ token }: { token: string }) {
       <div className="w-full max-w-md">
         <Card>
           <CardContent className="py-8">
-            {(status === "checking" || status === "accepting") && (
+            {status !== "error" && (
               <div className="flex flex-col items-center gap-3 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin" />
                 <p className="text-sm font-medium">
-                  {status === "checking"
+                  {!session || isPending
                     ? "Checking session..."
                     : "Accepting invitation..."}
                 </p>

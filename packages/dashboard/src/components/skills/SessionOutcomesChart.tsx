@@ -29,7 +29,7 @@ interface SessionOutcomesChartProps {
 export function SessionOutcomesChart({ data, loading, predictions }: SessionOutcomesChartProps) {
   const completionPrediction = predictions?.find((p) => p.metric === "completion_rate");
 
-  const chartData = data.map((d) => ({
+  const chartData: { week: string; completion_rate: number; predicted_rate?: number }[] = data.map((d) => ({
     week: d.week.slice(0, 10),
     completion_rate: Math.round(d.completion_rate * 100),
   }));
@@ -40,7 +40,7 @@ export function SessionOutcomesChart({ data, loading, predictions }: SessionOutc
         week: pw.week.slice(0, 10),
         completion_rate: 0,
         predicted_rate: Math.round(pw.predicted_value * 100),
-      } as any);
+      });
     }
   }
 

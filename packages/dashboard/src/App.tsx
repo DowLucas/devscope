@@ -23,8 +23,9 @@ import { InviteAcceptPage } from "@/components/team/InviteAcceptPage";
 import { SkillsView } from "@/components/skills/SkillsView";
 import { PlaybooksView } from "@/components/playbooks/PlaybooksView";
 import { useDevscopeSocket } from "@/hooks/useWebSocket";
-import { useActivityStore } from "@/stores/activityStore";
+import { useActivityStore, type ActiveAgent } from "@/stores/activityStore";
 import { apiFetch } from "@/lib/api";
+import type { Session } from "@devscope/shared";
 
 function AppContent() {
   useDevscopeSocket();
@@ -42,7 +43,7 @@ function AppContent() {
 
     apiFetch("/api/sessions/active")
       .then((r) => r.json())
-      .then((sessions: any[]) => {
+      .then((sessions: (Session & { activeAgents?: ActiveAgent[] })[]) => {
         const agents = sessions.flatMap((s) => s.activeAgents ?? []);
         setActiveAgents(agents);
         setActiveSessions(sessions);

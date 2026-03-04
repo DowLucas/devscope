@@ -30,7 +30,7 @@ interface SessionProductivityChartProps {
 export function SessionProductivityChart({ data, loading, predictions }: SessionProductivityChartProps) {
   const sessionPrediction = predictions?.find((p) => p.metric === "sessions");
 
-  const chartData = data.map((d) => ({
+  const chartData: { week: string; sessions: number; avg_duration: number; predicted_sessions?: number }[] = data.map((d) => ({
     week: d.week.slice(0, 10),
     sessions: d.sessions,
     avg_duration: d.avg_duration_minutes,
@@ -43,7 +43,7 @@ export function SessionProductivityChart({ data, loading, predictions }: Session
         sessions: 0,
         avg_duration: 0,
         predicted_sessions: pw.predicted_value,
-      } as any);
+      });
     }
   }
 

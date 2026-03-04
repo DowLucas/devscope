@@ -48,6 +48,7 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function usePersona() {
   const ctx = useContext(PersonaCtx);
   if (!ctx) throw new Error("usePersona must be used inside PersonaProvider");

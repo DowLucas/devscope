@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { authClient } from "@/lib/auth-client";
 import { useTeamStore } from "@/stores/teamStore";
+import type { OrgRole } from "@devscope/shared";
 
 export function useTeamInit() {
   const { setCurrentTeam, setCurrentRole, setLoading } = useTeamStore();
@@ -57,8 +58,8 @@ export function useTeamInit() {
                 slug: org.slug,
                 logo: org.logo ?? null,
               });
-              const member = (org as any).members?.find(
-                (m: { userId: string }) => m.userId === sessionUserId
+              const member = (org as { members?: { userId: string; role: OrgRole }[] }).members?.find(
+                (m) => m.userId === sessionUserId
               );
               if (member) setCurrentRole(member.role);
             });
@@ -68,5 +69,5 @@ export function useTeamInit() {
       .finally(() => {
         setLoading(false);
       });
-  }, [activeOrgId, orgPending, sessionUserId, setCurrentTeam, setCurrentRole, setLoading]);
+  }, [activeOrg, activeOrgId, orgPending, sessionUserId, setCurrentTeam, setCurrentRole, setLoading]);
 }

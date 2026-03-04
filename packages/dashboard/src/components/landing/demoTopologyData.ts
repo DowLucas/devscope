@@ -210,7 +210,7 @@ for (const s of sessionDefs) {
 }
 
 // Agent simulation state (only for active agent)
-let agentSimState: SessionSimState = { phase: "idle", toolName: null, event: null };
+const agentSimState: SessionSimState = { phase: "idle", toolName: null, event: null };
 
 function nextPhase(current: SimPhase): SimPhase {
   switch (current) {
