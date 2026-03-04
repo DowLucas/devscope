@@ -1,6 +1,6 @@
 import { type ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Activity, Users, GitBranch, BarChart3, AlertTriangle, FolderOpen, Sparkles, Clock, Settings, LogOut, UsersRound, Mail, Cog, TrendingUp, BookOpen } from "lucide-react";
+import { Activity, Users, GitBranch, BarChart3, AlertTriangle, FolderOpen, Sparkles, Clock, Settings, LogOut, UsersRound, Mail, Cog, TrendingUp, BookOpen, Shield } from "lucide-react";
 import { useActivityStore } from "@/stores/activityStore";
 import { authClient } from "@/lib/auth-client";
 import { useTeamStore } from "@/stores/teamStore";
@@ -113,12 +113,13 @@ function isActive(location: string, path: string): boolean {
   return location === path || location.startsWith(path + "/");
 }
 
-const WIDE_VIEWS = ["/dashboard/topology", "/dashboard/metrics", "/dashboard/projects", "/dashboard/incidents", "/dashboard/assistant", "/dashboard/skills", "/dashboard/playbooks", "/dashboard/account", "/dashboard/team"];
+const WIDE_VIEWS = ["/dashboard/topology", "/dashboard/metrics", "/dashboard/projects", "/dashboard/incidents", "/dashboard/assistant", "/dashboard/skills", "/dashboard/playbooks", "/dashboard/account", "/dashboard/team", "/dashboard/privacy"];
 
 function useNavGroups() {
   const admin = useTeamStore((s) => s.isAdmin());
   const teamItems = [
     { path: "/dashboard/team", label: "Members", icon: UsersRound },
+    { path: "/dashboard/privacy", label: "Privacy", icon: Shield },
     ...(admin
       ? [
           { path: "/dashboard/team/invites", label: "Invites", icon: Mail },

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Settings, AlertTriangle, Loader2 } from "lucide-react";
+import { Settings, AlertTriangle, Loader2, Database } from "lucide-react";
 import { toast } from "sonner";
 import {
   Card,
@@ -21,7 +21,10 @@ export function TeamSettingsPage() {
   const [settings, setSettings] = useState<OrgSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [thresholdDays, setThresholdDays] = useState(14);
+  const [retentionDays, setRetentionDays] = useState(90);
+  const [anonymizeOnExpire, setAnonymizeOnExpire] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingRetention, setSavingRetention] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -30,6 +33,8 @@ export function TeamSettingsPage() {
       const data: OrgSettings = await res.json();
       setSettings(data);
       setThresholdDays(data.inactive_threshold_days);
+      setRetentionDays(data.retention_days ?? 90);
+      setAnonymizeOnExpire(data.anonymize_on_expire ?? true);
     } catch (err) {
       console.error("[TeamSettingsPage]", err);
       toast.error("Failed to load team settings");
@@ -60,6 +65,28 @@ export function TeamSettingsPage() {
       toast.error("Failed to save settings");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveRetention() {
+    setSavingRetention(true);
+    try {
+      const res = await apiFetch("/api/teams/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ retention_days: retentionDays, anonymize_on_expire: anonymizeOnExpire }),
+      });
+      if (!res.ok) throw new Error(`Failed to save settings: ${res.status}`);
+      const updated: OrgSettings = await res.json();
+      setSettings(updated);
+      setRetentionDays(updated.retention_days ?? 90);
+      setAnonymizeOnExpire(updated.anonymize_on_expire ?? true);
+      toast.success("Retention settings saved");
+    } catch (err) {
+      console.error("[TeamSettingsPage.saveRetention]", err);
+      toast.error("Failed to save retention settings");
+    } finally {
+      setSavingRetention(false);
     }
   }
 
@@ -157,6 +184,69 @@ export function TeamSettingsPage() {
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Save
             </button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Database className="h-4 w-4 text-muted-foreground" />
+            Data Retention
+          </CardTitle>
+          <CardDescription>
+            Automatically purge or anonymize event data older than the retention
+            period. Anonymized sessions retain aggregate metrics but remove
+            developer associations.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="flex items-end gap-3">
+              <div className="space-y-1">
+                <label
+                  htmlFor="retention-days"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Retention Period
+                </label>
+                <select
+                  id="retention-days"
+                  value={retentionDays}
+                  onChange={(e) => setRetentionDays(Number(e.target.value))}
+                  className="rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value={30}>30 days</option>
+                  <option value={60}>60 days</option>
+                  <option value={90}>90 days</option>
+                  <option value={180}>180 days</option>
+                  <option value={365}>365 days</option>
+                </select>
+              </div>
+              <button
+                onClick={handleSaveRetention}
+                disabled={
+                  savingRetention ||
+                  (retentionDays === (settings?.retention_days ?? 90) &&
+                    anonymizeOnExpire === (settings?.anonymize_on_expire ?? true))
+                }
+                className="rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none transition-colors inline-flex items-center gap-1.5"
+              >
+                {savingRetention && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Save
+              </button>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={anonymizeOnExpire}
+                onChange={(e) => setAnonymizeOnExpire(e.target.checked)}
+                className="rounded border-input"
+              />
+              <span className="text-muted-foreground">
+                Anonymize expired sessions instead of deleting them
+              </span>
+            </label>
           </div>
         </CardContent>
       </Card>
