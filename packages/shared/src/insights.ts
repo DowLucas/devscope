@@ -192,3 +192,22 @@ export interface DigestSummary {
   roi?: { prompts_per_session: number; tool_calls_per_session: number; sessions_per_developer: number };
   project_allocation?: { project_name: string; percentage: number }[];
 }
+
+// --- Tooling Health ---
+
+export interface ToolingHealthSummary {
+  tool_name: string;
+  project_name: string | null;
+  total_calls: number;
+  failure_count: number;
+  failure_rate: number;
+  avg_duration_ms: number | null;
+  trend: "improving" | "stable" | "degrading";
+}
+
+export interface ToolingHealthTrend {
+  date: string;
+  tool_name: string;
+  failure_rate: number;
+  total_calls: number;
+}

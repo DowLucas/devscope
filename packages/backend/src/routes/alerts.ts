@@ -9,6 +9,8 @@ import {
   deleteAlertRule,
   getRecentAlerts,
   acknowledgeAlert,
+  getToolingHealthSummary,
+  getToolingHealthTrends,
 } from "../db";
 
 const alertRuleCreateSchema = z.object({
@@ -80,6 +82,22 @@ export function alertsRoutes(sql: SQL) {
     const orgId = c.get("orgId" as never) as string | undefined;
     await acknowledgeAlert(sql, id, orgId);
     return c.json({ ok: true });
+  });
+
+  // GET /api/alerts/tooling-health — current tooling health summary
+  app.get("/tooling-health", async (c) => {
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    const days = clampInt(c.req.query("days"), 7, 90);
+    return c.json(await getToolingHealthSummary(sql, devIds ?? [], days));
+  });
+
+  // GET /api/alerts/tooling-health/trends — historical trend data
+  app.get("/tooling-health/trends", async (c) => {
+    const orgId = c.get("orgId" as never) as string | undefined;
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    if (!orgId) return c.json([]);
+    const days = clampInt(c.req.query("days"), 14, 90);
+    return c.json(await getToolingHealthTrends(sql, orgId, devIds ?? [], days));
   });
 
   return app;

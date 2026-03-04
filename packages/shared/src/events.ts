@@ -50,11 +50,18 @@ export interface SessionStartPayload {
   privacyMode?: string;
   continued?: boolean;
   claudeSessionId?: string;
+  model?: string;
+  gitBranch?: string;
+  gitCommit?: string;
+  gitRemoteUrl?: string;
 }
 
 export interface SessionEndPayload {
   endReason: string;
   duration?: number;
+  filesChanged?: string[];
+  gitBranch?: string;
+  gitCommit?: string;
 }
 
 export interface PromptEventPayload {
@@ -69,12 +76,14 @@ export interface ToolEventPayload {
   duration?: number;
   success?: boolean;
   errorMessage?: string;
+  isInterrupt?: boolean;
   agentId?: string | null;
 }
 
 export interface AgentEventPayload {
   agentType: string;
   agentId: string;
+  parentAgentId?: string | null;
 }
 
 export interface ResponsePayload {

@@ -1,5 +1,6 @@
 import { describe, expect, test, mock, beforeEach } from "bun:test";
 import { Hono } from "hono";
+import { dbStubs } from "../../__test_helpers__/mockStubs";
 
 // ---------------------------------------------------------------------------
 // Mocks -- must be set up BEFORE importing the module under test
@@ -7,7 +8,7 @@ import { Hono } from "hono";
 
 const mockGetAllDevelopers = mock(() => Promise.resolve([] as any[]));
 
-mock.module("../../db", () => ({
+mock.module("../../db", () => dbStubs({
   getAllDevelopers: mockGetAllDevelopers,
 }));
 
