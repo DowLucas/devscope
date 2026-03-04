@@ -3,6 +3,7 @@ import { AccountView } from "@daveyplate/better-auth-ui";
 import { KeyRound, User, Eye } from "lucide-react";
 import { ApiKeysCard } from "./ApiKeysCard";
 import { DataSharingCard } from "./DataSharingCard";
+import { DeleteAccountCard } from "./DeleteAccountCard";
 
 const SECTIONS = [
   { id: "account", label: "Account", icon: User },
@@ -52,7 +53,12 @@ export function SettingsPage() {
 
       {/* Content */}
       <div className="flex-1 min-w-0 space-y-6">
-        {active === "account" && <AccountView pathname={location} />}
+        {active === "account" && (
+          <>
+            <AccountView pathname={location} />
+            <DeleteAccountCard />
+          </>
+        )}
         {active === "api-keys" && <ApiKeysCard />}
         {active === "privacy" && <DataSharingCard />}
       </div>

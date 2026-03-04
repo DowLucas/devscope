@@ -29,6 +29,7 @@ import { playbooksRoutes } from "./routes/playbooks";
 import { teamSkillsRoutes } from "./routes/teamSkills";
 import { ethicsRoutes } from "./routes/ethics";
 import { privacyRoutes } from "./routes/privacy";
+import { accountRoutes } from "./routes/account";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
@@ -207,6 +208,7 @@ app.route("/api/playbooks", playbooksRoutes(sql));
 app.route("/api/team-skills", teamSkillsRoutes(sql));
 app.route("/api/ethics", ethicsRoutes(sql));
 app.route("/api/privacy", privacyRoutes(sql));
+app.route("/api/account", accountRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })
