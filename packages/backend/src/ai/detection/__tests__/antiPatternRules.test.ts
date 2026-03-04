@@ -271,10 +271,10 @@ describe("detectFailureCascades", () => {
     expect(results[0].details.cascade_length).toBe(8);
   });
 
-  test("name is 'Failure Cascade'", () => {
+  test("name is 'Cascading Failures'", () => {
     const seq = makeFailures("bash", 4);
     const results = detectFailureCascades(seq);
-    expect(results[0].name).toBe("Failure Cascade");
+    expect(results[0].name).toBe("Cascading Failures");
   });
 });
 
