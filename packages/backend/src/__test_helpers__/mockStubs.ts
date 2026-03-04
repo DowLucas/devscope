@@ -104,7 +104,7 @@ export function stripSensitiveFieldsStubs(overrides: Record<string, unknown> = {
 /** All exports from `../../services/developerLink`. */
 export function developerLinkStubs(overrides: Record<string, unknown> = {}) {
   return {
-    computeDeveloperId: mock((email: string) => "mock-dev-id"),
+    computeDeveloperId: mock((_email: string) => "mock-dev-id"),
     linkUserToDeveloper: mock(() => Promise.resolve()),
     getDeveloperIdForUser: mock(() => Promise.resolve(null)),
     getOrgDeveloperIds: mock(() => Promise.resolve([])),
