@@ -2,6 +2,7 @@ import type { SQL } from "bun";
 import { sql as Sql } from "bun";
 import type { SessionPattern, SessionPatternMatch } from "@devscope/shared";
 import { inList } from "./utils";
+import { extractPromptFeatures, type PromptFeatures } from "../ai/detection/promptFeatures";
 
 // --- Tool Sequence Extraction ---
 
@@ -54,6 +55,7 @@ export interface SessionSequence {
   agent_delegations: number;
   agent_types: string[];
   duration_minutes: number;
+  prompt_features: PromptFeatures | null;
 }
 
 async function getSessionPromptEvents(
@@ -69,6 +71,19 @@ async function getSessionPromptEvents(
       AND e.event_type = 'prompt.submit'
     ORDER BY e.created_at ASC`;
   return rows as PromptEvent[];
+}
+
+async function getSessionPromptTexts(
+  sql: SQL,
+  sessionId: string
+): Promise<(string | null)[]> {
+  const rows = await sql`
+    SELECT e.payload->>'promptText' as prompt_text
+    FROM events e
+    WHERE e.session_id = ${sessionId}
+      AND e.event_type = 'prompt.submit'
+    ORDER BY e.created_at ASC`;
+  return (rows as any[]).map(r => r.prompt_text ?? null);
 }
 
 async function getSessionAgentEvents(
@@ -120,10 +135,11 @@ export async function getRecentSessionSequences(
 
   for (const session of sessions) {
     const sid = (session as any).session_id;
-    const [tools, prompts, agents] = await Promise.all([
+    const [tools, prompts, agents, promptTexts] = await Promise.all([
       getSessionToolSequence(sql, sid),
       getSessionPromptEvents(sql, sid),
       getSessionAgentEvents(sql, sid),
+      getSessionPromptTexts(sql, sid),
     ]);
     if (tools.length < 3) continue; // Skip trivial sessions
 
@@ -142,6 +158,10 @@ export async function getRecentSessionSequences(
     const agentStarts = agents.filter(a => a.event_type === "agent.start");
     const agentTypes = [...new Set(agentStarts.map(a => a.agent_type).filter(Boolean))];
 
+    // Extract prompt features locally (never sends raw text to LLM)
+    const hasAnyText = promptTexts.some(t => t !== null);
+    const promptFeatures = hasAnyText ? extractPromptFeatures(promptTexts) : null;
+
     sequences.push({
       session_id: sid,
       developer_id: (session as any).developer_id,
@@ -155,6 +175,7 @@ export async function getRecentSessionSequences(
       agent_delegations: agentStarts.length,
       agent_types: agentTypes,
       duration_minutes: (session as any).duration_minutes ?? 0,
+      prompt_features: promptFeatures,
     });
   }
 

@@ -137,6 +137,7 @@ async function refineSkill(
       avg_prompt_length: s.avg_prompt_length,
       continuation_ratio: s.continuation_ratio,
       agent_delegations: s.agent_delegations,
+      ...(s.prompt_features ? { prompt_features: s.prompt_features } : {}),
     })),
   };
 

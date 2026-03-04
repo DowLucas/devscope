@@ -63,6 +63,13 @@ Key signals to consider:
 - agent_delegations & agent_types: Whether the developer leverages sub-agents for parallel research
 - tool sequence patterns: What workflows the developer's prompts lead to
 - success_rate: How well the developer's approach works
+- prompt_features (when available): Locally-extracted characteristics of how developers write their prompts:
+  - file_references: Number of prompts mentioning specific file paths (high = developer gives precise locations)
+  - code_references: Number of prompts mentioning function/class names (high = developer provides code context)
+  - questions vs directives: Whether the developer asks questions or gives commands
+  - includes_errors: Whether the developer includes error messages in their prompts
+  - avg_specificity: 0-1 score of how specific/detailed the prompts are
+  - slash_commands: Whether the developer uses Claude Code slash commands (/commit, /clear, etc.)
 
 Focus on patterns that appear in 2+ sessions. Merge similar patterns.
 Return a JSON array. Return an empty array if no meaningful patterns found.
@@ -76,6 +83,7 @@ async function clusterPatterns(
   }
 
   // Prepare session data for the LLM — include developer behavior signals
+  // NOTE: prompt_features are extracted locally from prompt text — raw text is never sent
   const sessionData = state.sequences.map(s => ({
     session_id: s.session_id,
     tool_names: s.tool_names.slice(0, 50), // Cap at 50 tools per session
@@ -86,6 +94,7 @@ async function clusterPatterns(
     agent_delegations: s.agent_delegations,
     agent_types: s.agent_types,
     duration_minutes: s.duration_minutes,
+    ...(s.prompt_features ? { prompt_features: s.prompt_features } : {}),
   }));
 
   const dataStr = JSON.stringify(sessionData, null, 2).slice(0, 25_000);

@@ -116,6 +116,7 @@ async function generateSkills(
     continuation_ratio: s.continuation_ratio,
     agent_delegations: s.agent_delegations,
     agent_types: s.agent_types,
+    ...(s.prompt_features ? { prompt_features: s.prompt_features } : {}),
   }));
 
   const prompt = SKILL_GEN_PROMPT.replace(
