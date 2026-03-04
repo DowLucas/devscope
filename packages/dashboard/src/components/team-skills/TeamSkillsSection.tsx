@@ -17,7 +17,6 @@ const STATUS_FILTERS = [
 export function TeamSkillsSection() {
   const {
     skills,
-    selectedSkill,
     stats,
     loading,
     error,
@@ -148,8 +147,8 @@ export function TeamSkillsSection() {
         </div>
       )}
 
-      {/* Detail panel */}
-      {selectedSkill && <TeamSkillDetail />}
+      {/* Detail dialog */}
+      <TeamSkillDetail />
     </div>
   );
 }

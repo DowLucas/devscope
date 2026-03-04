@@ -1,3 +1,7 @@
 {
-  "enabledPlugins": {}
+  "plugins": {
+    "devscope@devscope": {
+      "enabled": true
+    }
+  }
 }

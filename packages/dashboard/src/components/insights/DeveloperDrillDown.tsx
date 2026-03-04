@@ -55,7 +55,7 @@ export function DeveloperDrillDown({
         </div>
       </div>
 
-      <StatCards data={summary.data} loading={summary.loading} />
+      <StatCards data={summary.data} loading={summary.loading} days={days} />
 
       <PeriodComparison developerId={developerId} />
 

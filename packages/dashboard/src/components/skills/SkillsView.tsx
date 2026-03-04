@@ -62,7 +62,7 @@ export function SkillsView() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           }`}
         >
-          AI Skills
+          Skills
         </button>
       </div>
 

@@ -36,7 +36,7 @@ export function InsightsOverview() {
 
       <ThroughputCards />
 
-      <StatCards data={summary.data} loading={summary.loading} />
+      <StatCards data={summary.data} loading={summary.loading} days={days} />
 
       <PeriodComparison />
 

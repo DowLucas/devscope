@@ -28,7 +28,7 @@ const updateRequestSchema = z.object({
 async function getUserDeveloperId(sql: SQL, userId: string): Promise<string | null> {
   const [link] = await sql`
     SELECT developer_id FROM user_developer_link
-    WHERE user_id = ${userId}
+    WHERE auth_user_id = ${userId}
     LIMIT 1`;
   return (link as any)?.developer_id ?? null;
 }
@@ -37,6 +37,17 @@ export function privacyRoutes(sql: SQL) {
   const app = new Hono();
 
   app.use("/*", requireOrgMember(sql));
+
+  // GET /api/privacy/consent/preferences — own share_details status
+  app.get("/consent/preferences", async (c) => {
+    const user = c.get("user" as never) as any;
+    const developerId = await getUserDeveloperId(sql, user.id);
+    if (!developerId) {
+      return c.json({ linked: false, share_details: false });
+    }
+    const [row] = await sql`SELECT share_details FROM developers WHERE id = ${developerId} LIMIT 1`;
+    return c.json({ linked: true, share_details: (row as any)?.share_details ?? false });
+  });
 
   // GET /api/privacy/consent/overview
   app.get("/consent/overview", async (c) => {
