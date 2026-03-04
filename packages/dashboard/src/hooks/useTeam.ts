@@ -6,6 +6,7 @@ import type { OrgRole } from "@devscope/shared";
 export function useTeamInit() {
   const { setCurrentTeam, setCurrentRole, setLoading } = useTeamStore();
   const initRef = useRef(false);
+  const fetchingRef = useRef(false);
 
   const { data: activeOrg, isPending: orgPending } =
     authClient.useActiveOrganization();
@@ -38,10 +39,14 @@ export function useTeamInit() {
 
     // No active org — try to set the first available one (only once)
     if (initRef.current) {
-      setLoading(false);
+      // Don't set loading=false while an async fetch is still in flight
+      if (!fetchingRef.current) {
+        setLoading(false);
+      }
       return;
     }
     initRef.current = true;
+    fetchingRef.current = true;
     setLoading(true);
 
     authClient.organization
@@ -67,6 +72,7 @@ export function useTeamInit() {
       })
       .catch(() => {})
       .finally(() => {
+        fetchingRef.current = false;
         setLoading(false);
       });
   }, [activeOrg, activeOrgId, orgPending, sessionUserId, setCurrentTeam, setCurrentRole, setLoading]);

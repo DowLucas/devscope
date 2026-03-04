@@ -36,12 +36,13 @@ function fetchAllData(
 ) {
   apiFetch("/api/developers")
     .then((r) => r.json())
-    .then(setDevelopers)
+    .then((devs) => { if (Array.isArray(devs)) setDevelopers(devs); })
     .catch(console.error);
 
   apiFetch("/api/sessions/active")
     .then((r) => r.json())
     .then((sessions: (Session & { activeAgents?: ActiveAgent[] })[]) => {
+      if (!Array.isArray(sessions)) return;
       const agents = sessions.flatMap((s) => s.activeAgents ?? []);
       setActiveAgents(agents);
       setActiveSessions(sessions);
@@ -50,7 +51,7 @@ function fetchAllData(
 
   apiFetch("/api/events/recent?limit=200")
     .then((r) => r.json())
-    .then(setEvents)
+    .then((evts) => { if (Array.isArray(evts)) setEvents(evts); })
     .catch(console.error);
 }
 

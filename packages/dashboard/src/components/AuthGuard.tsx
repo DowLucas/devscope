@@ -44,7 +44,17 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   // Note: API key setup is optional — users can skip it during onboarding
   // and set it up later from Settings. No forced redirect here.
 
-  if (isPending || (session && teamLoading)) {
+  // Redirect condition — mirrors the useEffect below so children don't render before the effect fires
+  const redirectingToOnboarding =
+    !isPending &&
+    session &&
+    !teamLoading &&
+    !currentTeam &&
+    !location.startsWith("/onboarding") &&
+    !location.startsWith("/auth/") &&
+    !location.startsWith("/invite");
+
+  if (isPending || (session && teamLoading) || redirectingToOnboarding) {
     return (
       <div className="h-screen flex items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />

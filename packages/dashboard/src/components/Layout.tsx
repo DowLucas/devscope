@@ -33,11 +33,17 @@ function useNavBadges(): Record<string, NavBadge | null> {
   const developers = useActivityStore((s) => s.developers);
   const events = useActivityStore((s) => s.events);
 
-  // Tick every 10s so the "last minute" count stays current
+  // Tick every 10s so the "last minute" count stays current;
+  // also refresh immediately when the tab becomes visible again.
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 10_000);
-    return () => clearInterval(id);
+    const onVisible = () => { if (!document.hidden) setNow(Date.now()); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   // Count events from the last 60 seconds
