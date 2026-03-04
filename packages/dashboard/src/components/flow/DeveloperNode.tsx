@@ -41,9 +41,6 @@ export function DeveloperNode({ data }: NodeProps & { data: DeveloperNodeData })
           <div className="truncate text-sm font-medium text-gray-100">
             {developer.name}
           </div>
-          <div className="truncate text-xs text-gray-500">
-            {developer.email}
-          </div>
         </div>
       </div>
       {sessionCount > 0 && (
