@@ -14,6 +14,7 @@ import {
 import { broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg } from "../services/developerLink";
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
+import { logEthicsEvent } from "../utils/ethicsAudit";
 
 const eventSchema = z.object({
   id: z.string().min(1).max(200),
@@ -91,6 +92,16 @@ export function eventsRoutes(sql: SQL) {
       await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode);
     }
 
+    // Log ethics event when privacy mode is activated
+    if (event.eventType === "session.start" && privacyMode === "redacted") {
+      const orgIds = await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${event.developerId}`;
+      for (const row of orgIds as any[]) {
+        logEthicsEvent(sql, row.organization_id, "privacy_mode_activated", {
+          session_id: event.sessionId,
+        });
+      }
+    }
+
     // Track what to broadcast — we emit AFTER insertEvent so that
     // getActiveAgents() finds recently-inserted agent events when
     // the frontend refetches in response to the broadcast.
@@ -134,13 +145,26 @@ export function eventsRoutes(sql: SQL) {
 
     // Strip opt-in sensitive fields (promptText, toolInput) from broadcasts.
     // WebSocket goes to all dashboard viewers — we can't scope to self-view here.
+    const rawPayload = event.payload as Record<string, unknown>;
+    const hadSensitiveFields = "promptText" in rawPayload || "toolInput" in rawPayload || "responseText" in rawPayload;
     broadcastToDevOrgs({
       type: "event.new",
       data: {
         ...event,
-        payload: stripSensitivePayload(event.payload as Record<string, unknown>),
+        payload: stripSensitivePayload(rawPayload),
       },
     });
+
+    // Log ethics event when sensitive fields were stripped
+    if (hadSensitiveFields && devOrgs.length > 0) {
+      const strippedFields = ["promptText", "toolInput", "responseText"].filter((f) => f in rawPayload);
+      for (const row of devOrgs as any[]) {
+        logEthicsEvent(sql, row.organization_id, "sensitive_fields_stripped", {
+          fields: strippedFields,
+          event_type: event.eventType,
+        });
+      }
+    }
 
     // Check alert thresholds on tool failures
     if (event.eventType === "tool.fail") {

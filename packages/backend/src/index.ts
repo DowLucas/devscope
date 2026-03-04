@@ -20,15 +20,20 @@ import { startDigestGeneration } from "./jobs/digestGeneration";
 import { startAiInsightGeneration } from "./jobs/aiInsights";
 import { startPatternAnalysis } from "./jobs/patternAnalysis";
 import { startSessionTitleGeneration } from "./jobs/sessionTitleGeneration";
+import { startDataRetention } from "./jobs/dataRetention";
+import { startToolingHealthCheck } from "./jobs/toolingHealth";
 import { aiRoutes } from "./routes/ai";
 import { patternsRoutes } from "./routes/patterns";
 import { skillsRoutes } from "./routes/skills";
 import { playbooksRoutes } from "./routes/playbooks";
 import { teamSkillsRoutes } from "./routes/teamSkills";
+import { ethicsRoutes } from "./routes/ethics";
+import { privacyRoutes } from "./routes/privacy";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
 import { getPublicStats } from "./db/queries";
+import { flushEthicsAudit } from "./utils/ethicsAudit";
 import type { Context, Next } from "hono";
 
 const sql = await initializeDatabase();
@@ -55,6 +60,8 @@ startDigestGeneration(sql);
 startAiInsightGeneration(sql);
 startPatternAnalysis(sql);
 startSessionTitleGeneration(sql);
+startDataRetention(sql);
+startToolingHealthCheck(sql);
 
 // Seed a default alert rule if none exist
 const [existingRules] = await sql`SELECT COUNT(*)::INT as cnt FROM alert_rules`;
@@ -181,6 +188,10 @@ app.use("/api/ai/*", orgScopeMiddleware(sql));
 app.use("/api/ai", orgScopeMiddleware(sql));
 app.use("/api/team-skills/*", orgScopeMiddleware(sql));
 app.use("/api/team-skills", orgScopeMiddleware(sql));
+app.use("/api/ethics/*", orgScopeMiddleware(sql));
+app.use("/api/ethics", orgScopeMiddleware(sql));
+app.use("/api/privacy/*", orgScopeMiddleware(sql));
+app.use("/api/privacy", orgScopeMiddleware(sql));
 
 app.route("/api/events", eventsRoutes(sql));
 app.route("/api/sessions", sessionsRoutes(sql));
@@ -194,6 +205,8 @@ app.route("/api/patterns", patternsRoutes(sql));
 app.route("/api/skills", skillsRoutes(sql));
 app.route("/api/playbooks", playbooksRoutes(sql));
 app.route("/api/team-skills", teamSkillsRoutes(sql));
+app.route("/api/ethics", ethicsRoutes(sql));
+app.route("/api/privacy", privacyRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })
@@ -276,9 +289,10 @@ if (process.env.SERVE_STATIC === "true") {
 const PORT = Number(process.env.PORT ?? 6767);
 
 // Graceful shutdown
-function shutdown(signal: string) {
+async function shutdown(signal: string) {
   console.log(`[devscope] Received ${signal}, shutting down...`);
   try {
+    await flushEthicsAudit();
     sql.close();
     console.log("[devscope] Database connection closed");
   } catch (err) {

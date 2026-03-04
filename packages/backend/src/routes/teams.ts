@@ -7,7 +7,9 @@ import { getOrgDeveloperStatuses } from "../services/developerStatus";
 import { linkUserToDeveloper } from "../services/developerLink";
 
 const teamSettingsSchema = z.object({
-  inactive_threshold_days: z.number().int().min(1).max(365),
+  inactive_threshold_days: z.number().int().min(1).max(365).optional(),
+  retention_days: z.number().int().min(30).max(365).optional(),
+  anonymize_on_expire: z.boolean().optional(),
 });
 
 export function teamsRoutes(sql: SQL) {
@@ -33,12 +35,12 @@ export function teamsRoutes(sql: SQL) {
     if (!orgId) return c.json({ error: "No active organization" }, 400);
 
     const [settings] = await sql`
-      SELECT organization_id, inactive_threshold_days
+      SELECT organization_id, inactive_threshold_days, retention_days, anonymize_on_expire
       FROM organization_settings
       WHERE organization_id = ${orgId}`;
 
     if (!settings) {
-      return c.json({ organization_id: orgId, inactive_threshold_days: 7 });
+      return c.json({ organization_id: orgId, inactive_threshold_days: 7, retention_days: 90, anonymize_on_expire: true });
     }
     return c.json(settings);
   });
@@ -50,14 +52,46 @@ export function teamsRoutes(sql: SQL) {
     if (!orgId) return c.json({ error: "No active organization" }, 400);
 
     const body = c.req.valid("json");
-    const days = body.inactive_threshold_days;
+
+    // Build dynamic SET clause based on provided fields
+    const updates: string[] = [];
+    const values: Record<string, unknown> = {};
+
+    if (body.inactive_threshold_days !== undefined) {
+      updates.push("inactive_threshold_days");
+      values.inactive_threshold_days = body.inactive_threshold_days;
+    }
+    if (body.retention_days !== undefined) {
+      updates.push("retention_days");
+      values.retention_days = body.retention_days;
+    }
+    if (body.anonymize_on_expire !== undefined) {
+      updates.push("anonymize_on_expire");
+      values.anonymize_on_expire = body.anonymize_on_expire;
+    }
+
+    if (updates.length === 0) {
+      return c.json({ error: "No fields to update" }, 400);
+    }
+
+    // Use individual fields in the upsert
+    const inactiveDays = body.inactive_threshold_days ?? 7;
+    const retDays = body.retention_days ?? 90;
+    const anonymize = body.anonymize_on_expire ?? true;
 
     await sql`
-      INSERT INTO organization_settings (organization_id, inactive_threshold_days)
-      VALUES (${orgId}, ${days})
-      ON CONFLICT (organization_id) DO UPDATE SET inactive_threshold_days = ${days}`;
+      INSERT INTO organization_settings (organization_id, inactive_threshold_days, retention_days, anonymize_on_expire)
+      VALUES (${orgId}, ${inactiveDays}, ${retDays}, ${anonymize})
+      ON CONFLICT (organization_id) DO UPDATE SET
+        inactive_threshold_days = COALESCE(${body.inactive_threshold_days ?? null}::INT, organization_settings.inactive_threshold_days),
+        retention_days = COALESCE(${body.retention_days ?? null}::INT, organization_settings.retention_days),
+        anonymize_on_expire = COALESCE(${body.anonymize_on_expire ?? null}::BOOLEAN, organization_settings.anonymize_on_expire)`;
 
-    return c.json({ organization_id: orgId, inactive_threshold_days: days });
+    const [updated] = await sql`
+      SELECT organization_id, inactive_threshold_days, retention_days, anonymize_on_expire
+      FROM organization_settings WHERE organization_id = ${orgId}`;
+
+    return c.json(updated);
   });
 
   // POST /api/teams/link-developer — link current user to developer identity

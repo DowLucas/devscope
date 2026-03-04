@@ -5,6 +5,7 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { FailureRateChart } from "./FailureRateChart";
 import { FailureClustersTable } from "./FailureClustersTable";
 import { AlertRulesConfig } from "./AlertRulesConfig";
+import { ToolingHealthCard } from "./ToolingHealthCard";
 
 export function FailuresView() {
   const { days } = useDateRange();
@@ -17,6 +18,8 @@ export function FailuresView() {
         <h2 className="text-lg font-semibold">Tool Failures</h2>
         <DateRangePicker />
       </div>
+
+      <ToolingHealthCard />
 
       <FailureRateChart data={failures.data} loading={failures.loading} />
 

@@ -21,6 +21,12 @@ import type {
   DigestSummary,
   DigestEntry,
   MinuteActivityPoint,
+  ToolingHealthSummary,
+  ToolingHealthTrend,
+  EthicsAuditEntry,
+  EthicsAuditSummary,
+  ConsentOverview,
+  DataRequest,
 } from "@devscope/shared";
 import { inList } from "./utils";
 
@@ -1597,4 +1603,383 @@ export async function getSessionTitleHistory(sql: SQL, sessionId: string) {
     FROM session_titles
     WHERE session_id = ${sessionId}
     ORDER BY generated_at ASC`;
+}
+
+// =============================================
+// Ethics Audit Log
+// =============================================
+
+export async function insertEthicsAuditBatch(
+  sql: SQL,
+  events: Array<{ organization_id: string | null; event_type: string; details: Record<string, unknown> }>
+) {
+  await sql.begin(async (tx) => {
+    for (const evt of events) {
+      await tx`
+        INSERT INTO ethics_audit_log (id, organization_id, event_type, details)
+        VALUES (${crypto.randomUUID()}, ${evt.organization_id}, ${evt.event_type}, ${evt.details}::jsonb)`;
+    }
+  });
+}
+
+export async function getEthicsAuditLog(
+  sql: SQL,
+  orgId: string,
+  limit: number = 50,
+  offset: number = 0,
+  eventType?: string
+): Promise<EthicsAuditEntry[]> {
+  if (eventType) {
+    return await sql`
+      SELECT id, organization_id, event_type, details, created_at
+      FROM ethics_audit_log
+      WHERE organization_id = ${orgId} AND event_type = ${eventType}
+      ORDER BY created_at DESC
+      LIMIT ${limit} OFFSET ${offset}` as unknown as EthicsAuditEntry[];
+  }
+  return await sql`
+    SELECT id, organization_id, event_type, details, created_at
+    FROM ethics_audit_log
+    WHERE organization_id = ${orgId}
+    ORDER BY created_at DESC
+    LIMIT ${limit} OFFSET ${offset}` as unknown as EthicsAuditEntry[];
+}
+
+export async function getEthicsAuditSummary(
+  sql: SQL,
+  orgId: string,
+  days: number = 7
+): Promise<EthicsAuditSummary[]> {
+  return await sql`
+    SELECT
+      event_type,
+      COUNT(*)::INT AS count,
+      MAX(created_at) AS last_occurred
+    FROM ethics_audit_log
+    WHERE organization_id = ${orgId}
+      AND created_at >= NOW() - ${days + ' days'}::INTERVAL
+    GROUP BY event_type
+    ORDER BY count DESC` as unknown as EthicsAuditSummary[];
+}
+
+// =============================================
+// Data Retention
+// =============================================
+
+export async function getRetentionSettings(sql: SQL, orgId: string) {
+  const [row] = await sql`
+    SELECT retention_days, anonymize_on_expire
+    FROM organization_settings
+    WHERE organization_id = ${orgId}`;
+  return {
+    retention_days: (row as any)?.retention_days ?? 90,
+    anonymize_on_expire: (row as any)?.anonymize_on_expire ?? true,
+  };
+}
+
+export async function anonymizeOldSessions(
+  sql: SQL,
+  developerIds: string[],
+  cutoffDate: string
+): Promise<number> {
+  if (developerIds.length === 0) return 0;
+  const result = await sql`
+    UPDATE sessions
+    SET developer_id = 'anonymized'
+    WHERE developer_id IN (${inList(developerIds)})
+      AND status = 'ended'
+      AND ended_at IS NOT NULL
+      AND ended_at < ${cutoffDate}::TIMESTAMPTZ
+      AND developer_id != 'anonymized'`;
+  return (result as any).count ?? 0;
+}
+
+export async function purgeOldEvents(
+  sql: SQL,
+  developerIds: string[],
+  cutoffDate: string
+): Promise<number> {
+  if (developerIds.length === 0) return 0;
+  const result = await sql`
+    DELETE FROM events
+    WHERE session_id IN (
+      SELECT id FROM sessions
+      WHERE developer_id IN (${inList(developerIds)})
+        AND status = 'ended'
+        AND ended_at IS NOT NULL
+        AND ended_at < ${cutoffDate}::TIMESTAMPTZ
+    )
+    AND created_at < ${cutoffDate}::TIMESTAMPTZ`;
+  return (result as any).count ?? 0;
+}
+
+export async function logRetentionPurge(
+  sql: SQL,
+  orgId: string,
+  eventsDeleted: number,
+  sessionsAnonymized: number
+) {
+  await sql`
+    INSERT INTO retention_log (id, organization_id, events_deleted, sessions_anonymized)
+    VALUES (${crypto.randomUUID()}, ${orgId}, ${eventsDeleted}, ${sessionsAnonymized})`;
+}
+
+// =============================================
+// Consent / Privacy
+// =============================================
+
+export async function getConsentOverview(
+  sql: SQL,
+  orgId: string,
+  developerIds: string[]
+): Promise<ConsentOverview> {
+  if (developerIds.length === 0) {
+    return {
+      total_developers: 0,
+      sharing_details: 0,
+      privacy_mode_count: 0,
+      data_categories: getStaticDataCategories(),
+    };
+  }
+
+  const [counts] = await sql`
+    SELECT
+      COUNT(*)::INT AS total,
+      COUNT(*) FILTER (WHERE share_details = TRUE)::INT AS sharing
+    FROM developers
+    WHERE id IN (${inList(developerIds)})`;
+
+  const [privacyCounts] = await sql`
+    SELECT COUNT(DISTINCT s.id)::INT AS cnt
+    FROM sessions s
+    WHERE s.developer_id IN (${inList(developerIds)})
+      AND s.privacy_mode = 'redacted'
+      AND s.started_at >= NOW() - '30 days'::INTERVAL`;
+
+  return {
+    total_developers: (counts as any)?.total ?? 0,
+    sharing_details: (counts as any)?.sharing ?? 0,
+    privacy_mode_count: (privacyCounts as any)?.cnt ?? 0,
+    data_categories: getStaticDataCategories(),
+  };
+}
+
+function getStaticDataCategories() {
+  return [
+    { name: "Session Metadata", description: "Session start/end times, project name, permission mode", collected: true, opt_in_required: false },
+    { name: "Event Types & Timestamps", description: "Event type (tool.complete, prompt.submit, etc.) and when it occurred", collected: true, opt_in_required: false },
+    { name: "Tool Names & Results", description: "Which tools were used, success/fail status, duration", collected: true, opt_in_required: false },
+    { name: "Prompt Length", description: "Character count of prompts (not the prompt text itself)", collected: true, opt_in_required: false },
+    { name: "Developer Identity", description: "SHA256 hash of git email, display name", collected: true, opt_in_required: false },
+    { name: "Prompt Text", description: "Actual prompt content sent to Claude", collected: true, opt_in_required: true },
+    { name: "Tool Input", description: "Parameters passed to tools (file paths, code snippets)", collected: true, opt_in_required: true },
+    { name: "Response Text", description: "Claude's response content", collected: true, opt_in_required: true },
+  ];
+}
+
+export async function updateDeveloperPrivacy(
+  sql: SQL,
+  developerId: string,
+  shareDetails: boolean
+) {
+  await sql`
+    UPDATE developers SET share_details = ${shareDetails}
+    WHERE id = ${developerId}`;
+}
+
+export async function createDataRequest(
+  sql: SQL,
+  developerId: string,
+  orgId: string,
+  requestType: "export" | "deletion"
+): Promise<DataRequest> {
+  const id = crypto.randomUUID();
+  await sql`
+    INSERT INTO data_requests (id, developer_id, organization_id, request_type)
+    VALUES (${id}, ${developerId}, ${orgId}, ${requestType})`;
+  return {
+    id,
+    developer_id: developerId,
+    organization_id: orgId,
+    request_type: requestType,
+    status: "pending",
+    requested_at: new Date().toISOString(),
+    completed_at: null,
+    handled_by: null,
+    notes: null,
+  };
+}
+
+export async function getDataRequests(
+  sql: SQL,
+  orgId: string,
+  developerId?: string,
+  limit: number = 50
+): Promise<DataRequest[]> {
+  if (developerId) {
+    return await sql`
+      SELECT dr.*, d.name AS developer_name
+      FROM data_requests dr
+      LEFT JOIN developers d ON dr.developer_id = d.id
+      WHERE dr.organization_id = ${orgId} AND dr.developer_id = ${developerId}
+      ORDER BY dr.requested_at DESC
+      LIMIT ${limit}` as unknown as DataRequest[];
+  }
+  return await sql`
+    SELECT dr.*, d.name AS developer_name
+    FROM data_requests dr
+    LEFT JOIN developers d ON dr.developer_id = d.id
+    WHERE dr.organization_id = ${orgId}
+    ORDER BY dr.requested_at DESC
+    LIMIT ${limit}` as unknown as DataRequest[];
+}
+
+export async function updateDataRequestStatus(
+  sql: SQL,
+  requestId: string,
+  orgId: string,
+  status: "processing" | "completed" | "rejected",
+  handledBy: string,
+  notes?: string
+) {
+  const completedAt = status === "completed" || status === "rejected" ? new Date().toISOString() : null;
+  await sql`
+    UPDATE data_requests
+    SET status = ${status}, handled_by = ${handledBy}, notes = ${notes ?? null},
+        completed_at = ${completedAt}::TIMESTAMPTZ
+    WHERE id = ${requestId} AND organization_id = ${orgId}`;
+}
+
+// =============================================
+// Tooling Health
+// =============================================
+
+export async function getToolingHealthSummary(
+  sql: SQL,
+  developerIds: string[],
+  days: number = 7
+): Promise<ToolingHealthSummary[]> {
+  if (developerIds.length === 0) return [];
+
+  return await sql`
+    WITH recent AS (
+      SELECT
+        e.payload->>'toolName' AS tool_name,
+        s.project_name,
+        COUNT(*)::INT AS total_calls,
+        COUNT(*) FILTER (WHERE e.event_type = 'tool.fail')::INT AS failure_count,
+        ROUND(
+          COUNT(*) FILTER (WHERE e.event_type = 'tool.fail')::NUMERIC * 100
+          / NULLIF(COUNT(*), 0), 2
+        ) AS failure_rate,
+        AVG((e.payload->>'duration')::NUMERIC)::INT AS avg_duration_ms
+      FROM events e
+      JOIN sessions s ON e.session_id = s.id
+      WHERE s.developer_id IN (${inList(developerIds)})
+        AND e.event_type IN ('tool.complete', 'tool.fail')
+        AND e.created_at >= NOW() - ${days + ' days'}::INTERVAL
+      GROUP BY tool_name, s.project_name
+      HAVING COUNT(*) >= 3
+    )
+    SELECT *, 'stable'::TEXT AS trend FROM recent
+    ORDER BY failure_rate DESC, total_calls DESC` as unknown as ToolingHealthSummary[];
+}
+
+export async function getToolingHealthTrends(
+  sql: SQL,
+  orgId: string,
+  developerIds: string[],
+  days: number = 14
+): Promise<ToolingHealthTrend[]> {
+  if (developerIds.length === 0) return [];
+
+  return await sql`
+    SELECT
+      snapshot_date::TEXT AS date,
+      tool_name,
+      failure_rate::NUMERIC AS failure_rate,
+      total_calls
+    FROM tooling_health_snapshots
+    WHERE organization_id = ${orgId}
+      AND snapshot_date >= CURRENT_DATE - ${days}::INT
+    ORDER BY snapshot_date ASC, tool_name` as unknown as ToolingHealthTrend[];
+}
+
+export async function snapshotToolingHealth(
+  sql: SQL,
+  orgId: string,
+  developerIds: string[]
+) {
+  if (developerIds.length === 0) return;
+
+  // Compute today's aggregates per tool+project
+  const rows = await sql`
+    SELECT
+      e.payload->>'toolName' AS tool_name,
+      s.project_name,
+      COUNT(*)::INT AS total_calls,
+      COUNT(*) FILTER (WHERE e.event_type = 'tool.fail')::INT AS failure_count,
+      ROUND(
+        COUNT(*) FILTER (WHERE e.event_type = 'tool.fail')::NUMERIC * 100
+        / NULLIF(COUNT(*), 0), 2
+      ) AS failure_rate,
+      AVG((e.payload->>'duration')::NUMERIC)::INT AS avg_duration_ms
+    FROM events e
+    JOIN sessions s ON e.session_id = s.id
+    WHERE s.developer_id IN (${inList(developerIds)})
+      AND e.event_type IN ('tool.complete', 'tool.fail')
+      AND e.created_at >= CURRENT_DATE
+    GROUP BY tool_name, s.project_name
+    HAVING COUNT(*) >= 1`;
+
+  for (const row of rows as any[]) {
+    await sql`
+      INSERT INTO tooling_health_snapshots
+        (id, organization_id, tool_name, project_name, snapshot_date, total_calls, failure_count, failure_rate, avg_duration_ms)
+      VALUES (
+        ${crypto.randomUUID()}, ${orgId}, ${row.tool_name}, ${row.project_name},
+        CURRENT_DATE, ${row.total_calls}, ${row.failure_count}, ${row.failure_rate}, ${row.avg_duration_ms}
+      )
+      ON CONFLICT (organization_id, snapshot_date, tool_name, COALESCE(project_name, '__all__'))
+      DO UPDATE SET
+        total_calls = EXCLUDED.total_calls,
+        failure_count = EXCLUDED.failure_count,
+        failure_rate = EXCLUDED.failure_rate,
+        avg_duration_ms = EXCLUDED.avg_duration_ms`;
+  }
+}
+
+export async function detectToolingAnomalies(
+  sql: SQL,
+  orgId: string,
+  developerIds: string[]
+): Promise<Array<{ tool_name: string; project_name: string | null; current_rate: number; baseline_rate: number }>> {
+  if (developerIds.length === 0) return [];
+
+  return await sql`
+    WITH today AS (
+      SELECT tool_name, project_name, failure_rate, total_calls
+      FROM tooling_health_snapshots
+      WHERE organization_id = ${orgId} AND snapshot_date = CURRENT_DATE
+    ),
+    baseline AS (
+      SELECT tool_name, project_name,
+        AVG(failure_rate) AS avg_rate
+      FROM tooling_health_snapshots
+      WHERE organization_id = ${orgId}
+        AND snapshot_date >= CURRENT_DATE - 7
+        AND snapshot_date < CURRENT_DATE
+      GROUP BY tool_name, project_name
+    )
+    SELECT
+      t.tool_name,
+      t.project_name,
+      t.failure_rate::NUMERIC AS current_rate,
+      COALESCE(b.avg_rate, 0)::NUMERIC AS baseline_rate
+    FROM today t
+    LEFT JOIN baseline b ON t.tool_name = b.tool_name
+      AND (t.project_name = b.project_name OR (t.project_name IS NULL AND b.project_name IS NULL))
+    WHERE t.total_calls >= 5
+      AND t.failure_rate > COALESCE(b.avg_rate, 0) * 2
+      AND t.failure_rate >= 10` as unknown as any[];
 }

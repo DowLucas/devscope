@@ -22,6 +22,7 @@ import { TeamView } from "@/components/team/TeamView";
 import { InviteAcceptPage } from "@/components/team/InviteAcceptPage";
 import { SkillsView } from "@/components/skills/SkillsView";
 import { PlaybooksView } from "@/components/playbooks/PlaybooksView";
+import { PrivacyDashboard } from "@/components/privacy/PrivacyDashboard";
 import { useDevscopeSocket } from "@/hooks/useWebSocket";
 import { useActivityStore, type ActiveAgent } from "@/stores/activityStore";
 import { apiFetch } from "@/lib/api";
@@ -71,6 +72,7 @@ function AppContent() {
         <Route path="/dashboard/assistant/*?" component={AiView} />
         <Route path="/dashboard/skills/*?" component={SkillsView} />
         <Route path="/dashboard/playbooks/*?" component={PlaybooksView} />
+        <Route path="/dashboard/privacy/*?" component={PrivacyDashboard} />
         <Route path="/dashboard/team/*?" component={TeamView} />
         <Route path="/dashboard/account/*?" component={SettingsPage} />
         {/* Default dashboard view — Activity feed */}
