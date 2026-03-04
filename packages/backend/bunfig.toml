@@ -1,0 +1,3 @@
+[test]
+# Each test file runs in its own worker, preventing mock.module conflicts
+isolate = true

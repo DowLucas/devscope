@@ -1,4 +1,5 @@
 import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test";
+import { dbStubs, wsHandlerStubs } from "../../__test_helpers__/mockStubs";
 
 // ---------------------------------------------------------------------------
 // Mocks -- must be set up BEFORE importing the module under test
@@ -8,12 +9,12 @@ const mockGetStaleActiveSessions = mock(() => Promise.resolve([] as any[]));
 const mockEndSession = mock(() => Promise.resolve());
 const mockBroadcast = mock(() => {});
 
-mock.module("../../db", () => ({
+mock.module("../../db", () => dbStubs({
   getStaleActiveSessions: mockGetStaleActiveSessions,
   endSession: mockEndSession,
 }));
 
-mock.module("../../ws/handler", () => ({
+mock.module("../../ws/handler", () => wsHandlerStubs({
   broadcast: mockBroadcast,
 }));
 
