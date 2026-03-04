@@ -10,10 +10,10 @@ interface StatCardsProps {
 }
 
 const BASE_STATS = [
-  { key: "total_sessions" as const, label: "Total Sessions", icon: Layers, format: (_days: number) => (v: number) => v.toLocaleString() },
-  { key: "avg_duration_minutes" as const, label: "Avg Duration", icon: Clock, format: (_days: number) => (v: number) => v ? `${v.toFixed(1)}m` : "—" },
+  { key: "total_sessions" as const, label: "Total Sessions", icon: Layers, format: () => (v: number) => v.toLocaleString() },
+  { key: "avg_duration_minutes" as const, label: "Avg Duration", icon: Clock, format: () => (v: number) => v ? `${v.toFixed(1)}m` : "—" },
   { key: "active_days" as const, label: "Active Days", icon: Calendar, format: (days: number) => (v: number) => `${v} / ${days}` },
-  { key: "unique_developers" as const, label: "Developers", icon: Users, format: (_days: number) => (v: number) => v.toLocaleString() },
+  { key: "unique_developers" as const, label: "Developers", icon: Users, format: () => (v: number) => v.toLocaleString() },
 ];
 
 export function StatCards({ data, loading, days = 30 }: StatCardsProps) {
