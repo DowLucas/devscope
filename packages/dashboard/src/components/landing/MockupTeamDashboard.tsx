@@ -24,20 +24,20 @@ const INSIGHTS = [
   {
     icon: AlertTriangle,
     iconColor: "text-amber-400",
-    title: "Possible burnout risk: Sarah K",
+    title: "High session volume across the team",
     severity: "Warning",
     severityClass: "border border-amber-500/30 text-amber-400",
     narrative:
-      "34 sessions in 5 days with decreasing prompt quality scores. Consider reviewing workload.",
+      "Team-wide session count is 40% above the rolling average. Consider reviewing workload distribution in the next standup.",
   },
   {
     icon: Lightbulb,
     iconColor: "text-emerald-400",
-    title: "Recommend pairing on auth-service",
+    title: "auth-service has recurring blockers",
     severity: "Info",
     severityClass: "bg-muted text-muted-foreground",
     narrative:
-      "Alex M has had 4 stuck sessions on auth-service this week. Jordan P resolved similar issues recently.",
+      "4 stuck sessions on auth-service this week. Past resolutions suggest a pairing session or shared runbook could help.",
   },
 ] as const;
 
