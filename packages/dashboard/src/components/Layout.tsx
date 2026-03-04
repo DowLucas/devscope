@@ -33,16 +33,19 @@ function useNavBadges(): Record<string, NavBadge | null> {
   const developers = useActivityStore((s) => s.developers);
   const events = useActivityStore((s) => s.events);
 
-  // Tick every 10s so the "last minute" count expires stale events
+  // Tick every 10s so the "today" count stays current
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 10_000);
     return () => clearInterval(id);
   }, []);
 
-  const oneMinuteAgo = now - 60_000;
-  const recentEventCount = events.filter(
-    (e) => new Date(e.timestamp).getTime() > oneMinuteAgo
+  // Count events from today (since midnight) to include historic data
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+  const startOfDayMs = startOfDay.getTime();
+  const todayEventCount = events.filter(
+    (e) => new Date(e.timestamp).getTime() > startOfDayMs
   ).length;
 
   const unacknowledgedCount = alerts.filter((a) => !a.acknowledged).length;
@@ -51,8 +54,8 @@ function useNavBadges(): Record<string, NavBadge | null> {
   ).length;
 
   return {
-    "/dashboard": recentEventCount > 0
-      ? { count: recentEventCount, variant: "info" } : null,
+    "/dashboard": todayEventCount > 0
+      ? { count: todayEventCount, variant: "info" } : null,
     "/dashboard/topology": activeSessions.length > 0
       ? { count: activeSessions.length, variant: "success" } : null,
     "/dashboard/sessions": activeSessions.length > 0

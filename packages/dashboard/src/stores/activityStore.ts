@@ -14,7 +14,7 @@ export interface StoppedAgent extends ActiveAgent {
 
 const MAX_STOPPED_AGENTS = 100;
 
-interface ActivityState {
+export interface ActivityState {
   events: DevscopeEvent[];
   developers: (Developer & { activeSessions?: number })[];
   activeSessions: Session[];
