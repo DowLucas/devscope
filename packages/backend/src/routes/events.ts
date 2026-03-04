@@ -93,7 +93,7 @@ export function eventsRoutes(sql: SQL) {
     }
 
     // Log ethics event when privacy mode is activated
-    if (event.eventType === "session.start" && privacyMode === "redacted") {
+    if (event.eventType === "session.start" && privacyMode === "private") {
       const orgIds = await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${event.developerId}`;
       for (const row of orgIds as any[]) {
         logEthicsEvent(sql, row.organization_id, "privacy_mode_activated", {

@@ -290,7 +290,7 @@ describe("POST /events", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
-        validEvent({ payload: { permissionMode: "plan", privacyMode: "redacted" } }),
+        validEvent({ payload: { permissionMode: "plan", privacyMode: "private" } }),
       ),
     });
 
@@ -301,7 +301,7 @@ describe("POST /events", () => {
       "/home/user/project",
       "my-project",
       "plan",
-      "redacted",
+      "private",
     );
   });
 

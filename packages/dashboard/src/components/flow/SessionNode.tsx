@@ -103,7 +103,7 @@ export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
   const projectName = session.projectName ?? "";
   const startedAt = session.startedAt ?? "";
   const isDangerousMode = session.permissionMode === "dangerously-skip-permissions";
-  const isRedactedMode = session.privacyMode === "redacted";
+  const isRedactedMode = session.privacyMode === "private";
 
   const debounced = useDebouncedToolState(isToolRunning, currentToolName, latestEvent);
 
@@ -155,7 +155,7 @@ export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
               </span>
             )}
             {isRedactedMode && (
-              <span title="Privacy mode (redacted)">
+              <span title="Privacy mode (private)">
                 <Lock className="h-3.5 w-3.5 shrink-0 text-amber-400" />
               </span>
             )}

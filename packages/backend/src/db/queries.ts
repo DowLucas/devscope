@@ -1755,7 +1755,7 @@ export async function getConsentOverview(
     FROM sessions s
     JOIN organization_developer od ON od.developer_id = s.developer_id AND od.organization_id = ${orgId}
     WHERE s.developer_id IN (${inList(developerIds)})
-      AND s.privacy_mode = 'redacted'
+      AND s.privacy_mode = 'private'
       AND s.started_at >= NOW() - '30 days'::INTERVAL`;
 
   return {

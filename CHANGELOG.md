@@ -6,11 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-03-04
+
+### Changed
+- **Privacy mode rename**: `redacted` → `private`, `full` → `open`. Default changed to `standard`.
+  - Backend ethics event trigger updated: fires for `privacyMode === "private"`
+  - Consent overview SQL updated: counts sessions with `privacy_mode = 'private'`
+  - Dashboard session detail and topology badges updated to show "Private"
+
 ## [0.4.0] - 2026-03-04
 
 ### Added
 - **Ethics & consent dashboard** — data retention controls, consent management, tooling health monitor, and ethics audit log
-- **Privacy mode tracking** — plugin privacy mode (`redacted`/`full`) tracked end-to-end from plugin to dashboard
+- **Privacy mode tracking** — plugin privacy mode (`private`/`standard`/`open`) tracked end-to-end from plugin to dashboard
 - **Soft-delete account** — users can delete their account with a confirmation dialog
 - **Activity sidebar badge** — shows live event count from the last minute
 - **Settings sidebar** — dedicated settings panel with skill detail dialog
