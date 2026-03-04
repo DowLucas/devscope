@@ -297,4 +297,5 @@ export default {
   port: PORT,
   fetch: app.fetch,
   websocket,
+  idleTimeout: 120, // AI workflows (skill generation, insights) need longer than the 10s default
 };
