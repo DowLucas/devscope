@@ -53,24 +53,9 @@ export function teamsRoutes(sql: SQL) {
 
     const body = c.req.valid("json");
 
-    // Build dynamic SET clause based on provided fields
-    const updates: string[] = [];
-    const values: Record<string, unknown> = {};
-
-    if (body.inactive_threshold_days !== undefined) {
-      updates.push("inactive_threshold_days");
-      values.inactive_threshold_days = body.inactive_threshold_days;
-    }
-    if (body.retention_days !== undefined) {
-      updates.push("retention_days");
-      values.retention_days = body.retention_days;
-    }
-    if (body.anonymize_on_expire !== undefined) {
-      updates.push("anonymize_on_expire");
-      values.anonymize_on_expire = body.anonymize_on_expire;
-    }
-
-    if (updates.length === 0) {
+    if (body.inactive_threshold_days === undefined &&
+        body.retention_days === undefined &&
+        body.anonymize_on_expire === undefined) {
       return c.json({ error: "No fields to update" }, 400);
     }
 

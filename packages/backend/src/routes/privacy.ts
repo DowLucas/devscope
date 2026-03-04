@@ -25,6 +25,14 @@ const updateRequestSchema = z.object({
   notes: z.string().max(1000).optional(),
 });
 
+async function getUserDeveloperId(sql: SQL, userId: string): Promise<string | null> {
+  const [link] = await sql`
+    SELECT developer_id FROM user_developer_link
+    WHERE user_id = ${userId}
+    LIMIT 1`;
+  return (link as any)?.developer_id ?? null;
+}
+
 export function privacyRoutes(sql: SQL) {
   const app = new Hono();
 
@@ -43,22 +51,17 @@ export function privacyRoutes(sql: SQL) {
     const orgId = c.get("orgId" as never) as string;
     const user = c.get("user" as never) as any;
 
-    // Look up developer linked to this user
-    const [link] = await sql`
-      SELECT developer_id FROM user_developer_link
-      WHERE user_id = ${user.id}
-      LIMIT 1`;
-
-    if (!link) {
+    const developerId = await getUserDeveloperId(sql, user.id);
+    if (!developerId) {
       return c.json({ error: "No developer identity linked. Use the plugin first." }, 400);
     }
 
     const body = c.req.valid("json");
-    await updateDeveloperPrivacy(sql, (link as any).developer_id, body.share_details);
+    await updateDeveloperPrivacy(sql, developerId, body.share_details);
 
     logEthicsEvent(sql, orgId, "data_request_processed", {
       action: "preferences_updated",
-      developer_id: (link as any).developer_id,
+      developer_id: developerId,
       share_details: body.share_details,
     });
 
@@ -70,17 +73,13 @@ export function privacyRoutes(sql: SQL) {
     const orgId = c.get("orgId" as never) as string;
     const user = c.get("user" as never) as any;
 
-    const [link] = await sql`
-      SELECT developer_id FROM user_developer_link
-      WHERE user_id = ${user.id}
-      LIMIT 1`;
-
-    if (!link) {
+    const developerId = await getUserDeveloperId(sql, user.id);
+    if (!developerId) {
       return c.json({ error: "No developer identity linked. Use the plugin first." }, 400);
     }
 
     const body = c.req.valid("json");
-    const request = await createDataRequest(sql, (link as any).developer_id, orgId, body.request_type);
+    const request = await createDataRequest(sql, developerId, orgId, body.request_type);
 
     logEthicsEvent(sql, orgId, "data_request_processed", {
       action: "request_created",
@@ -102,14 +101,10 @@ export function privacyRoutes(sql: SQL) {
       return c.json(await getDataRequests(sql, orgId));
     }
 
-    const [link] = await sql`
-      SELECT developer_id FROM user_developer_link
-      WHERE user_id = ${user.id}
-      LIMIT 1`;
+    const developerId = await getUserDeveloperId(sql, user.id);
+    if (!developerId) return c.json([]);
 
-    if (!link) return c.json([]);
-
-    return c.json(await getDataRequests(sql, orgId, (link as any).developer_id));
+    return c.json(await getDataRequests(sql, orgId, developerId));
   });
 
   // PUT /api/privacy/consent/data-requests/:id — admin update status

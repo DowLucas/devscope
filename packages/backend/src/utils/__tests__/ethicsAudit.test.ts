@@ -1,9 +1,9 @@
-import { describe, expect, test, beforeEach, mock, spyOn } from "bun:test";
+import { describe, expect, test, beforeEach } from "bun:test";
 import { logEthicsEvent, flushEthicsAudit } from "../ethicsAudit";
 
 // Mock SQL with a tracking array for inserts
 function createMockSql() {
-  const inserts: Array<{ organization_id: string | null; event_type: string; details: Record<string, unknown> }> = [];
+  let beginCalled = false;
 
   const txProxy = new Proxy({}, {
     get: () => {
@@ -17,15 +17,21 @@ function createMockSql() {
     (...args: unknown[]) => Promise.resolve([]),
     {
       begin: async (fn: (tx: any) => Promise<void>) => {
+        beginCalled = true;
         await fn(txProxy);
       },
     }
   );
 
-  return { sql: sql as any, inserts };
+  return { sql: sql as any, wasBeginCalled: () => beginCalled };
 }
 
 describe("ethicsAudit", () => {
+  // Flush any leftover pending events between tests
+  beforeEach(async () => {
+    await flushEthicsAudit();
+  });
+
   test("logEthicsEvent accumulates events without immediate flush", () => {
     const { sql } = createMockSql();
 
@@ -35,24 +41,16 @@ describe("ethicsAudit", () => {
   });
 
   test("flushEthicsAudit flushes pending events", async () => {
-    const { sql } = createMockSql();
-    let beginCalled = false;
-    sql.begin = async (fn: (tx: any) => Promise<void>) => {
-      beginCalled = true;
-      const txProxy = new Proxy({}, {
-        get: () => (..._args: unknown[]) => Promise.resolve([]),
-      });
-      await fn(txProxy);
-    };
+    const { sql, wasBeginCalled } = createMockSql();
 
     logEthicsEvent(sql, "org-2", "data_request_processed", { action: "test" });
     await flushEthicsAudit();
 
-    expect(beginCalled).toBe(true);
+    expect(wasBeginCalled()).toBe(true);
   });
 
   test("flushEthicsAudit is safe to call with no pending events", async () => {
-    // Should not throw even with no SQL set
+    // Should not throw even with no events pending
     await flushEthicsAudit();
   });
 

@@ -1,6 +1,7 @@
 -- Data retention settings per organization
 ALTER TABLE organization_settings
-  ADD COLUMN IF NOT EXISTS retention_days INTEGER NOT NULL DEFAULT 90,
+  ADD COLUMN IF NOT EXISTS retention_days INTEGER NOT NULL DEFAULT 90
+    CHECK (retention_days >= 30 AND retention_days <= 365),
   ADD COLUMN IF NOT EXISTS anonymize_on_expire BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- Seed an anonymized developer record used as the target for anonymization
@@ -16,3 +17,6 @@ CREATE TABLE IF NOT EXISTS retention_log (
   events_deleted INTEGER NOT NULL DEFAULT 0,
   sessions_anonymized INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE INDEX IF NOT EXISTS idx_retention_log_org
+  ON retention_log(organization_id, purged_at DESC);

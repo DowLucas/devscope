@@ -1,13 +1,10 @@
 import type { SQL } from "bun";
+import type { EthicsEventType } from "@devscope/shared";
 
-export type EthicsEventType =
-  | "sensitive_fields_stripped"
-  | "ai_individual_reference_blocked"
-  | "privacy_mode_activated"
-  | "data_request_processed"
-  | "retention_purge_executed";
+export type { EthicsEventType };
 
 interface PendingAuditEvent {
+  sql: SQL;
   organization_id: string | null;
   event_type: EthicsEventType;
   details: Record<string, unknown>;
@@ -18,16 +15,14 @@ const FLUSH_THRESHOLD = 50;
 
 let pendingEvents: PendingAuditEvent[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
-let activeSql: SQL | null = null;
 
 async function flush() {
   if (pendingEvents.length === 0) return;
   const batch = pendingEvents.splice(0);
-  const db = activeSql;
+  const db = batch[0].sql;
   if (!db) return;
 
   try {
-    // Build a batch insert using individual INSERTs wrapped in a transaction
     await db.begin(async (tx) => {
       for (const evt of batch) {
         await tx`
@@ -58,8 +53,8 @@ export function logEthicsEvent(
   eventType: EthicsEventType,
   details: Record<string, unknown> = {},
 ) {
-  activeSql = sql;
   pendingEvents.push({
+    sql,
     organization_id: orgId,
     event_type: eventType,
     details,

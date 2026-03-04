@@ -16,6 +16,7 @@ export function ConsentOverview() {
   const fetchOverview = useCallback(async () => {
     try {
       const res = await apiFetch("/api/privacy/consent/overview");
+      if (!res.ok) throw new Error(`Failed to load overview: ${res.status}`);
       setOverview(await res.json());
     } catch (err) {
       console.error("[ConsentOverview]", err);
@@ -96,6 +97,7 @@ export function DataRequestsView() {
   const fetchRequests = useCallback(async () => {
     try {
       const res = await apiFetch("/api/privacy/consent/data-requests");
+      if (!res.ok) throw new Error(`Failed to load requests: ${res.status}`);
       setRequests(await res.json());
     } catch (err) {
       console.error("[DataRequests]", err);

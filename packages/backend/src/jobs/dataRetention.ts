@@ -33,8 +33,10 @@ export function startDataRetention(sql: SQL) {
         if (devIds.length === 0) continue;
 
         const settings = await getRetentionSettings(sql, orgId);
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - settings.retention_days);
+        const now = new Date();
+        const cutoff = new Date(Date.UTC(
+          now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - settings.retention_days
+        ));
         const cutoffDate = cutoff.toISOString();
 
         let sessionsAnonymized = 0;

@@ -27,8 +27,8 @@ export function EthicsAuditLog() {
         apiFetch("/api/ethics/summary?days=7"),
         apiFetch(`/api/ethics/audit?limit=50${filter ? `&event_type=${filter}` : ""}`),
       ]);
-      setSummary(await summaryRes.json());
-      setEntries(await entriesRes.json());
+      if (summaryRes.ok) setSummary(await summaryRes.json());
+      if (entriesRes.ok) setEntries(await entriesRes.json());
     } catch (err) {
       console.error("[EthicsAuditLog]", err);
     } finally {

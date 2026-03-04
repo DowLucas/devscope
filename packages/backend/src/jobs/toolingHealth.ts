@@ -7,7 +7,6 @@ import { getOrgDeveloperIds } from "../services/developerLink";
 import { broadcastToOrg } from "../ws/handler";
 
 const CHECK_INTERVAL_MS = 60_000; // Check every minute
-const SNAPSHOT_INTERVAL_HOURS = 1; // Snapshot every hour
 
 export function startToolingHealthCheck(sql: SQL) {
   const g = globalThis as any;
@@ -44,7 +43,7 @@ export function startToolingHealthCheck(sql: SQL) {
           const alertId = crypto.randomUUID();
           await sql`
             INSERT INTO alert_events (id, rule_id, session_id, developer_id, tool_name, failure_count, organization_id)
-            VALUES (${alertId}, 'tooling-health-auto', 'system', 'system', ${anomaly.tool_name}, ${Math.round(anomaly.current_rate)}, ${orgId})`;
+            VALUES (${alertId}, 'tooling-health-auto', 'system', 'system', ${anomaly.tool_name}, ${anomaly.total_calls ?? 0}, ${orgId})`;
 
           broadcastToOrg(orgId, {
             type: "alert.triggered",
@@ -69,5 +68,5 @@ export function startToolingHealthCheck(sql: SQL) {
   }
 
   g.__gc_toolhealth_interval = setInterval(check, CHECK_INTERVAL_MS);
-  console.log(`[toolhealth] Tooling health check started (snapshots every ${SNAPSHOT_INTERVAL_HOURS}h)`);
+  console.log("[toolhealth] Tooling health check started (snapshots every hour)");
 }

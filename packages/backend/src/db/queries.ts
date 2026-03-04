@@ -1657,7 +1657,7 @@ export async function getEthicsAuditSummary(
       MAX(created_at) AS last_occurred
     FROM ethics_audit_log
     WHERE organization_id = ${orgId}
-      AND created_at >= NOW() - ${days + ' days'}::INTERVAL
+      AND created_at >= NOW() - make_interval(days => ${days})
     GROUP BY event_type
     ORDER BY count DESC` as unknown as EthicsAuditSummary[];
 }
@@ -1691,7 +1691,7 @@ export async function anonymizeOldSessions(
       AND ended_at IS NOT NULL
       AND ended_at < ${cutoffDate}::TIMESTAMPTZ
       AND developer_id != 'anonymized'`;
-  return (result as any).count ?? 0;
+  return (result as any[]).length ?? 0;
 }
 
 export async function purgeOldEvents(
@@ -1710,7 +1710,7 @@ export async function purgeOldEvents(
         AND ended_at < ${cutoffDate}::TIMESTAMPTZ
     )
     AND created_at < ${cutoffDate}::TIMESTAMPTZ`;
-  return (result as any).count ?? 0;
+  return (result as any[]).length ?? 0;
 }
 
 export async function logRetentionPurge(
@@ -1877,7 +1877,7 @@ export async function getToolingHealthSummary(
       JOIN sessions s ON e.session_id = s.id
       WHERE s.developer_id IN (${inList(developerIds)})
         AND e.event_type IN ('tool.complete', 'tool.fail')
-        AND e.created_at >= NOW() - ${days + ' days'}::INTERVAL
+        AND e.created_at >= NOW() - make_interval(days => ${days})
       GROUP BY tool_name, s.project_name
       HAVING COUNT(*) >= 3
     )
@@ -1953,7 +1953,7 @@ export async function detectToolingAnomalies(
   sql: SQL,
   orgId: string,
   developerIds: string[]
-): Promise<Array<{ tool_name: string; project_name: string | null; current_rate: number; baseline_rate: number }>> {
+): Promise<Array<{ tool_name: string; project_name: string | null; current_rate: number; baseline_rate: number; total_calls: number }>> {
   if (developerIds.length === 0) return [];
 
   return await sql`
@@ -1975,7 +1975,8 @@ export async function detectToolingAnomalies(
       t.tool_name,
       t.project_name,
       t.failure_rate::NUMERIC AS current_rate,
-      COALESCE(b.avg_rate, 0)::NUMERIC AS baseline_rate
+      COALESCE(b.avg_rate, 0)::NUMERIC AS baseline_rate,
+      t.total_calls
     FROM today t
     LEFT JOIN baseline b ON t.tool_name = b.tool_name
       AND (t.project_name = b.project_name OR (t.project_name IS NULL AND b.project_name IS NULL))

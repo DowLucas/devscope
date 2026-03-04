@@ -27,24 +27,28 @@ function TrendIcon({ trend }: { trend: string }) {
 export function ToolingHealthCard() {
   const [data, setData] = useState<ToolingHealthSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
       const res = await apiFetch("/api/alerts/tooling-health?days=7");
-      if (res.ok) {
-        const items: ToolingHealthSummary[] = await res.json();
-        // Group by tool, pick highest failure rate per tool
-        const byTool = new Map<string, ToolingHealthSummary>();
-        for (const item of items) {
-          const existing = byTool.get(item.tool_name);
-          if (!existing || item.failure_rate > existing.failure_rate) {
-            byTool.set(item.tool_name, item);
-          }
-        }
-        setData(Array.from(byTool.values()).slice(0, 8));
+      if (!res.ok) {
+        setError(true);
+        return;
       }
+      const items: ToolingHealthSummary[] = await res.json();
+      // Group by tool, pick highest failure rate per tool
+      const byTool = new Map<string, ToolingHealthSummary>();
+      for (const item of items) {
+        const existing = byTool.get(item.tool_name);
+        if (!existing || item.failure_rate > existing.failure_rate) {
+          byTool.set(item.tool_name, item);
+        }
+      }
+      setData(Array.from(byTool.values()).slice(0, 8));
     } catch (err) {
       console.error("[ToolingHealthCard]", err);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -56,6 +60,16 @@ export function ToolingHealthCard() {
 
   if (loading) {
     return <Skeleton className="h-48 rounded-xl" />;
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-center text-sm text-muted-foreground">
+          Failed to load tooling health data.
+        </CardContent>
+      </Card>
+    );
   }
 
   if (data.length === 0) return null;
