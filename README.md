@@ -52,21 +52,39 @@ Select `https://devscope.sh` when prompted and enter your API key. That's it.
 
 For teams that want full control over their data.
 
-**Prerequisites:** [Docker](https://www.docker.com/) (recommended) or [Bun](https://bun.sh/) v1.0+ with PostgreSQL
+**Prerequisites:** [Docker](https://www.docker.com/) with Compose
 
 ```bash
 git clone https://github.com/DowLucas/devscope.git
 cd devscope
 
-# Copy and configure environment
+# 1. Copy the env template
 cp .env.production.example .env
-# Edit .env — set BETTER_AUTH_SECRET, POSTGRES_PASSWORD, DOMAIN, etc.
-
-# Start production stack (Caddy with auto-TLS on :80/:443)
-docker compose -f docker-compose.yml up --build
 ```
 
-See [`.env.production.example`](.env.production.example) for all available configuration options.
+Edit `.env` and set at minimum:
+
+```bash
+BETTER_AUTH_SECRET=<openssl rand -base64 32>
+POSTGRES_PASSWORD=<openssl rand -base64 32>
+BETTER_AUTH_URL=https://your-domain.com
+DOMAIN=your-domain.com
+GC_CORS_ORIGIN=https://your-domain.com
+
+# Optional — seed admin account on first startup
+DEVSCOPE_ADMIN_EMAIL=admin@your-domain.com
+DEVSCOPE_ADMIN_PASSWORD=<strong-password>
+DEVSCOPE_ADMIN_NAME=Admin
+```
+
+```bash
+# 2. Start the production stack (Caddy auto-TLS on :80/:443)
+docker compose -f docker-compose.yml up --build -d
+```
+
+After startup, open your domain and sign in with the admin credentials you set. Create an organization, generate an API key, then install the plugin (see below).
+
+See [`.env.production.example`](.env.production.example) for all configuration options including OAuth, email, and AI features.
 
 ### Install the Plugin
 
@@ -137,18 +155,56 @@ The plugin reads configuration from (in priority order):
 
 ### Server Environment Variables
 
+**Required:**
+
+| Variable | Description |
+|---|---|
+| `BETTER_AUTH_SECRET` | Session signing secret — generate with `openssl rand -base64 32` |
+| `POSTGRES_PASSWORD` | PostgreSQL password (used by Docker Compose) |
+
+**Core (strongly recommended):**
+
 | Variable | Description | Default |
 |---|---|---|
-| `BETTER_AUTH_SECRET` | Session signing secret (required) | — |
-| `DOMAIN` | Domain for Caddy auto-TLS | `localhost` |
-| `POSTGRES_PASSWORD` | PostgreSQL password | `devscope` |
-| `GC_CORS_ORIGIN` | Allowed CORS origins | `http://localhost:5173` |
-| `STALE_SESSION_TIMEOUT_MINUTES` | Auto-close inactive sessions | `5` |
-| `GEMINI_API_KEY` | Google Gemini for AI reports (optional) | — |
-| `DEVSCOPE_ADMIN_EMAIL` | Seed admin email | — |
-| `DEVSCOPE_ADMIN_PASSWORD` | Seed admin password | — |
+| `BETTER_AUTH_URL` | Public URL of the backend — used for OAuth callbacks and email links | `http://localhost:6767` |
+| `DOMAIN` | Domain for Caddy auto-TLS (Let's Encrypt) | `localhost` |
+| `GC_CORS_ORIGIN` | Allowed CORS origins — must match your dashboard URL | `http://localhost:5173` |
+| `STALE_SESSION_TIMEOUT_MINUTES` | Auto-close sessions with no activity | `5` |
 
-See [`.env.production.example`](.env.production.example) for the full list.
+**Admin seed account** (created on first startup if no users exist):
+
+| Variable | Description | Default |
+|---|---|---|
+| `DEVSCOPE_ADMIN_EMAIL` | Admin email address | — |
+| `DEVSCOPE_ADMIN_PASSWORD` | Admin password | — |
+| `DEVSCOPE_ADMIN_NAME` | Admin display name | `Admin` |
+| `DEVSCOPE_ORG_NAME` | Default organization name | `DevScope` |
+
+**OAuth providers** (optional — email/password login always works):
+
+| Variable | Description |
+|---|---|
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth app credentials |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth app credentials |
+
+**Email — Resend** (optional — invite URLs logged to console if not set):
+
+| Variable | Description |
+|---|---|
+| `RESEND_API_KEY` | [Resend](https://resend.com) API key for invitation emails |
+| `RESEND_FROM` | From address, e.g. `DevScope <noreply@yourdomain.com>` |
+
+**AI features — Google Gemini** (optional):
+
+| Variable | Description | Default |
+|---|---|---|
+| `GEMINI_API_KEY` | Google Gemini API key for AI insights and session titles | — |
+| `AI_DAILY_TOKEN_BUDGET` | Max tokens per day across all AI calls | `1000000` |
+| `AI_INSIGHT_SCHEDULE` | Hour (0–23 UTC) for daily AI insight job | `0` (midnight) |
+| `SESSION_TITLE_INTERVAL_MINUTES` | How often to generate session titles | `3` |
+| `PATTERN_ANALYSIS_SCHEDULE` | How often (hours) to run pattern analysis | `1` |
+
+See [`.env.production.example`](.env.production.example) for an annotated template.
 
 ## API
 
