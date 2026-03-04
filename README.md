@@ -11,6 +11,8 @@
   <a href="https://devscope.sh"><img src="https://img.shields.io/badge/Cloud-devscope.sh-blueviolet" alt="Cloud"></a>
   <a href="https://github.com/DowLucas/devscope/stargazers"><img src="https://img.shields.io/github/stars/DowLucas/devscope" alt="GitHub stars"></a>
   <a href="https://bun.sh/"><img src="https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun" alt="Bun"></a>
+  <a href="https://github.com/DowLucas/devscope/actions/workflows/ci.yml"><img src="https://github.com/DowLucas/devscope/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://railway.app"><img src="https://img.shields.io/badge/deployed%20on-Railway-0B0D0E?logo=railway" alt="Deployed on Railway"></a>
 </p>
 
 Real-time monitoring dashboard for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) developer sessions. Track what your team is building, catch stuck sessions, and understand how AI-assisted development is being used across your organization.
