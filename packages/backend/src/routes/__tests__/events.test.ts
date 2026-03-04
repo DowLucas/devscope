@@ -1,5 +1,6 @@
 import { describe, expect, test, mock, beforeEach } from "bun:test";
 import { Hono } from "hono";
+import { dbStubs, wsHandlerStubs, developerLinkStubs, stripSensitiveFieldsStubs } from "../../__test_helpers__/mockStubs";
 
 // ---------------------------------------------------------------------------
 // Mocks -- must be set up BEFORE importing the module under test
@@ -12,7 +13,7 @@ const mockInsertEvent = mock(() => Promise.resolve());
 const mockGetRecentEvents = mock(() => Promise.resolve([] as any[]));
 const mockCheckAlertThresholds = mock(() => Promise.resolve(null as any));
 
-mock.module("../../db", () => ({
+mock.module("../../db", () => dbStubs({
   upsertDeveloper: mockUpsertDeveloper,
   createSession: mockCreateSession,
   endSession: mockEndSession,
@@ -23,13 +24,13 @@ mock.module("../../db", () => ({
 
 const mockBroadcastToOrg = mock(() => {});
 
-mock.module("../../ws/handler", () => ({
+mock.module("../../ws/handler", () => wsHandlerStubs({
   broadcastToOrg: mockBroadcastToOrg,
 }));
 
 const mockAutoLinkDeveloperToOrg = mock(() => Promise.resolve());
 
-mock.module("../../services/developerLink", () => ({
+mock.module("../../services/developerLink", () => developerLinkStubs({
   autoLinkDeveloperToOrg: mockAutoLinkDeveloperToOrg,
 }));
 
@@ -41,7 +42,7 @@ const mockStripSensitivePayload = mock((payload: Record<string, unknown>) => {
   return stripped;
 });
 
-mock.module("../../utils/stripSensitiveFields", () => ({
+mock.module("../../utils/stripSensitiveFields", () => stripSensitiveFieldsStubs({
   stripSensitivePayload: mockStripSensitivePayload,
 }));
 

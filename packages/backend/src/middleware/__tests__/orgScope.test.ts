@@ -1,4 +1,5 @@
 import { describe, expect, test, mock, beforeEach } from "bun:test";
+import { developerLinkStubs } from "../../__test_helpers__/mockStubs";
 
 // ---------------------------------------------------------------------------
 // Mocks – must be set up BEFORE importing the module under test
@@ -6,7 +7,7 @@ import { describe, expect, test, mock, beforeEach } from "bun:test";
 
 const mockGetOrgDeveloperIds = mock(() => Promise.resolve([] as string[]));
 
-mock.module("../../services/developerLink", () => ({
+mock.module("../../services/developerLink", () => developerLinkStubs({
   getOrgDeveloperIds: mockGetOrgDeveloperIds,
 }));
 
