@@ -58,50 +58,6 @@ export interface SessionSequence {
   prompt_features: PromptFeatures | null;
 }
 
-async function getSessionPromptEvents(
-  sql: SQL,
-  sessionId: string
-): Promise<PromptEvent[]> {
-  const rows = await sql`
-    SELECT
-      COALESCE((e.payload->>'promptLength')::INT, 0) as prompt_length,
-      COALESCE((e.payload->>'isContinuation')::BOOLEAN, FALSE) as is_continuation
-    FROM events e
-    WHERE e.session_id = ${sessionId}
-      AND e.event_type = 'prompt.submit'
-    ORDER BY e.created_at ASC`;
-  return rows as PromptEvent[];
-}
-
-async function getSessionPromptTexts(
-  sql: SQL,
-  sessionId: string
-): Promise<(string | null)[]> {
-  const rows = await sql`
-    SELECT e.payload->>'promptText' as prompt_text
-    FROM events e
-    WHERE e.session_id = ${sessionId}
-      AND e.event_type = 'prompt.submit'
-    ORDER BY e.created_at ASC`;
-  return (rows as any[]).map(r => r.prompt_text ?? null);
-}
-
-async function getSessionAgentEvents(
-  sql: SQL,
-  sessionId: string
-): Promise<AgentEvent[]> {
-  const rows = await sql`
-    SELECT
-      e.payload->>'agentType' as agent_type,
-      e.payload->>'agentId' as agent_id,
-      e.event_type
-    FROM events e
-    WHERE e.session_id = ${sessionId}
-      AND e.event_type IN ('agent.start', 'agent.stop')
-    ORDER BY e.created_at ASC`;
-  return rows as AgentEvent[];
-}
-
 export async function getRecentSessionSequences(
   sql: SQL,
   days: number = 1,
