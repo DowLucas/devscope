@@ -129,7 +129,7 @@ export function TeamSkillsSection() {
         <div className="text-center py-12 space-y-3">
           <BookOpen className="h-10 w-10 mx-auto text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground">
-            No team skills yet. Generate skills from your team's patterns and sessions.
+            No workflow skills yet. Generate skills from your team's proven Claude Code strategies.
           </p>
           <GenerateSkillsButton />
         </div>

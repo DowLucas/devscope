@@ -29,8 +29,8 @@ export function AntiPatternTrendChart({ data, loading }: AntiPatternTrendChartPr
 
   return (
     <ChartCard
-      title="Anti-Pattern Frequency"
-      description="Weekly anti-pattern occurrences (lower is better)"
+      title="Usage Issues"
+      description="Weekly usage issues detected (lower is better)"
     >
       {loading ? null : (
         <ResponsiveContainer width="100%" height={300}>
@@ -45,7 +45,7 @@ export function AntiPatternTrendChart({ data, loading }: AntiPatternTrendChartPr
             <Tooltip content={ChartTooltip} />
             <Bar
               dataKey="count"
-              name="Anti-Patterns"
+              name="Issues"
               fill={CHART_COLORS.destructive}
               radius={[4, 4, 0, 0]}
             />

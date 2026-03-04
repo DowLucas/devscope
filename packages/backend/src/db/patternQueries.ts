@@ -30,6 +30,17 @@ export async function getSessionToolSequence(
   return rows as ToolEvent[];
 }
 
+export interface PromptEvent {
+  prompt_length: number;
+  is_continuation: boolean;
+}
+
+export interface AgentEvent {
+  agent_type: string;
+  agent_id: string;
+  event_type: string; // agent.start or agent.stop
+}
+
 export interface SessionSequence {
   session_id: string;
   developer_id: string;
@@ -37,6 +48,43 @@ export interface SessionSequence {
   tools: ToolEvent[];
   tool_names: string[];
   success_rate: number;
+  prompt_count: number;
+  avg_prompt_length: number;
+  continuation_ratio: number;
+  agent_delegations: number;
+  agent_types: string[];
+  duration_minutes: number;
+}
+
+async function getSessionPromptEvents(
+  sql: SQL,
+  sessionId: string
+): Promise<PromptEvent[]> {
+  const rows = await sql`
+    SELECT
+      COALESCE((e.payload->>'promptLength')::INT, 0) as prompt_length,
+      COALESCE((e.payload->>'isContinuation')::BOOLEAN, FALSE) as is_continuation
+    FROM events e
+    WHERE e.session_id = ${sessionId}
+      AND e.event_type = 'prompt.submit'
+    ORDER BY e.created_at ASC`;
+  return rows as PromptEvent[];
+}
+
+async function getSessionAgentEvents(
+  sql: SQL,
+  sessionId: string
+): Promise<AgentEvent[]> {
+  const rows = await sql`
+    SELECT
+      e.payload->>'agentType' as agent_type,
+      e.payload->>'agentId' as agent_id,
+      e.event_type
+    FROM events e
+    WHERE e.session_id = ${sessionId}
+      AND e.event_type IN ('agent.start', 'agent.stop')
+    ORDER BY e.created_at ASC`;
+  return rows as AgentEvent[];
 }
 
 export async function getRecentSessionSequences(
@@ -48,7 +96,8 @@ export async function getRecentSessionSequences(
   let sessionsQuery;
   if (developerIds && developerIds.length > 0) {
     sessionsQuery = sql`
-      SELECT s.id as session_id, s.developer_id, s.project_name
+      SELECT s.id as session_id, s.developer_id, s.project_name,
+        ROUND(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::FLOAT as duration_minutes
       FROM sessions s
       WHERE s.status = 'ended'
         AND s.ended_at >= NOW() - make_interval(days => ${days})
@@ -57,7 +106,8 @@ export async function getRecentSessionSequences(
       LIMIT ${limit}`;
   } else {
     sessionsQuery = sql`
-      SELECT s.id as session_id, s.developer_id, s.project_name
+      SELECT s.id as session_id, s.developer_id, s.project_name,
+        ROUND(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::FLOAT as duration_minutes
       FROM sessions s
       WHERE s.status = 'ended'
         AND s.ended_at >= NOW() - make_interval(days => ${days})
@@ -69,19 +119,42 @@ export async function getRecentSessionSequences(
   const sequences: SessionSequence[] = [];
 
   for (const session of sessions) {
-    const tools = await getSessionToolSequence(sql, (session as any).session_id);
+    const sid = (session as any).session_id;
+    const [tools, prompts, agents] = await Promise.all([
+      getSessionToolSequence(sql, sid),
+      getSessionPromptEvents(sql, sid),
+      getSessionAgentEvents(sql, sid),
+    ]);
     if (tools.length < 3) continue; // Skip trivial sessions
 
     const successCount = tools.filter(t => t.success).length;
     const successRate = tools.length > 0 ? successCount / tools.length : 0;
 
+    const promptCount = prompts.length;
+    const avgPromptLength = promptCount > 0
+      ? Math.round(prompts.reduce((sum, p) => sum + p.prompt_length, 0) / promptCount)
+      : 0;
+    const continuationCount = prompts.filter(p => p.is_continuation).length;
+    const continuationRatio = promptCount > 0
+      ? Math.round((continuationCount / promptCount) * 1000) / 1000
+      : 0;
+
+    const agentStarts = agents.filter(a => a.event_type === "agent.start");
+    const agentTypes = [...new Set(agentStarts.map(a => a.agent_type).filter(Boolean))];
+
     sequences.push({
-      session_id: (session as any).session_id,
+      session_id: sid,
       developer_id: (session as any).developer_id,
       project_name: (session as any).project_name ?? "",
       tools,
       tool_names: tools.map(t => t.tool_name),
       success_rate: Math.round(successRate * 1000) / 1000,
+      prompt_count: promptCount,
+      avg_prompt_length: avgPromptLength,
+      continuation_ratio: continuationRatio,
+      agent_delegations: agentStarts.length,
+      agent_types: agentTypes,
+      duration_minutes: (session as any).duration_minutes ?? 0,
     });
   }
 

@@ -34,10 +34,10 @@ export function detectRetryLoops(sequence: ToolEvent[]): DetectedAntiPattern[] {
     if (consecutive >= 3 && failCount >= 3) {
       results.push({
         rule: "retry_loop",
-        name: `Retry Loop: ${tool}`,
-        description: `Tool "${tool}" was called ${consecutive} times consecutively with ${failCount} failures, indicating a retry loop.`,
+        name: `Repeated ${tool} Failures`,
+        description: `Claude Code retried "${tool}" ${consecutive} times with ${failCount} failures. This often happens when the prompt lacks sufficient context or the task needs to be broken into smaller steps.`,
         severity: consecutive >= 5 ? "critical" : "warning",
-        suggestion: `When "${tool}" fails repeatedly, try a different approach instead of retrying the same call. Consider reading the error message and adjusting parameters.`,
+        suggestion: `Try providing more specific context in your prompt (e.g. exact file paths, function names, or expected behavior). If the task is complex, break it into smaller, focused requests. You can also use /clear to reset context if it's become cluttered.`,
         details: {
           tool_name: tool,
           consecutive_calls: consecutive,
@@ -77,10 +77,10 @@ export function detectFailureCascades(sequence: ToolEvent[]): DetectedAntiPatter
       const uniqueTools = [...new Set(cascadeTools)];
       results.push({
         rule: "failure_cascade",
-        name: "Failure Cascade",
-        description: `A cascade of ${cascadeLength} consecutive failures across ${uniqueTools.length} tool(s), triggered by "${sequence[i].tool_name}".`,
+        name: "Cascading Failures",
+        description: `${cascadeLength} consecutive failures across ${uniqueTools.length} tool(s) after "${sequence[i].tool_name}" failed. This usually means the initial request was too ambiguous or missing key context.`,
         severity: cascadeLength >= 6 ? "critical" : "warning",
-        suggestion: `When multiple tools fail in sequence, stop and reassess the approach. The initial failure in "${sequence[i].tool_name}" likely caused downstream issues.`,
+        suggestion: `When Claude Code hits a wall, try rephrasing your request with more constraints — include file paths, expected inputs/outputs, or error messages. Consider using the Agent tool for complex research tasks, or break the work into focused steps.`,
         details: {
           trigger_tool: sequence[i].tool_name,
           cascade_length: cascadeLength,
@@ -112,10 +112,10 @@ export function detectAbandonedSessions(
   if (failRate >= 0.5) {
     return {
       rule: "abandoned_session",
-      name: "Abandoned Session",
-      description: `Session ended with ${Math.round(failRate * 100)}% failure rate in the last ${lastN.length} tool calls, suggesting it was abandoned due to issues.`,
+      name: "Struggling Session",
+      description: `Session ended with ${Math.round(failRate * 100)}% failure rate in its final ${lastN.length} tool calls. The task may have been too broad or the context too cluttered for effective work.`,
       severity: failRate >= 0.8 ? "critical" : "warning",
-      suggestion: "When facing persistent failures, try asking for help or breaking the task into smaller pieces instead of continuing to struggle.",
+      suggestion: "For complex tasks, try starting a fresh session with /clear or breaking the work into smaller sessions. Providing a CLAUDE.md file with project-specific context can help Claude Code understand your codebase better. Consider using specific file paths and function names in your prompts.",
       details: {
         failure_rate: Math.round(failRate * 1000) / 1000,
         last_tool_count: lastN.length,

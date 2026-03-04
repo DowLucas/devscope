@@ -46,19 +46,27 @@ function detectRuleBased(
   return { ruleBasedHits: hits };
 }
 
-const CLASSIFY_PROMPT = `You are reviewing detected anti-patterns in Claude Code developer sessions.
+const CLASSIFY_PROMPT = `You are reviewing detected usage issues in Claude Code developer sessions.
+Your goal is to help DEVELOPERS improve how they use Claude Code — focus on what the developer can do differently, not on Claude Code's internal behavior.
+
 For each detection below, confirm or refine it:
 1. Confirm the severity is appropriate (info/warning/critical)
-2. Improve the suggestion to be more specific and actionable
+2. Rewrite the suggestion as developer-facing advice about Claude Code best practices:
+   - Suggest specific prompt techniques (be more specific, include file paths, break into steps)
+   - Recommend Claude Code features (use /clear, agents for research, CLAUDE.md for context)
+   - Advise on task structure (smaller focused sessions, exploration before editing)
 3. If a detection is a false positive (e.g. intentional retries), mark severity as "info"
+4. Rewrite names to describe the developer's situation, not Claude's internal tool behavior
+   - BAD: "Retry Loop: Bash" → GOOD: "Repeated Command Failures"
+   - BAD: "Failure Cascade" → GOOD: "Task Needs Clearer Scope"
 
 For each detection, return:
 - session_id: the session ID
 - rule: the detection rule
-- name: refined name
-- description: refined description
+- name: refined name (developer-facing, not tool-centric)
+- description: refined description (explain what happened from the developer's perspective)
 - severity: "info" | "warning" | "critical"
-- suggestion: improved, specific suggestion
+- suggestion: developer-facing advice referencing Claude Code best practices
 
 Return a JSON array. Respond with ONLY valid JSON — no markdown, no code fences.`;
 

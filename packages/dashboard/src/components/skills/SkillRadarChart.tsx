@@ -30,8 +30,8 @@ export function SkillRadarChart({ data }: SkillRadarChartProps) {
 
   return (
     <ChartCard
-      title="Skill Assessment"
-      description="AI-evaluated team skill dimensions"
+      title="Claude Code Proficiency"
+      description="Team proficiency across key Claude Code usage dimensions"
     >
       <ResponsiveContainer width="100%" height={350}>
         <RadarChart data={chartData} outerRadius="75%">

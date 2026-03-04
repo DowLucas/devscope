@@ -60,14 +60,14 @@ export function TeamSummaryCards({ summary, loading }: TeamSummaryCardsProps) {
         delta={delta(summary.avg_duration_minutes, summary.prev_avg_duration_minutes)}
       />
       <MetricCard
-        label="Patterns Detected"
+        label="Strategies Detected"
         value={summary.patterns_detected}
         icon={Sparkles}
         previousValue={summary.prev_patterns_detected}
         delta={delta(summary.patterns_detected, summary.prev_patterns_detected)}
       />
       <MetricCard
-        label="Anti-Patterns"
+        label="Usage Issues"
         value={summary.anti_patterns_detected}
         icon={AlertTriangle}
         previousValue={summary.prev_anti_patterns_detected}

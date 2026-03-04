@@ -32,7 +32,7 @@ export function TopPatternsTable({ data, loading }: TopPatternsTableProps) {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium text-muted-foreground">
-          Top Effective Patterns
+          Top Developer Strategies
         </CardTitle>
       </CardHeader>
       <CardContent>

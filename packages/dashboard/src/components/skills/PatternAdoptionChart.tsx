@@ -30,8 +30,8 @@ export function PatternAdoptionChart({ data, loading }: PatternAdoptionChartProp
 
   return (
     <ChartCard
-      title="Pattern Adoption"
-      description="Effective vs ineffective pattern usage by week"
+      title="Strategy Adoption"
+      description="Effective vs ineffective developer strategies by week"
     >
       {loading ? null : (
         <ResponsiveContainer width="100%" height={300}>

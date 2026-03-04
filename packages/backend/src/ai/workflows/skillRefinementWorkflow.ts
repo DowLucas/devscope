@@ -65,6 +65,7 @@ async function gatherNewData(
 // --- Node 2: Refine via Gemini ---
 
 const REFINEMENT_PROMPT = `You are refining an existing Claude Code plugin skill based on new session data.
+Skills encode proven developer workflow strategies as reusable Claude Code workflows.
 
 Current skill:
 {current_skill}
@@ -78,14 +79,15 @@ Decide one of:
 - "archive": the skill is no longer relevant or useful
 
 If "update", provide ALL updated fields (even if unchanged):
-- updated_name: skill name
-- updated_description: skill description
+- updated_name: skill name (should describe the developer strategy, not internal tool sequences)
+- updated_description: skill description (explain when a developer would use this)
 - updated_trigger_phrases: trigger phrases array
-- updated_skill_body: full SKILL.md body
+- updated_skill_body: full SKILL.md body (encode the developer's proven workflow strategy)
 
 Rules:
 - Only update if there's meaningful new information from the data
 - Preserve the skill's core purpose when updating
+- Ensure descriptions focus on the developer's strategy, not Claude Code's internal tool behavior
 - Focus on team-level workflows — never reference individuals
 - Respond with ONLY valid JSON — no markdown, no code fences
 
@@ -131,6 +133,10 @@ async function refineSkill(
     session_samples: state.sessionSequences.slice(0, 15).map(s => ({
       tool_names: s.tool_names.slice(0, 20),
       success_rate: s.success_rate,
+      prompt_count: s.prompt_count,
+      avg_prompt_length: s.avg_prompt_length,
+      continuation_ratio: s.continuation_ratio,
+      agent_delegations: s.agent_delegations,
     })),
   };
 

@@ -69,8 +69,8 @@ export function SkillsView() {
       {activeTab === "overview" ? (
         <div className="space-y-6">
           <PageHeader
-            title="Team Skills"
-            description="Team growth metrics, AI-detected patterns, and coaching insights"
+            title="Claude Code Skills"
+            description="How your team uses Claude Code — usage patterns, proficiency metrics, and tips for improvement"
           >
             <WeekSelector value={weeks} onChange={setWeeks} />
           </PageHeader>
@@ -130,7 +130,7 @@ export function SkillsView() {
 
             {aiInsights && (
               <div className="space-y-6">
-                <h2 className="text-lg font-semibold">AI Growth Insights</h2>
+                <h2 className="text-lg font-semibold">Claude Code Proficiency</h2>
                 <GrowthSummaryBanner data={aiInsights.growth_summary} />
                 {aiInsights.skill_assessment.length > 0 && (
                   <SkillRadarChart data={aiInsights.skill_assessment} />

@@ -84,8 +84,8 @@ async function gatherData(
   };
 }
 
-const SKILL_INSIGHT_PROMPT = `You are a team growth analyst for DevScope, a developer activity monitoring platform.
-Analyze the team's session and pattern data to produce growth insights.
+const SKILL_INSIGHT_PROMPT = `You are a Claude Code usage analyst helping a development team improve how they use Claude Code (an AI coding assistant).
+Analyze the team's session data, usage patterns, and outcomes to assess their Claude Code proficiency and provide actionable improvement tips.
 
 You MUST respond with ONLY valid JSON matching this exact structure (no markdown, no code fences):
 
@@ -100,7 +100,7 @@ You MUST respond with ONLY valid JSON matching this exact structure (no markdown
   ],
   "skill_assessment": [
     {
-      "dimension": "string (e.g. Session Efficiency, Pattern Adoption, Error Recovery, Code Quality, Collaboration)",
+      "dimension": "string",
       "score": 0-100,
       "previous_score": 0-100,
       "detail": "one sentence"
@@ -117,15 +117,28 @@ You MUST respond with ONLY valid JSON matching this exact structure (no markdown
   ],
   "growth_summary": {
     "overall_trend": "improving" | "stable" | "declining",
-    "headline": "short headline e.g. Team productivity up 15% over 4 weeks",
+    "headline": "short headline e.g. Team Claude Code proficiency improving steadily",
     "key_insight": "1-2 sentence analysis"
   }
 }
 
+Skill assessment dimensions MUST focus on how the team uses Claude Code:
+- "Prompt Clarity": How well developers structure their prompts (specificity, context, file references). High score = focused prompts with good context, low score = vague or overly broad requests.
+- "Task Decomposition": How well developers break complex work into manageable Claude Code sessions. High score = focused sessions with clear goals, low score = sprawling sessions that struggle.
+- "Feature Utilization": How effectively the team uses Claude Code's features (agents for research, continuation for follow-ups, slash commands). High score = leveraging advanced features, low score = basic usage only.
+- "Error Recovery": How well developers adapt when Claude Code encounters issues (rephrasing, providing context, changing approach). High score = quick pivots, low score = repeated failures.
+- "Session Effectiveness": Overall success rate and completion rate of Claude Code sessions. High score = consistent completion, low score = many abandoned or failed sessions.
+
+Coaching items MUST be about improving Claude Code usage, not about coaching Claude Code itself:
+- GOOD coaching: "Try including file paths in prompts for faster navigation", "Use agents for complex codebase exploration", "Break large refactoring into focused sessions"
+- BAD coaching: "Claude should use Read before Edit", "Reduce Bash tool retry loops"
+- Reference specific Claude Code best practices: CLAUDE.md files, /clear command, Agent tool, continuation prompts, specific file references, permission modes
+
 Rules:
 - Generate 2-4 predictions (one per metric if data exists)
-- Generate 4-6 skill assessment dimensions
+- Generate exactly 5 skill assessment dimensions (the ones listed above)
 - Generate 3-6 coaching items (mix of strengths, improvements, and actions)
+- ALL coaching must be developer-facing advice about Claude Code usage
 - For predictions, project 3 weeks ahead with decreasing confidence
 - Base scores and predictions on actual data trends, not guesses
 - If data is sparse, say so in explanations and use wider confidence intervals
