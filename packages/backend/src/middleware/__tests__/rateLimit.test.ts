@@ -104,26 +104,25 @@ describe("rateLimitMiddleware", () => {
   // ---------------------------------------------------------------------------
   // x-forwarded-for parsing
   // ---------------------------------------------------------------------------
-  test("extracts client IP as second-to-last from x-forwarded-for with multiple entries", async () => {
-    // With 1 trusted proxy, for "client, proxy" => client IP is parts[0]
-    // (index = max(0, length-1-1) = max(0, 0) = 0)
+  test("uses rightmost entry from x-forwarded-for (what the trusted proxy recorded)", async () => {
+    // New behavior: take rightmost entry — the IP our trusted proxy appended from the TCP connection
     const app = createApp({ maxRequests: 1, windowMs: 60_000 });
 
-    // "real-client, trusted-proxy" => client IP is "real-client"
+    // "client, trusted-proxy" => key is rightmost "10.0.3.99"
     const res1 = await app.request("/test", {
       headers: { "x-forwarded-for": "10.0.3.1, 10.0.3.99" },
     });
     expect(res1.status).toBe(200);
 
-    // Use up the limit for the same client IP
+    // Same rightmost entry => same key, rate limited
     const res2 = await app.request("/test", {
-      headers: { "x-forwarded-for": "10.0.3.1, 10.0.3.99" },
+      headers: { "x-forwarded-for": "10.0.3.2, 10.0.3.99" },
     });
     expect(res2.status).toBe(429);
 
-    // Different client IP through same proxy should still be allowed
+    // Different rightmost entry => different key, allowed
     const res3 = await app.request("/test", {
-      headers: { "x-forwarded-for": "10.0.3.2, 10.0.3.99" },
+      headers: { "x-forwarded-for": "10.0.3.1, 10.0.3.88" },
     });
     expect(res3.status).toBe(200);
   });
@@ -143,11 +142,10 @@ describe("rateLimitMiddleware", () => {
     expect(res2.status).toBe(429);
   });
 
-  test("handles x-forwarded-for with three entries (client, proxy1, proxy2)", async () => {
-    // 3 entries: index = max(0, 3-1-1) = 1 => parts[1] is the client IP
+  test("handles x-forwarded-for with three entries (uses rightmost)", async () => {
+    // 3 entries: rightmost is "10.0.5.99" (what the trusted proxy recorded)
     const app = createApp({ maxRequests: 1, windowMs: 60_000 });
 
-    // "origin, client, trusted-proxy" => parts[1] = "10.0.5.2" is the key
     const res1 = await app.request("/test", {
       headers: { "x-forwarded-for": "10.0.5.1, 10.0.5.2, 10.0.5.99" },
     });
@@ -160,9 +158,9 @@ describe("rateLimitMiddleware", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // x-real-ip fallback
+  // x-real-ip (preferred) and x-forwarded-for (fallback)
   // ---------------------------------------------------------------------------
-  test("falls back to x-real-ip when x-forwarded-for is absent", async () => {
+  test("uses x-real-ip when present", async () => {
     const app = createApp({ maxRequests: 1, windowMs: 60_000 });
 
     const res1 = await app.request("/test", {
@@ -188,10 +186,11 @@ describe("rateLimitMiddleware", () => {
     expect(res2.status).toBe(429);
   });
 
-  test("x-forwarded-for takes precedence over x-real-ip", async () => {
+  test("x-real-ip takes precedence over x-forwarded-for", async () => {
+    // New behavior: x-real-ip is preferred (set by trusted proxy from TCP connection, cannot be spoofed)
     const app = createApp({ maxRequests: 1, windowMs: 60_000 });
 
-    // Use up limit for the xff IP
+    // Use up limit for x-real-ip "10.0.7.2" (x-real-ip wins over x-forwarded-for)
     await app.request("/test", {
       headers: {
         "x-forwarded-for": "10.0.7.1",
@@ -199,7 +198,7 @@ describe("rateLimitMiddleware", () => {
       },
     });
 
-    // Same xff IP should be blocked
+    // Same x-real-ip => same key, rate limited
     const res = await app.request("/test", {
       headers: {
         "x-forwarded-for": "10.0.7.1",
@@ -208,9 +207,9 @@ describe("rateLimitMiddleware", () => {
     });
     expect(res.status).toBe(429);
 
-    // The x-real-ip alone should still be allowed (different key)
+    // x-forwarded-for alone with a different IP is its own key, still allowed
     const res2 = await app.request("/test", {
-      headers: { "x-real-ip": "10.0.7.2" },
+      headers: { "x-forwarded-for": "10.0.7.1" },
     });
     expect(res2.status).toBe(200);
   });
@@ -246,6 +245,68 @@ describe("rateLimitMiddleware", () => {
     // Prefixed app with same IP should still be allowed
     const res2 = await requestWithIp(appWithPrefix, ip);
     expect(res2.status).toBe(200);
+  });
+
+  // ---------------------------------------------------------------------------
+  // keyFn
+  // ---------------------------------------------------------------------------
+  test("keyFn overrides IP-based keying", async () => {
+    const app = new Hono();
+    app.use("*", rateLimitMiddleware({
+      maxRequests: 1,
+      windowMs: 60_000,
+      prefix: "keyfn-test",
+      keyFn: () => "fixed-user-id",
+    }));
+    app.get("/test", (c) => c.json({ ok: true }));
+
+    const res1 = await app.request("/test", { headers: { "x-forwarded-for": "1.2.3.4" } });
+    expect(res1.status).toBe(200);
+
+    // Same keyFn result ("fixed-user-id") regardless of IP — should be rate limited
+    const res2 = await app.request("/test", { headers: { "x-forwarded-for": "5.6.7.8" } });
+    expect(res2.status).toBe(429);
+  });
+
+  test("keyFn isolates windows per user ID", async () => {
+    const users = ["user-a", "user-b"];
+    let callCount = 0;
+    const app = new Hono();
+    app.use("*", rateLimitMiddleware({
+      maxRequests: 1,
+      windowMs: 60_000,
+      prefix: "keyfn-users",
+      keyFn: () => users[callCount++ % 2],
+    }));
+    app.get("/test", (c) => c.json({ ok: true }));
+
+    // Requests alternate between user-a and user-b — each gets their own window
+    const resA1 = await app.request("/test"); // user-a, count=1
+    const resB1 = await app.request("/test"); // user-b, count=1
+    expect(resA1.status).toBe(200);
+    expect(resB1.status).toBe(200);
+
+    const resA2 = await app.request("/test"); // user-a, count=2 > maxRequests(1)
+    const resB2 = await app.request("/test"); // user-b, count=2 > maxRequests(1)
+    expect(resA2.status).toBe(429);
+    expect(resB2.status).toBe(429);
+  });
+
+  test("keyFn with prefix namespaces correctly", async () => {
+    const app = new Hono();
+    app.use("*", rateLimitMiddleware({
+      maxRequests: 1,
+      windowMs: 60_000,
+      prefix: "myprefix",
+      keyFn: () => "user-123",
+    }));
+    app.get("/test", (c) => c.json({ ok: true }));
+
+    const res1 = await app.request("/test");
+    expect(res1.status).toBe(200);
+
+    const res2 = await app.request("/test");
+    expect(res2.status).toBe(429);
   });
 
   // ---------------------------------------------------------------------------

@@ -73,6 +73,10 @@ export function getClientCount(): number {
   return count;
 }
 
+export function getOrgClientCount(orgId: string): number {
+  return orgClients.get(orgId)?.size ?? 0;
+}
+
 // Heartbeat: ping all clients every 30s, remove dead connections
 const PING_INTERVAL_MS = 30_000;
 if (g.__gc_ws_ping_interval) {

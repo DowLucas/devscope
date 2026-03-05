@@ -1,8 +1,16 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
+import { rateLimitMiddleware } from "../middleware/rateLimit";
 
 export function accountRoutes(sql: SQL) {
   const app = new Hono();
+
+  app.use("/", rateLimitMiddleware({
+    maxRequests: 3,
+    windowMs: 60 * 60_000, // 1 hour
+    prefix: "account-delete",
+    keyFn: (c) => (c.get("user" as never) as any)?.id ?? "unknown",
+  }));
 
   /**
    * DELETE /api/account

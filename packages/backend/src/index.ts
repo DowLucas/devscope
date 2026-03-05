@@ -14,7 +14,7 @@ import { insightsRoutes } from "./routes/insights";
 import { alertsRoutes } from "./routes/alerts";
 import { exportRoutes } from "./routes/export";
 import { teamsRoutes } from "./routes/teams";
-import { addClient, removeClient, getClientCount, broadcastToOrg } from "./ws/handler";
+import { addClient, removeClient, getClientCount, getOrgClientCount, broadcastToOrg } from "./ws/handler";
 import { startStaleSessionCleanup } from "./jobs/cleanupStaleSessions";
 import { startDigestGeneration } from "./jobs/digestGeneration";
 import { startAiInsightGeneration } from "./jobs/aiInsights";
@@ -30,8 +30,9 @@ import { teamSkillsRoutes } from "./routes/teamSkills";
 import { ethicsRoutes } from "./routes/ethics";
 import { privacyRoutes } from "./routes/privacy";
 import { accountRoutes } from "./routes/account";
+import { waitlistRoutes } from "./routes/waitlist";
 import { orgScopeMiddleware } from "./middleware/orgScope";
-import { rateLimitMiddleware } from "./middleware/rateLimit";
+import { rateLimitMiddleware, getClientIp } from "./middleware/rateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
 import { getPublicStats } from "./db/queries";
 import { flushEthicsAudit } from "./utils/ethicsAudit";
@@ -105,6 +106,8 @@ app.use("/api/public/*", rateLimitMiddleware({ maxRequests: 30, windowMs: 60_000
 
 let cachedStats: { data: unknown; expiresAt: number } | null = null;
 
+app.route("/api/public/waitlist", waitlistRoutes(sql));
+
 app.get("/api/public/stats", async (c) => {
   const now = Date.now();
   if (!cachedStats || cachedStats.expiresAt <= now) {
@@ -116,6 +119,19 @@ app.get("/api/public/stats", async (c) => {
 // --- better-auth handler (pass raw Request untouched) ---
 app.use("/api/auth/sign-in/*", rateLimitMiddleware({ maxRequests: 10, windowMs: 60_000, prefix: "signin" }));
 app.use("/api/auth/sign-up/*", rateLimitMiddleware({ maxRequests: 5, windowMs: 60_000, prefix: "signup" }));
+
+// Block sign-up and OAuth callbacks when the user limit is reached
+const userLimit = Number(process.env.USER_LIMIT ?? 100);
+async function registrationGuard(c: Context, next: Next) {
+  const [row] = await sql`SELECT COUNT(*)::INT as cnt FROM auth_user`;
+  if (((row as any).cnt as number) >= userLimit) {
+    return c.json({ error: "Registration is closed" }, 403);
+  }
+  return next();
+}
+app.use("/api/auth/sign-up/*", registrationGuard);
+app.use("/api/auth/callback/*", registrationGuard);
+
 app.all("/api/auth/*", (c) => auth.handler(c.req.raw));
 
 // --- Auth middleware helpers ---
@@ -167,6 +183,27 @@ app.use("/api/*", async (c, next) => {
   return requireSession(c, next);
 });
 
+// Global rate limit for all authenticated routes: 300 req/min per user
+app.use("/api/*", async (c, next) => {
+  const path = c.req.path;
+  if (
+    path === "/api/health" ||
+    path === "/api/verify-connection" ||
+    path.startsWith("/api/auth/") ||
+    path.startsWith("/api/events") ||
+    path.startsWith("/api/public/")
+  ) {
+    return next();
+  }
+  const user = c.get("user" as never) as any;
+  return rateLimitMiddleware({
+    maxRequests: 300,
+    windowMs: 60_000,
+    prefix: "auth",
+    keyFn: () => user?.id ?? getClientIp(c),
+  })(c, next);
+});
+
 // Org scope middleware — resolves active org's developer IDs onto context
 app.use("/api/events/recent", orgScopeMiddleware(sql));
 app.use("/api/sessions/*", orgScopeMiddleware(sql));
@@ -183,6 +220,18 @@ app.use("/api/skills/*", orgScopeMiddleware(sql));
 app.use("/api/skills", orgScopeMiddleware(sql));
 app.use("/api/alerts/*", orgScopeMiddleware(sql));
 app.use("/api/alerts", orgScopeMiddleware(sql));
+app.use("/api/export/*", rateLimitMiddleware({
+  maxRequests: 10,
+  windowMs: 60_000,
+  prefix: "export",
+  keyFn: (c) => (c.get("user" as never) as any)?.id ?? getClientIp(c),
+}));
+app.use("/api/export", rateLimitMiddleware({
+  maxRequests: 10,
+  windowMs: 60_000,
+  prefix: "export",
+  keyFn: (c) => (c.get("user" as never) as any)?.id ?? getClientIp(c),
+}));
 app.use("/api/export/*", orgScopeMiddleware(sql));
 app.use("/api/export", orgScopeMiddleware(sql));
 app.use("/api/ai/*", orgScopeMiddleware(sql));
@@ -232,12 +281,13 @@ app.post("/api/verify-connection", async (c) => {
   }
 });
 
-const MAX_WS_CLIENTS = 100;
+const MAX_WS_CLIENTS = 500;
+const MAX_WS_CLIENTS_PER_ORG = 20;
 
 app.get(
   "/ws",
   async (c, next) => {
-    // Connection limit
+    // Global safety cap
     if (getClientCount() >= MAX_WS_CLIENTS) {
       return c.text("Too many connections", 503);
     }
@@ -246,8 +296,13 @@ app.get(
     if (!session) {
       return c.text("Unauthorized", 401);
     }
+    // Per-org connection limit
+    const orgId = (session.session as any).activeOrganizationId as string | undefined;
+    if (orgId && getOrgClientCount(orgId) >= MAX_WS_CLIENTS_PER_ORG) {
+      return c.text("Too many connections for this organization", 503);
+    }
     // Store orgId for use in onOpen
-    c.set("wsOrgId" as never, (session.session as any).activeOrganizationId as never);
+    c.set("wsOrgId" as never, orgId as never);
     return next();
   },
   upgradeWebSocket((c) => {

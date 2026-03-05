@@ -4,6 +4,7 @@ interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
   prefix?: string;
+  keyFn?: (c: Context) => string;
 }
 
 interface WindowEntry {
@@ -21,23 +22,26 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-function getClientIp(c: Context): string {
+export function getClientIp(c: Context): string {
+  // X-Real-IP is set by the trusted proxy (Railway/Caddy) from the TCP connection
+  // and cannot be spoofed by clients — prefer it over X-Forwarded-For.
+  const realIp = c.req.header("x-real-ip");
+  if (realIp) return realIp;
+
+  // Fallback: X-Forwarded-For for environments without X-Real-IP.
+  // Take the rightmost entry, which is what our trusted proxy recorded from the TCP connection.
   const xff = c.req.header("x-forwarded-for");
   if (xff) {
     const parts = xff.split(",").map(s => s.trim());
-    // Behind one trusted proxy (Caddy), the client IP is second-to-last
-    // If only one entry, that's the client
-    const trustedProxies = 1;
-    const clientIndex = Math.max(0, parts.length - 1 - trustedProxies);
-    return parts[clientIndex] || "unknown";
+    return parts[parts.length - 1] || "unknown";
   }
-  return c.req.header("x-real-ip") || "unknown";
+  return "unknown";
 }
 
 export function rateLimitMiddleware(config: RateLimitConfig) {
   return async (c: Context, next: Next) => {
-    const ip = getClientIp(c);
-    const key = config.prefix ? `${config.prefix}:${ip}` : ip;
+    const rawKey = config.keyFn ? config.keyFn(c) : getClientIp(c);
+    const key = config.prefix ? `${config.prefix}:${rawKey}` : rawKey;
     const now = Date.now();
     let entry = windows.get(key);
 

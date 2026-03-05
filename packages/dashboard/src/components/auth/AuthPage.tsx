@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { AuthView } from "@daveyplate/better-auth-ui";
 import {
@@ -96,8 +96,107 @@ function readPersona(): "technical" | "non-technical" | null {
   return null;
 }
 
+/* ------------------------------------------------------------------ */
+/*  WaitlistForm — shown on /auth/sign-up when registration is closed  */
+/* ------------------------------------------------------------------ */
+function WaitlistForm() {
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "duplicate">("idle");
+  const emailRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { emailRef.current?.focus(); }, []);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus("loading");
+    try {
+      const res = await fetch("/api/public/waitlist/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-requested-with": "fetch" },
+        body: JSON.stringify({ email: email.trim(), name: name.trim() || undefined }),
+      });
+      if (res.ok) {
+        setStatus("success");
+      } else if (res.status === 409) {
+        setStatus("duplicate");
+      } else {
+        setStatus("error");
+      }
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  if (status === "success") {
+    return (
+      <div className="text-center space-y-3">
+        <div className="text-3xl">🎉</div>
+        <h2 className="text-xl font-semibold">You're on the list!</h2>
+        <p className="text-sm text-muted-foreground">
+          We'll notify you at <span className="font-medium">{email}</span> when a spot opens up.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <p className="text-sm text-muted-foreground">
+          DevScope is currently at capacity. Join the waitlist and we'll reach out when space opens up.
+        </p>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-1.5">
+          <label htmlFor="wl-name" className="text-sm font-medium">Name <span className="text-muted-foreground">(optional)</span></label>
+          <input
+            id="wl-name"
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Your name"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="wl-email" className="text-sm font-medium">Email</label>
+          <input
+            id="wl-email"
+            ref={emailRef}
+            type="email"
+            required
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+        {status === "duplicate" && (
+          <p className="text-sm text-amber-500">You're already on the waitlist.</p>
+        )}
+        {status === "error" && (
+          <p className="text-sm text-destructive">Something went wrong. Please try again.</p>
+        )}
+        <button
+          type="submit"
+          disabled={status === "loading"}
+          className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {status === "loading" ? "Joining…" : "Join the waitlist"}
+        </button>
+      </form>
+      <p className="text-center text-sm text-muted-foreground">
+        Already have an account?{" "}
+        <a href="/auth/sign-in" className="underline underline-offset-4 hover:text-foreground">Sign in</a>
+      </p>
+    </div>
+  );
+}
+
 export function AuthPage({ view }: { view?: string }) {
   const [persona, setPersona] = useState<"technical" | "non-technical" | null>(readPersona);
+  const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
 
   useEffect(() => {
     // Re-read on storage changes (e.g. landing page footer switcher in another tab)
@@ -105,6 +204,14 @@ export function AuthPage({ view }: { view?: string }) {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  useEffect(() => {
+    if (view !== "sign-up") return;
+    fetch("/api/public/registration-status")
+      .then(r => r.json())
+      .then((d: { open: boolean }) => setRegistrationOpen(d.open))
+      .catch(() => setRegistrationOpen(true)); // fail open
+  }, [view]);
 
   const isSignUp = view === "sign-up";
   const p = persona ?? "technical";
@@ -215,17 +322,27 @@ export function AuthPage({ view }: { view?: string }) {
           {/* Heading */}
           <div className="mb-6 text-center lg:text-left">
             <h1 className="text-2xl font-bold tracking-tight">
-              {isSignUp ? "Create your account" : "Welcome back"}
+              {isSignUp && registrationOpen === false
+                ? "Join the waitlist"
+                : isSignUp
+                ? "Create your account"
+                : "Welcome back"}
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {isSignUp
+              {isSignUp && registrationOpen === false
+                ? "We're at capacity — get notified when a spot opens"
+                : isSignUp
                 ? "Get started with DevScope in minutes"
                 : "Sign in to your DevScope account"}
             </p>
           </div>
 
-          {/* Auth form from better-auth-ui */}
-          <AuthView pathname={view || "sign-in"} className="max-w-lg" />
+          {/* Show waitlist form when registration is closed, otherwise auth form */}
+          {isSignUp && registrationOpen === false ? (
+            <WaitlistForm />
+          ) : (
+            <AuthView pathname={view || "sign-in"} className="max-w-lg" />
+          )}
         </div>
       </div>
     </div>
