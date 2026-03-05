@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       hooks={{ useListApiKeys, useListAccounts, useAccountInfo } as Parameters<typeof AuthUIProvider>[0]["hooks"]}
       account={{ basePath: "/dashboard/account" }}
       social={{ providers: socialProviders }}
-      credentials={{ confirmPassword: true }}
+      credentials={{ confirmPassword: import.meta.env.PROD }}
       emailVerification={true}
       additionalFields={{
         acceptedTerms: {
