@@ -1,0 +1,69 @@
+# DevScope
+
+> Open-source monitoring and upskilling platform for Claude Code developer sessions.
+
+DevScope captures Claude Code session lifecycle events and analyzes AI-assisted development workflows to surface effective patterns, detect anti-patterns, and help developers and teams improve their AI engineering skills over time.
+
+## What DevScope Does
+
+- **Claude Code session monitoring**: Hooks into Claude Code lifecycle events (session start/end, prompt submission, tool calls, agent spawning) via lightweight async Bash scripts
+- **Pattern discovery**: Identifies effective tool sequences and prompting strategies from session data
+- **Anti-pattern detection**: Flags inefficient or problematic AI usage patterns in real time
+- **Team upskilling**: Aggregated insights for engineering leads and managers — adoption trends, skill mapping, team playbooks
+- **AI-powered insights**: Uses Google Gemini to generate session summaries and improvement suggestions
+- **Privacy-first**: Three data collection modes, metadata-only available as default option
+- **Open source**: MIT-licensed plugin, dual-licensed dashboard
+- **Self-hostable**: Full Docker Compose deployment in minutes
+
+## Installation (Claude Code Plugin)
+
+```bash
+claude plugin marketplace add DowLucas/devscope-plugin
+claude plugin install devscope
+```
+
+Then follow the setup wizard to configure your DevScope server URL and API key.
+
+## Privacy Modes
+
+| Mode | Data Collected |
+|------|----------------|
+| `private` | Metadata only: timestamps, tool names, event counts. No prompt content. |
+| `standard` (default) | Prompt text and session context included. |
+| `open` | Full prompts and responses included. |
+
+You set your privacy level during setup and can change it at any time by editing `~/.config/devscope/config`.
+
+## Deployment Options
+
+1. **Cloud** (recommended for individuals): Sign up at https://devscope.sh — no setup required
+2. **Self-hosted**: Docker Compose deployment. Full control over your data.
+
+```bash
+git clone https://github.com/DowLucas/devscope
+cd devscope/devscope-cloud
+docker compose up -d
+```
+
+## Tech Stack
+
+- **Plugin**: Bash hooks (zero dependencies, cross-platform Linux/macOS)
+- **Backend**: Bun runtime + Hono HTTP framework + PostgreSQL
+- **Dashboard**: React 19 + TypeScript + Vite + Tailwind CSS
+- **AI insights**: Google Gemini API for session analysis
+- **Auth**: Better Auth with API key support
+
+## Target Audience
+
+- **Individual developers** using Claude Code who want to understand their AI usage patterns and improve their skills
+- **Engineering leads and managers** who need team-level insights on AI-assisted development adoption
+- **Organizations** building standards and playbooks around agentic engineering workflows
+
+## Pricing
+
+Free and open source. Cloud hosting at devscope.sh is available at no cost during beta. Self-hosting is always free.
+
+## Source Code
+
+GitHub: https://github.com/DowLucas/devscope
+License: PolyForm Shield 1.0.0 (backend/dashboard), MIT (plugin/docs)

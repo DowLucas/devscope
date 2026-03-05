@@ -6,7 +6,105 @@
     <link rel="icon" type="image/png" href="/favicon-192.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="/favicon-180.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DevScope</title>
+
+    <title>DevScope — Claude Code Monitoring & AI Developer Upskilling</title>
+    <meta name="description" content="DevScope monitors Claude Code sessions to surface patterns, catch anti-patterns, and upskill teams in AI-assisted development. Open-source. Self-hostable." />
+
+    <!-- Canonical -->
+    <link rel="canonical" href="https://devscope.sh/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://devscope.sh/" />
+    <meta property="og:site_name" content="DevScope" />
+    <meta property="og:title" content="DevScope — Claude Code Monitoring & AI Developer Upskilling" />
+    <meta property="og:description" content="Monitor Claude Code sessions, surface effective patterns, catch anti-patterns, and upskill your team in AI-assisted development. Open-source and self-hostable." />
+    <meta property="og:image" content="https://devscope.sh/og-image.png" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="DevScope — Claude Code Monitoring & AI Developer Upskilling" />
+    <meta name="twitter:description" content="Monitor Claude Code sessions, surface effective patterns, and upskill your team. Open-source." />
+    <meta name="twitter:image" content="https://devscope.sh/og-image.png" />
+
+    <!-- JSON-LD: SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "DevScope",
+      "description": "Open-source observability and upskilling platform for Claude Code sessions. Monitors AI-assisted development workflows, surfaces effective patterns, detects anti-patterns, and helps teams improve their AI engineering skills.",
+      "url": "https://devscope.sh",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Linux, macOS",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "author": { "@type": "Organization", "name": "Dow Technology", "url": "https://devscope.sh" },
+      "isAccessibleForFree": true,
+      "keywords": "Claude Code monitoring, Claude Code plugin, AI developer upskilling, AI engineering observability, agentic workflow monitoring",
+      "sameAs": ["https://github.com/DowLucas/devscope"]
+    }
+    </script>
+
+    <!-- JSON-LD: Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Dow Technology",
+      "url": "https://devscope.sh",
+      "sameAs": ["https://github.com/DowLucas/devscope"]
+    }
+    </script>
+
+    <!-- JSON-LD: FAQPage -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is DevScope?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "DevScope is an open-source monitoring and upskilling platform for Claude Code developer sessions. It captures session lifecycle events, analyzes AI-assisted workflows, surfaces effective patterns, and helps teams improve their AI engineering skills over time."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does the DevScope Claude Code plugin work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The DevScope plugin installs as Claude Code hooks — lightweight async Bash scripts that fire on session events such as prompts, tool calls, and session start/end. All hooks are non-blocking with zero impact on developer workflow. Install with: claude plugin marketplace add DowLucas/devscope-plugin"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What data does DevScope collect?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "DevScope offers three privacy modes. In 'private' mode it collects only metadata (timestamps, tool names, counts). In 'standard' mode (default) it includes prompt text and session context. In 'open' mode it includes full prompts and responses. You control the privacy level in your config."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I self-host DevScope?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. DevScope is fully open source and designed for self-hosting. Deploy with Docker Compose in minutes. Your data stays entirely on your infrastructure. A managed cloud version is also available at devscope.sh."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is DevScope free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. DevScope is free and open source. The plugin is MIT licensed. The cloud version at devscope.sh is free during beta. Self-hosting is always free with no usage limits."
+          }
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>

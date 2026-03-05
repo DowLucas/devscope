@@ -20,27 +20,37 @@ const DEFAULT_FAQ: readonly FaqItem[] = [
   {
     question: "What is DevScope?",
     answer:
-      "DevScope is an open-source upskilling platform for AI-assisted development. It analyzes Claude Code sessions to surface effective patterns, flag anti-patterns, and help teams build better AI workflows.",
+      "DevScope is an open-source monitoring and upskilling platform for Claude Code developer sessions. It captures session lifecycle events, analyzes AI-assisted workflows, surfaces effective patterns, and helps developers and teams improve their AI engineering skills over time.",
   },
   {
-    question: "How does the plugin work?",
+    question: "How does the Claude Code plugin work?",
     answer:
-      "The DevScope plugin installs as Claude Code hooks — lightweight bash scripts that fire on session events like prompts, tool calls, and session lifecycle changes. All hooks are async and non-blocking, so there's zero impact on developer workflow.",
+      "The DevScope plugin installs as Claude Code hooks — lightweight async Bash scripts that fire on session events like prompts, tool calls, and session start/end. All hooks run asynchronously and non-blocking, so there is zero impact on your Claude Code workflow. Install with: claude plugin marketplace add DowLucas/devscope-plugin",
   },
   {
     question: "What data does DevScope collect?",
     answer:
-      "DevScope captures session lifecycle events, tool usage patterns, and prompt metadata. It does not collect prompt content or code — only structural information about how sessions progress.",
+      "DevScope offers three privacy modes you control. In 'private' mode it captures only metadata (timestamps, tool names, event counts) with no prompt content. In 'standard' mode (the default) it includes prompt text and session context. In 'open' mode it includes full prompts and responses. You set your privacy level during setup and can change it any time.",
   },
   {
     question: "Can I self-host DevScope?",
     answer:
-      "Yes! DevScope is fully open source and designed for self-hosting. Deploy with Docker Compose in minutes. Your data stays on your infrastructure.",
+      "Yes. DevScope is fully open source and built for self-hosting. Deploy the entire stack with Docker Compose in minutes — your session data stays entirely on your infrastructure. A managed cloud version is also available at devscope.sh with no setup required.",
   },
   {
-    question: "Does it work with any IDE?",
+    question: "Does it work with any IDE or editor?",
     answer:
-      "DevScope works with Claude Code CLI regardless of which editor or IDE you use. If Claude Code runs, DevScope captures insights from it.",
+      "DevScope works with the Claude Code CLI regardless of which editor or IDE you use. It hooks into the Claude Code process itself — not your editor — so it captures insights from any environment where Claude Code runs, including VS Code, JetBrains, Neovim, or terminal-only setups.",
+  },
+  {
+    question: "Is DevScope free?",
+    answer:
+      "Yes. DevScope is free and open source. The plugin is MIT licensed. The cloud version at devscope.sh is free during beta. Self-hosting is always free with no usage limits.",
+  },
+  {
+    question: "How is DevScope different from Claude Code's built-in analytics?",
+    answer:
+      "Claude Code does not currently provide session-level analytics or team-wide upskilling insights. DevScope fills that gap: it tracks which tools you use, how your sessions are structured, where you get stuck, and what patterns lead to successful outcomes — then surfaces those insights in a dashboard you and your team can act on.",
   },
 ] as const;
 
