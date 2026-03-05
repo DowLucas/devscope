@@ -37,7 +37,7 @@ interface VerificationEmailParams {
 export async function sendVerificationEmail(params: VerificationEmailParams): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    console.log(`[devscope] RESEND_API_KEY not set — verification email for ${params.to} skipped (verify URL: ${params.url})`);
+    console.log(`[devscope] RESEND_API_KEY not set — verification email for ${params.to} skipped`);
     return;
   }
 
@@ -79,7 +79,7 @@ export async function sendVerificationEmail(params: VerificationEmailParams): Pr
 export async function sendInviteEmail(params: InviteEmailParams): Promise<void> {
   const resend = getClient();
   if (!resend) {
-    console.log(`[devscope] RESEND_API_KEY not set — invite email for ${params.to} skipped (accept URL: ${params.acceptUrl})`);
+    console.log(`[devscope] RESEND_API_KEY not set — invite email for ${params.to} skipped`);
     return;
   }
 
