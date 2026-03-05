@@ -57,7 +57,8 @@ export async function sendVerificationEmail(params: VerificationEmailParams): Pr
       html: `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
           <p>Hey ${escapeHtml(name)},</p>
-          <p>Thanks for signing up for DevScope! I built it to help developers get better visibility into their Claude Code sessions, and I'm excited to have you on board.</p>
+          <p>Thanks for signing up for DevScope! I'm Lucas — I love building and exploring new ways to use AI in my day-to-day work and hobby projects. DevScope is one of those projects: a real-time dashboard to help developers get better visibility into their Claude Code sessions.</p>
+          <p>I'm eager to get feedback and build a community around it, so I'm genuinely excited to have you here.</p>
           <p>Just click the button below to verify your email and get started:</p>
           <a href="${escapeHtml(params.url)}"
              style="display: inline-block; padding: 12px 24px; background: #18181b; color: #fff;
