@@ -1,12 +1,16 @@
 import { useLocation } from "wouter";
-import { AccountView } from "@daveyplate/better-auth-ui";
-import { KeyRound, User, Eye } from "lucide-react";
+import {
+  AccountSettingsCards,
+  SecuritySettingsCards,
+} from "@daveyplate/better-auth-ui";
+import { KeyRound, User, Eye, ShieldCheck } from "lucide-react";
 import { ApiKeysCard } from "./ApiKeysCard";
 import { DataSharingCard } from "./DataSharingCard";
 import { DeleteAccountCard } from "./DeleteAccountCard";
 
 const SECTIONS = [
   { id: "account", label: "Account", icon: User },
+  { id: "security", label: "Security", icon: ShieldCheck },
   { id: "api-keys", label: "API Keys", icon: KeyRound },
   { id: "privacy", label: "Data Sharing", icon: Eye },
 ] as const;
@@ -14,6 +18,7 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]["id"];
 
 function getSectionFromPath(path: string): SectionId {
+  if (path.includes("/security")) return "security";
   if (path.includes("/api-keys")) return "api-keys";
   if (path.includes("/privacy")) return "privacy";
   return "account";
@@ -55,10 +60,11 @@ export function SettingsPage() {
       <div className="flex-1 min-w-0 space-y-6">
         {active === "account" && (
           <>
-            <AccountView pathname={location} />
+            <AccountSettingsCards />
             <DeleteAccountCard />
           </>
         )}
+        {active === "security" && <SecuritySettingsCards />}
         {active === "api-keys" && <ApiKeysCard />}
         {active === "privacy" && <DataSharingCard />}
       </div>
