@@ -181,6 +181,7 @@ Requirements:
 - Start with a Summary section
 - Include sections for: Team Usage Overview, Project Health, Claude Code Effectiveness, Developer Strategies, Sessions Needing Attention, Recommendations
 - In the Developer Strategies section: highlight top effective developer approaches with success rates, flag common usage pitfalls with frequency and tips for improvement, and provide 2-3 concrete Claude Code usage tips based on the data (e.g. "Sessions where developers explored the codebase first had fewer failures — try asking Claude to research before editing")
+- Include an **"Improve Your Claude Code Setup"** section with: (a) 2-3 specific CLAUDE.md additions the team should make based on observed failure patterns and context gaps (show each suggestion as a markdown code block with the text to add), (b) 1-2 Claude Code skill definitions based on effective repeated patterns observed (show the skill body in a code block), (c) any recurring context gaps where Claude Code repeatedly lacked project knowledge
 - End with Action Items focused on improving Claude Code usage and developer workflow
 - NEVER include individual developer names, rankings, or performance comparisons
 - Focus on team-level patterns, not individual behavior
