@@ -46,26 +46,29 @@ export async function sendVerificationEmail(params: VerificationEmailParams): Pr
     return;
   }
 
-  const from = process.env.RESEND_FROM ?? "DevScope <noreply@devscope.dev>";
+  const from = process.env.RESEND_FROM ?? "Lucas Dow <lucas@devscope.dev>";
   const name = params.name || params.to.split("@")[0];
 
   try {
     await resend.emails.send({
       from,
       to: params.to,
-      subject: "Verify your email address — DevScope",
+      subject: "Welcome to DevScope — please verify your email",
       html: `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-          <h2>Verify your email</h2>
-          <p>Hi ${escapeHtml(name)}, thanks for signing up for DevScope.</p>
-          <p>Click the button below to verify your email address and get started.</p>
+          <p>Hey ${escapeHtml(name)},</p>
+          <p>Thanks for signing up for DevScope! I'm Lucas — I love building and exploring new ways to use AI in my day-to-day work and hobby projects. DevScope is one of those projects: a real-time dashboard to help developers get better visibility into their Claude Code sessions.</p>
+          <p>I'm eager to get feedback and build a community around it, so I'm genuinely excited to have you here.</p>
+          <p>Just click the button below to verify your email and get started:</p>
           <a href="${escapeHtml(params.url)}"
              style="display: inline-block; padding: 12px 24px; background: #18181b; color: #fff;
                     border-radius: 6px; text-decoration: none; font-weight: 500;">
-            Verify Email
+            Verify my email
           </a>
+          <p>If you have any questions or feedback, just reply to this email — I read everything.</p>
+          <p>— Lucas</p>
           <p style="color: #71717a; font-size: 14px; margin-top: 24px;">
-            This link expires in 1 hour. If you didn't create an account, you can ignore this email.
+            This link expires in 1 hour. If you didn't create an account, you can safely ignore this email.
           </p>
         </div>
       `,
