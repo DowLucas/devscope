@@ -7,6 +7,7 @@ import { LandingNav } from "./LandingNav";
 import { HeroSection } from "./HeroSection";
 import { FeaturesSection } from "./FeaturesSection";
 import { HowItWorksSection } from "./HowItWorksSection";
+import { SecuritySection } from "./SecuritySection";
 import { StatsSection } from "./StatsSection";
 import { FaqSection } from "./FaqSection";
 import { CtaSection } from "./CtaSection";
@@ -58,6 +59,7 @@ export function LandingPage() {
           <FeaturesSection />
           <TopologyDemoSection />
           <HowItWorksSection />
+          <SecuritySection />
           <FaqSection />
           <CtaSection />
         </main>
