@@ -126,7 +126,7 @@ function CommitmentCard({ item, index }: { item: Commitment; index: number }) {
       className="rounded-xl border border-border bg-card p-6 flex flex-col gap-3 hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-colors duration-200"
     >
       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-        <Icon className="h-4.5 w-4.5 text-emerald-400" />
+        <Icon className="h-5 w-5 text-emerald-400" />
       </div>
       <div>
         <h3 className="text-sm font-semibold text-foreground mb-1">
