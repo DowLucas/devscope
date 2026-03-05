@@ -4,6 +4,7 @@ import { ArrowLeft, Clock, Wrench, MessageSquare, User, Sparkles, Lock } from "l
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { SessionTurnCard } from "./SessionTurnCard";
+import { SessionFeedbackPanel } from "./SessionFeedbackPanel";
 import { buildTurns } from "@/lib/buildTurns";
 import type { SessionDetail as SessionDetailType, SessionTitle } from "@devscope/shared";
 import type { SessionTurn } from "@devscope/shared";
@@ -163,6 +164,18 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
         <div className="flex items-center gap-2 rounded-lg bg-muted/30 border border-border px-3 py-2 text-xs text-muted-foreground">
           Session title generating...
         </div>
+      )}
+
+      {(session.status === "ended" || durationMin >= 5) && (
+        <Card>
+          <CardContent className="p-4">
+            <SessionFeedbackPanel
+              sessionId={session.id}
+              privacyMode={(session as typeof session & { privacyMode?: string }).privacyMode ?? null}
+              isSelfView={isSelfView}
+            />
+          </CardContent>
+        </Card>
       )}
 
       <div className="space-y-3">

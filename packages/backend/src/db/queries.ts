@@ -2017,6 +2017,137 @@ export async function snapshotToolingHealth(
   }
 }
 
+// --- Session Feedback Data ---
+
+export interface SessionFeedbackData {
+  session: {
+    id: string;
+    project_name: string | null;
+    project_path: string | null;
+    started_at: string;
+    ended_at: string | null;
+    status: string;
+    privacy_mode: string | null;
+    duration_minutes: number | null;
+  };
+  eventStats: {
+    total_events: number;
+    prompt_count: number;
+    tool_call_count: number;
+    tool_fail_count: number;
+    failure_rate_pct: number;
+    unique_tools: string[];
+  };
+  errorSamples: Array<{ tool_name: string; error_message: string }>;
+  promptSamples?: Array<{ prompt_text: string; prompt_length: number }>;
+  toolInputSamples?: Array<{ tool_name: string; tool_input: string }>;
+  responseSamples?: Array<{ response_text: string; response_length: number }>;
+}
+
+export async function getSessionFeedbackData(
+  sql: SQL,
+  sessionId: string,
+  includeContent: boolean
+): Promise<SessionFeedbackData | null> {
+  const sessionRows = await sql`
+    SELECT id, project_name, project_path, started_at, ended_at, status, privacy_mode,
+      EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at)) / 60 AS duration_minutes
+    FROM sessions
+    WHERE id = ${sessionId}
+  ` as any[];
+
+  if (sessionRows.length === 0) return null;
+  const session = sessionRows[0];
+
+  const events = await sql`
+    SELECT event_type, payload, created_at
+    FROM events
+    WHERE session_id = ${sessionId}
+    ORDER BY created_at
+  ` as any[];
+
+  let promptCount = 0;
+  let toolCallCount = 0;
+  let toolFailCount = 0;
+  const toolSet = new Set<string>();
+  const errorSamples: Array<{ tool_name: string; error_message: string }> = [];
+  const promptSamples: Array<{ prompt_text: string; prompt_length: number }> = [];
+  const toolInputSamples: Array<{ tool_name: string; tool_input: string }> = [];
+  const responseSamples: Array<{ response_text: string; response_length: number }> = [];
+
+  for (const event of events) {
+    const payload = typeof event.payload === "string" ? JSON.parse(event.payload) : (event.payload ?? {});
+
+    if (event.event_type === "prompt.submit") {
+      promptCount++;
+      if (includeContent && payload.promptText && promptSamples.length < 20) {
+        promptSamples.push({
+          prompt_text: String(payload.promptText).slice(0, 500),
+          prompt_length: payload.promptLength ?? String(payload.promptText).length,
+        });
+      }
+    } else if (event.event_type === "tool.complete" || event.event_type === "tool.start") {
+      toolCallCount++;
+      if (payload.toolName) toolSet.add(payload.toolName);
+      if (includeContent && payload.toolInput && event.event_type === "tool.complete" && toolInputSamples.length < 20) {
+        toolInputSamples.push({
+          tool_name: payload.toolName ?? "unknown",
+          tool_input: String(payload.toolInput).slice(0, 500),
+        });
+      }
+    } else if (event.event_type === "tool.fail") {
+      toolFailCount++;
+      if (payload.toolName) toolSet.add(payload.toolName);
+      if (errorSamples.length < 30) {
+        errorSamples.push({
+          tool_name: payload.toolName ?? "unknown",
+          error_message: String(payload.errorMessage ?? "").slice(0, 300),
+        });
+      }
+    } else if (event.event_type === "response.complete") {
+      if (includeContent && payload.responseText && responseSamples.length < 10) {
+        responseSamples.push({
+          response_text: String(payload.responseText).slice(0, 500),
+          response_length: payload.responseLength ?? String(payload.responseText).length,
+        });
+      }
+    }
+  }
+
+  const totalTools = toolCallCount + toolFailCount;
+  const failureRatePct = totalTools > 0 ? Math.round((toolFailCount / totalTools) * 100) : 0;
+
+  const result: SessionFeedbackData = {
+    session: {
+      id: session.id,
+      project_name: session.project_name ?? null,
+      project_path: session.project_path ?? null,
+      started_at: session.started_at,
+      ended_at: session.ended_at ?? null,
+      status: session.status,
+      privacy_mode: session.privacy_mode ?? null,
+      duration_minutes: session.duration_minutes != null ? Math.round(Number(session.duration_minutes)) : null,
+    },
+    eventStats: {
+      total_events: events.length,
+      prompt_count: promptCount,
+      tool_call_count: toolCallCount,
+      tool_fail_count: toolFailCount,
+      failure_rate_pct: failureRatePct,
+      unique_tools: Array.from(toolSet),
+    },
+    errorSamples,
+  };
+
+  if (includeContent) {
+    if (promptSamples.length > 0) result.promptSamples = promptSamples;
+    if (toolInputSamples.length > 0) result.toolInputSamples = toolInputSamples;
+    if (responseSamples.length > 0) result.responseSamples = responseSamples;
+  }
+
+  return result;
+}
+
 export async function detectToolingAnomalies(
   sql: SQL,
   orgId: string,

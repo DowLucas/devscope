@@ -6,6 +6,7 @@ import { isAiAvailable } from "../ai/gemini";
 import { runQueryWorkflowStreaming } from "../ai/workflows/queryWorkflow";
 import { runInsightWorkflow } from "../ai/workflows/insightWorkflow";
 import { runReportWorkflow } from "../ai/workflows/reportWorkflow";
+import { runSessionFeedbackWorkflow } from "../ai/workflows/sessionFeedbackWorkflow";
 import {
   createConversation,
   getConversation,
@@ -20,6 +21,7 @@ import {
   getTokenUsageSummary,
   getTodayTokenCount,
 } from "../db";
+import { getDeveloperIdForUser } from "../services/developerLink";
 import { broadcast, broadcastToOrg } from "../ws/handler";
 import type { Content } from "@google/genai";
 import type { InsightType, InsightSeverity, ReportType } from "@devscope/shared";
@@ -282,6 +284,76 @@ export function aiRoutes(sql: SQL) {
       persona,
       devIds
     );
+
+    if (orgId) {
+      broadcastToOrg(orgId, { type: "ai.report.completed", data: report });
+    } else {
+      broadcast({ type: "ai.report.completed", data: report });
+    }
+
+    return c.json(report);
+  });
+
+  // --- Session Feedback ---
+
+  const sessionFeedbackSchema = z.object({
+    session_id: z.string().min(1),
+  });
+
+  app.post("/session-feedback", requireAi(), zValidator("json", sessionFeedbackSchema), async (c) => {
+    const { session_id } = c.req.valid("json");
+    const orgId = c.get("orgId" as never) as string | undefined;
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    const user = c.get("user" as never) as any;
+
+    // Fetch session to get developer_id and privacy_mode
+    const sessionRows = await sql`
+      SELECT id, developer_id, privacy_mode, status
+      FROM sessions
+      WHERE id = ${session_id}
+    ` as any[];
+
+    if (sessionRows.length === 0) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const sessionRow = sessionRows[0];
+
+    // Org-scope validation
+    if (devIds && devIds.length > 0 && !devIds.includes(sessionRow.developer_id)) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    const privacyMode: string | null = sessionRow.privacy_mode ?? null;
+
+    if (privacyMode === "private") {
+      return c.json(
+        { error: "Session is in private mode. Feedback is not available." },
+        403
+      );
+    }
+
+    // Determine if the viewer is the session's own developer (self-view)
+    const viewerDevId = user?.id ? await getDeveloperIdForUser(sql, user.id) : null;
+    const isSelfView = viewerDevId != null && viewerDevId === sessionRow.developer_id;
+    const contentIncluded = isSelfView && privacyMode === "open";
+
+    // Check cache: return existing report if available for same privacy tier
+    const cached = await sql`
+      SELECT * FROM ai_reports
+      WHERE report_type = 'session'
+        AND data_context->>'session_id' = ${session_id}
+        AND data_context->>'content_included' = ${String(contentIncluded)}
+      ORDER BY created_at DESC
+      LIMIT 1
+    ` as any[];
+
+    if (cached.length > 0) {
+      return c.json(cached[0]);
+    }
+
+    // Generate new feedback
+    const report = await runSessionFeedbackWorkflow(sql, session_id, privacyMode, isSelfView);
 
     if (orgId) {
       broadcastToOrg(orgId, { type: "ai.report.completed", data: report });
