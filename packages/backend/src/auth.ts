@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { apiKey } from "@better-auth/api-key";
 import { organization } from "better-auth/plugins/organization";
 import { Pool } from "pg";
-import { sendInviteEmail, sendVerificationEmail } from "./services/email";
+import { sendInviteEmail, sendVerificationEmail, sendWelcomeEmail } from "./services/email";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -62,6 +62,17 @@ export const auth = betterAuth({
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
     expiresIn: 3600,
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          if (user.emailVerified) {
+            void sendWelcomeEmail({ to: user.email, name: user.name });
+          }
+        },
+      },
+    },
   },
   advanced: {
     cookiePrefix: "devscope",

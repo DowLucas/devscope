@@ -79,6 +79,49 @@ export async function sendVerificationEmail(params: VerificationEmailParams): Pr
   }
 }
 
+interface WelcomeEmailParams {
+  to: string;
+  name?: string;
+}
+
+export async function sendWelcomeEmail(params: WelcomeEmailParams): Promise<void> {
+  const resend = getClient();
+  if (!resend) {
+    console.log(`[devscope] RESEND_API_KEY not set — welcome email for ${params.to} skipped`);
+    return;
+  }
+
+  const from = process.env.RESEND_FROM ?? "Lucas Dow <lucas@devscope.dev>";
+  const name = params.name || params.to.split("@")[0];
+  const dashboardUrl = process.env.DASHBOARD_URL || process.env.BETTER_AUTH_URL || "http://localhost:5173";
+
+  try {
+    await resend.emails.send({
+      from,
+      to: params.to,
+      subject: "Welcome to DevScope",
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+          <p>Hey ${escapeHtml(name)},</p>
+          <p>Thanks for signing up for DevScope! I'm Lucas — I love building and exploring new ways to use AI in my day-to-day work and hobby projects. DevScope is one of those projects: a real-time dashboard to help developers get better visibility into their Claude Code sessions.</p>
+          <p>I'm eager to get feedback and build a community around it, so I'm genuinely excited to have you here.</p>
+          <p>Head to the dashboard to get started:</p>
+          <a href="${escapeHtml(dashboardUrl)}/dashboard"
+             style="display: inline-block; padding: 12px 24px; background: #18181b; color: #fff;
+                    border-radius: 6px; text-decoration: none; font-weight: 500;">
+            Go to Dashboard
+          </a>
+          <p>If you have any questions or feedback, just reply to this email — I read everything.</p>
+          <p>— Lucas</p>
+        </div>
+      `,
+    });
+    console.log(`[devscope] Welcome email sent to ${params.to}`);
+  } catch (err) {
+    console.error(`[devscope] Failed to send welcome email to ${params.to}:`, err);
+  }
+}
+
 export async function sendInviteEmail(params: InviteEmailParams): Promise<void> {
   const resend = getClient();
   if (!resend) {
