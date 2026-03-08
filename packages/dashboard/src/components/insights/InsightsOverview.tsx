@@ -1,5 +1,6 @@
 import type {
   ToolUsageDataPoint,
+  SkillUsageDataPoint,
   SessionStatsSummary,
   ProjectActivityDataPoint,
   HourlyDistributionPoint,
@@ -11,6 +12,7 @@ import { ExportButton } from "@/components/ui/export-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCards } from "./StatCards";
 import { ToolUsageChart } from "./charts/ToolUsageChart";
+import { SkillUsageChart } from "./charts/SkillUsageChart";
 import { ProjectActivityChart } from "./charts/ProjectActivityChart";
 import { HourlyHeatmap } from "./charts/HourlyHeatmap";
 import { PeriodComparison } from "./PeriodComparison";
@@ -22,6 +24,7 @@ export function InsightsOverview() {
 
   const summary = useInsightsData<SessionStatsSummary>("sessions/summary", undefined, days);
   const tools = useInsightsData<ToolUsageDataPoint[]>("tools", undefined, days);
+  const skills = useInsightsData<SkillUsageDataPoint[]>("skills", undefined, days);
   const projects = useInsightsData<ProjectActivityDataPoint[]>("projects", undefined, days);
   const hourly = useInsightsData<HourlyDistributionPoint[]>("hourly", undefined, days);
 
@@ -46,6 +49,8 @@ export function InsightsOverview() {
         <ToolUsageChart data={tools.data} loading={tools.loading} />
         <ProjectActivityChart data={projects.data} loading={projects.loading} />
       </div>
+
+      <SkillUsageChart data={skills.data} loading={skills.loading} />
 
       <HourlyHeatmap data={hourly.data} loading={hourly.loading} />
     </div>

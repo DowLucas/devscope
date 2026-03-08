@@ -21,6 +21,7 @@ import type {
   DigestSummary,
   DigestEntry,
   MinuteActivityPoint,
+  SkillUsageDataPoint,
   ToolingHealthSummary,
   ToolingHealthTrend,
   EthicsAuditEntry,
@@ -319,6 +320,71 @@ export async function getToolUsageBreakdown(
     GROUP BY tool_name
     ORDER BY total DESC
     LIMIT 15`) as ToolUsageDataPoint[];
+}
+
+export async function getSkillUsageBreakdown(
+  sql: SQL,
+  developerId?: string,
+  days: number = 30,
+  developerIds?: string[]
+): Promise<SkillUsageDataPoint[]> {
+  if (developerId) {
+    return (await sql`
+      SELECT
+        e.payload->'toolInput'->>'skill' as skill_name,
+        SUM(CASE WHEN e.event_type = 'tool.complete' THEN 1 ELSE 0 END)::INT as success_count,
+        SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::INT as fail_count,
+        COUNT(*)::INT as total,
+        COALESCE(AVG(CASE WHEN (e.payload->>'durationMs')::numeric > 0
+          THEN (e.payload->>'durationMs')::numeric END), 0)::INT as avg_duration_ms
+      FROM events e
+      JOIN sessions s ON e.session_id = s.id
+      WHERE e.event_type IN ('tool.complete', 'tool.fail')
+        AND e.payload->>'toolName' = 'Skill'
+        AND e.payload->'toolInput'->>'skill' IS NOT NULL
+        AND e.created_at >= NOW() - make_interval(days => ${days})
+        AND s.developer_id = ${developerId}
+      GROUP BY skill_name
+      ORDER BY total DESC
+      LIMIT 20`) as SkillUsageDataPoint[];
+  }
+  if (developerIds && developerIds.length > 0) {
+    return (await sql`
+      SELECT
+        e.payload->'toolInput'->>'skill' as skill_name,
+        SUM(CASE WHEN e.event_type = 'tool.complete' THEN 1 ELSE 0 END)::INT as success_count,
+        SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::INT as fail_count,
+        COUNT(*)::INT as total,
+        COALESCE(AVG(CASE WHEN (e.payload->>'durationMs')::numeric > 0
+          THEN (e.payload->>'durationMs')::numeric END), 0)::INT as avg_duration_ms
+      FROM events e
+      JOIN sessions s ON e.session_id = s.id
+      WHERE e.event_type IN ('tool.complete', 'tool.fail')
+        AND e.payload->>'toolName' = 'Skill'
+        AND e.payload->'toolInput'->>'skill' IS NOT NULL
+        AND e.created_at >= NOW() - make_interval(days => ${days})
+        AND s.developer_id IN (${inList(developerIds)})
+      GROUP BY skill_name
+      ORDER BY total DESC
+      LIMIT 20`) as SkillUsageDataPoint[];
+  }
+  return (await sql`
+    SELECT
+      e.payload->'toolInput'->>'skill' as skill_name,
+      SUM(CASE WHEN e.event_type = 'tool.complete' THEN 1 ELSE 0 END)::INT as success_count,
+      SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::INT as fail_count,
+      COUNT(*)::INT as total,
+      COALESCE(AVG(CASE WHEN (e.payload->>'durationMs')::numeric > 0
+        THEN (e.payload->>'durationMs')::numeric END), 0)::INT as avg_duration_ms
+    FROM events e
+    JOIN sessions s ON e.session_id = s.id
+    WHERE e.event_type IN ('tool.complete', 'tool.fail')
+      AND e.payload->>'toolName' = 'Skill'
+      AND e.payload->'toolInput'->>'skill' IS NOT NULL
+      AND e.created_at >= NOW() - make_interval(days => ${days})
+    GROUP BY skill_name
+    ORDER BY total DESC
+    LIMIT 20`) as SkillUsageDataPoint[];
 }
 
 export async function getSessionStats(

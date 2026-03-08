@@ -16,6 +16,7 @@ import {
   getProjectToolUsage,
   getProjectActivityOverTime,
   getActivityPerMinute,
+  getSkillUsageBreakdown,
 } from "../db";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
@@ -81,6 +82,16 @@ export function insightsRoutes(sql: SQL) {
     }
     const days = clampInt(c.req.query("days"), 30, 365);
     return c.json(await getProjectActivity(sql, developerId, days, devIds));
+  });
+
+  app.get("/skills", async (c) => {
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    let developerId = c.req.query("developerId") || undefined;
+    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
+      developerId = undefined;
+    }
+    const days = clampInt(c.req.query("days"), 30, 365);
+    return c.json(await getSkillUsageBreakdown(sql, developerId, days, devIds));
   });
 
   app.get("/hourly", async (c) => {

@@ -195,6 +195,14 @@ export interface DigestSummary {
 
 // --- Tooling Health ---
 
+export interface SkillUsageDataPoint {
+  skill_name: string;
+  success_count: number;
+  fail_count: number;
+  total: number;
+  avg_duration_ms: number;
+}
+
 export interface ToolingHealthSummary {
   tool_name: string;
   project_name: string | null;
