@@ -52,10 +52,15 @@ export function useAiReports() {
   const fetchReport = useCallback(async (id: string) => {
     try {
       const response = await apiFetch(`/api/ai/reports/${id}`);
+      if (!response.ok) {
+        setSelectedReport(null);
+        return null;
+      }
       const report = await response.json();
       setSelectedReport(report);
       return report as AiReport;
     } catch {
+      setSelectedReport(null);
       return null;
     }
   }, []);

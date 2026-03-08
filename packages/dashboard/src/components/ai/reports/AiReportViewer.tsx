@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { navigate } from "wouter/use-browser-location";
 import { ArrowLeft, Clock, Loader2 } from "lucide-react";
@@ -14,10 +14,29 @@ interface AiReportViewerProps {
 
 export function AiReportViewer({ reportId }: AiReportViewerProps) {
   const { selectedReport, fetchReport } = useAiReports();
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    fetchReport(reportId);
+    setNotFound(false);
+    fetchReport(reportId).then((result) => {
+      if (!result) setNotFound(true);
+    });
   }, [reportId, fetchReport]);
+
+  if (notFound) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={() => navigate("/dashboard/assistant/reports")}
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Reports
+        </button>
+        <p className="text-sm text-muted-foreground">Report not found.</p>
+      </div>
+    );
+  }
 
   if (!selectedReport) {
     return (
