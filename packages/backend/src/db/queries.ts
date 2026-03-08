@@ -222,6 +222,7 @@ export async function getDeveloperActivityOverTime(
   days: number = 30,
   developerIds?: string[]
 ): Promise<ActivityDataPoint[]> {
+  // Filter sessions first to reduce the JOIN scan
   if (developerId) {
     return (await sql`
       SELECT
@@ -231,9 +232,8 @@ export async function getDeveloperActivityOverTime(
         SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
         SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls
       FROM events e
-      JOIN sessions s ON e.session_id = s.id
       WHERE e.created_at >= NOW() - make_interval(days => ${days})
-        AND s.developer_id = ${developerId}
+        AND e.session_id IN (SELECT id FROM sessions WHERE developer_id = ${developerId})
       GROUP BY e.created_at::DATE
       ORDER BY day ASC`) as ActivityDataPoint[];
   }
@@ -246,12 +246,12 @@ export async function getDeveloperActivityOverTime(
         SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
         SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls
       FROM events e
-      JOIN sessions s ON e.session_id = s.id
       WHERE e.created_at >= NOW() - make_interval(days => ${days})
-        AND s.developer_id IN (${inList(developerIds)})
+        AND e.session_id IN (SELECT id FROM sessions WHERE developer_id IN (${inList(developerIds)}))
       GROUP BY e.created_at::DATE
       ORDER BY day ASC`) as ActivityDataPoint[];
   }
+  // No developer filter — skip JOIN entirely
   return (await sql`
     SELECT
       e.created_at::DATE as day,
@@ -260,7 +260,6 @@ export async function getDeveloperActivityOverTime(
       SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
       SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls
     FROM events e
-    JOIN sessions s ON e.session_id = s.id
     WHERE e.created_at >= NOW() - make_interval(days => ${days})
     GROUP BY e.created_at::DATE
     ORDER BY day ASC`) as ActivityDataPoint[];
@@ -1286,10 +1285,12 @@ export async function getProjectActivityOverTime(
         SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
         SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls
       FROM events e
-      JOIN sessions s ON e.session_id = s.id
-      WHERE s.project_name = ${projectName}
-        AND e.created_at >= NOW() - make_interval(days => ${days})
-        AND s.developer_id IN (${inList(developerIds)})
+      WHERE e.created_at >= NOW() - make_interval(days => ${days})
+        AND e.session_id IN (
+          SELECT id FROM sessions
+          WHERE project_name = ${projectName}
+            AND developer_id IN (${inList(developerIds)})
+        )
       GROUP BY e.created_at::DATE
       ORDER BY day ASC`) as ActivityDataPoint[];
   }
@@ -1301,9 +1302,8 @@ export async function getProjectActivityOverTime(
       SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
       SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls
     FROM events e
-    JOIN sessions s ON e.session_id = s.id
-    WHERE s.project_name = ${projectName}
-      AND e.created_at >= NOW() - make_interval(days => ${days})
+    WHERE e.created_at >= NOW() - make_interval(days => ${days})
+      AND e.session_id IN (SELECT id FROM sessions WHERE project_name = ${projectName})
     GROUP BY e.created_at::DATE
     ORDER BY day ASC`) as ActivityDataPoint[];
 }
