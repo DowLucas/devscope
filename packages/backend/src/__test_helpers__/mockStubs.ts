@@ -62,6 +62,27 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     getSessionEventsForTitle: noopArr,
     saveSessionTitle: noop,
     getSessionTitleHistory: noopArr,
+    // frictionQueries.ts
+    insertFrictionAlert: noop,
+    getFrictionAlerts: noopArr,
+    acknowledgeFrictionAlert: noop,
+    getFrictionRules: noopArr,
+    seedDefaultFrictionRules: noop,
+    // claudeMdQueries.ts
+    upsertClaudeMdSnapshot: noop,
+    getClaudeMdTimeline: noopArr,
+    getClaudeMdProjects: noopArr,
+    computeClaudeMdCorrelation: noop,
+    // topologyQueries.ts
+    computeTeamToolTopology: noop,
+    getTeamToolTopology: noopArr,
+    detectSkillGaps: noop,
+    getTeamSkillGaps: noopArr,
+    // workflowProfileQueries.ts
+    upsertWorkflowProfile: noop,
+    getWorkflowProfile: noop,
+    getWorkflowProfileHistory: noopArr,
+    getTeamWorkflowSummary: noop,
     ...overrides,
   };
 }

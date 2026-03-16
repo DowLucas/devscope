@@ -46,6 +46,15 @@ mock.module("../../utils/stripSensitiveFields", () => stripSensitiveFieldsStubs(
   stripSensitivePayload: mockStripSensitivePayload,
 }));
 
+mock.module("../../services/frictionDetector", () => ({
+  evaluateFriction: mock(() => null),
+  cleanupFrictionSession: mock(() => {}),
+}));
+
+mock.module("../../utils/ethicsAudit", () => ({
+  logEthicsEvent: mock(() => {}),
+}));
+
 // Import AFTER mocks are registered
 const { eventsRoutes } = await import("../events");
 
