@@ -95,12 +95,14 @@ export async function getFrictionAlerts(
 
 export async function acknowledgeFrictionAlert(
   sql: SQL,
-  alertId: string
+  alertId: string,
+  orgId: string
 ): Promise<FrictionAlert | null> {
   const [row] = await sql`
     UPDATE friction_alerts
     SET acknowledged = TRUE
     WHERE id = ${alertId}
+      AND organization_id = ${orgId}
     RETURNING *
   `;
   return (row as FrictionAlert) ?? null;
@@ -142,22 +144,10 @@ const DEFAULT_RULES: Array<{
     config: { increasePercent: 50, minPrompts: 3 },
   },
   {
-    id: "default-no-progress",
-    rule_name: "No Progress",
-    rule_type: "no_progress",
-    config: { timeoutMinutes: 10 },
-  },
-  {
     id: "default-failure-cascade",
     rule_name: "Failure Cascade",
     rule_type: "failure_cascade",
     config: { uniqueTools: 3, windowMinutes: 5 },
-  },
-  {
-    id: "default-stuck-loop",
-    rule_name: "Stuck Loop",
-    rule_type: "stuck_loop",
-    config: { cycles: 4 },
   },
 ];
 

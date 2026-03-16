@@ -1,9 +1,7 @@
 export type FrictionRuleType =
   | "repeated_failure"
   | "escalating_prompts"
-  | "no_progress"
-  | "failure_cascade"
-  | "stuck_loop";
+  | "failure_cascade";
 
 export interface FrictionRule {
   id: string;

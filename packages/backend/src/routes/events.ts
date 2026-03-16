@@ -96,30 +96,6 @@ export function eventsRoutes(sql: SQL) {
       await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode);
     }
 
-    // Capture CLAUDE.md files on session start
-    if (event.eventType === "session.start") {
-      const claudeMdFiles = (event.payload as any).claudeMdFiles;
-      if (Array.isArray(claudeMdFiles)) {
-        const orgId = (await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${event.developerId} LIMIT 1` as any[])[0]?.organization_id ?? null;
-        for (const file of claudeMdFiles.slice(0, 10)) {
-          try {
-            await upsertClaudeMdSnapshot(sql, {
-              organization_id: orgId,
-              project_name: event.projectName,
-              project_path: event.projectPath,
-              content_hash: file.hash,
-              content_size: file.size,
-              content_text: file.content ?? null,
-              session_id: event.sessionId,
-              developer_id: event.developerId,
-            });
-          } catch {
-            // Ignore snapshot errors — don't block event ingestion
-          }
-        }
-      }
-    }
-
     // Log ethics event when privacy mode is activated
     if (event.eventType === "session.start" && privacyMode === "private") {
       const orgIds = await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${event.developerId}`;
@@ -203,15 +179,42 @@ export function eventsRoutes(sql: SQL) {
       }
     }
 
+    // Capture CLAUDE.md files on session start (after devOrgs is available)
+    if (event.eventType === "session.start") {
+      const claudeMdFiles = (event.payload as any).claudeMdFiles;
+      if (Array.isArray(claudeMdFiles)) {
+        for (const row of devOrgs as any[]) {
+          for (const file of claudeMdFiles.slice(0, 10)) {
+            try {
+              await upsertClaudeMdSnapshot(sql, {
+                organization_id: row.organization_id,
+                project_name: event.projectName,
+                project_path: event.projectPath,
+                content_hash: file.hash,
+                content_size: file.size,
+                content_text: privacyMode === "private" ? null : (file.content ?? null),
+                session_id: event.sessionId,
+                developer_id: event.developerId,
+              });
+            } catch {
+              // Ignore snapshot errors — don't block event ingestion
+            }
+          }
+        }
+      }
+    }
+
     // Friction detection for active sessions
     if (["tool.fail", "prompt.submit", "tool.complete", "response.complete"].includes(event.eventType)) {
       try {
-        const orgId = (devOrgs as any[])[0]?.organization_id ?? null;
-        const rules = orgId ? await getFrictionRules(sql, orgId) : [];
-        const frictionAlert = evaluateFriction(event.sessionId, event, rules);
-        if (frictionAlert && orgId) {
-          const saved = await insertFrictionAlert(sql, { ...frictionAlert, organization_id: orgId });
-          broadcastToDevOrgs({ type: "friction.alert", data: saved });
+        for (const row of devOrgs as any[]) {
+          const orgId = row.organization_id;
+          const rules = await getFrictionRules(sql, orgId);
+          const frictionAlert = evaluateFriction(event.sessionId, event, rules);
+          if (frictionAlert) {
+            const saved = await insertFrictionAlert(sql, { ...frictionAlert, organization_id: orgId });
+            broadcastToDevOrgs({ type: "friction.alert", data: saved });
+          }
         }
       } catch {
         // Don't block event ingestion on friction errors

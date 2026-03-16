@@ -23,7 +23,8 @@ export function frictionRoutes(sql: SQL) {
   // POST /:id/acknowledge
   app.post("/:id/acknowledge", async (c) => {
     const id = c.req.param("id");
-    const alert = await acknowledgeFrictionAlert(sql, id);
+    const orgId = c.get("orgId" as never) as string;
+    const alert = await acknowledgeFrictionAlert(sql, id, orgId);
     if (!alert) return c.json({ error: "Alert not found" }, 404);
     return c.json(alert);
   });
