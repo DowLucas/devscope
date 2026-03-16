@@ -102,7 +102,7 @@ export function SessionFeedbackPanel({ sessionId, privacyMode, isSelfView }: Ses
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError((data as any).error ?? "Failed to generate debrief.");
+        setError((data as { error?: string }).error ?? "Failed to generate debrief.");
         return;
       }
 

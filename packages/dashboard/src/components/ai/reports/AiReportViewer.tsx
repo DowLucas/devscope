@@ -17,9 +17,8 @@ export function AiReportViewer({ reportId }: AiReportViewerProps) {
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    setNotFound(false);
     fetchReport(reportId).then((result) => {
-      if (!result) setNotFound(true);
+      setNotFound(!result);
     });
   }, [reportId, fetchReport]);
 
