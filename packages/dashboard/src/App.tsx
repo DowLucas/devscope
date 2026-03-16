@@ -23,6 +23,8 @@ import { InviteAcceptPage } from "@/components/team/InviteAcceptPage";
 import { SkillsView } from "@/components/skills/SkillsView";
 import { PlaybooksView } from "@/components/playbooks/PlaybooksView";
 import { PrivacyDashboard } from "@/components/privacy/PrivacyDashboard";
+import { ClaudeMdEvolutionView } from "@/components/claudemd/ClaudeMdEvolutionView";
+import { WorkflowProfileView } from "@/components/workflow/WorkflowProfileView";
 import { useDevscopeSocket } from "@/hooks/useWebSocket";
 import { useActivityStore, type ActiveAgent, type ActivityState } from "@/stores/activityStore";
 import { apiFetch } from "@/lib/api";
@@ -87,6 +89,8 @@ function AppContent() {
         <Route path="/dashboard/assistant/*?" component={AiView} />
         <Route path="/dashboard/skills/*?" component={SkillsView} />
         <Route path="/dashboard/playbooks/*?" component={PlaybooksView} />
+        <Route path="/dashboard/claudemd/*?" component={ClaudeMdEvolutionView} />
+        <Route path="/dashboard/workflow/*?" component={WorkflowProfileView} />
         <Route path="/dashboard/privacy/*?" component={PrivacyDashboard} />
         <Route path="/dashboard/team/*?" component={TeamView} />
         <Route path="/dashboard/account/*?" component={SettingsPage} />

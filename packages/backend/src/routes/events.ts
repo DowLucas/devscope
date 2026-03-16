@@ -10,11 +10,15 @@ import {
   insertEvent,
   getRecentEvents,
   checkAlertThresholds,
+  insertFrictionAlert,
+  getFrictionRules,
+  upsertClaudeMdSnapshot,
 } from "../db";
 import { broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg } from "../services/developerLink";
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 import { logEthicsEvent } from "../utils/ethicsAudit";
+import { evaluateFriction, cleanupFrictionSession } from "../services/frictionDetector";
 
 const eventSchema = z.object({
   id: z.string().min(1).max(200),
@@ -90,6 +94,30 @@ export function eventsRoutes(sql: SQL) {
     const shouldCreateOrReactivate = !existingSession || wasEnded || event.eventType === "session.start";
     if (shouldCreateOrReactivate) {
       await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode);
+    }
+
+    // Capture CLAUDE.md files on session start
+    if (event.eventType === "session.start") {
+      const claudeMdFiles = (event.payload as any).claudeMdFiles;
+      if (Array.isArray(claudeMdFiles)) {
+        const orgId = (await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${event.developerId} LIMIT 1` as any[])[0]?.organization_id ?? null;
+        for (const file of claudeMdFiles.slice(0, 10)) {
+          try {
+            await upsertClaudeMdSnapshot(sql, {
+              organization_id: orgId,
+              project_name: event.projectName,
+              project_path: event.projectPath,
+              content_hash: file.hash,
+              content_size: file.size,
+              content_text: file.content ?? null,
+              session_id: event.sessionId,
+              developer_id: event.developerId,
+            });
+          } catch {
+            // Ignore snapshot errors — don't block event ingestion
+          }
+        }
+      }
     }
 
     // Log ethics event when privacy mode is activated
@@ -173,6 +201,26 @@ export function eventsRoutes(sql: SQL) {
       if (alert) {
         broadcastToDevOrgs({ type: "alert.triggered", data: alert });
       }
+    }
+
+    // Friction detection for active sessions
+    if (["tool.fail", "prompt.submit", "tool.complete", "response.complete"].includes(event.eventType)) {
+      try {
+        const orgId = (devOrgs as any[])[0]?.organization_id ?? null;
+        const rules = orgId ? await getFrictionRules(sql, orgId) : [];
+        const frictionAlert = evaluateFriction(event.sessionId, event, rules);
+        if (frictionAlert && orgId) {
+          const saved = await insertFrictionAlert(sql, { ...frictionAlert, organization_id: orgId });
+          broadcastToDevOrgs({ type: "friction.alert", data: saved });
+        }
+      } catch {
+        // Don't block event ingestion on friction errors
+      }
+    }
+
+    // Clean up friction state on session end
+    if (event.eventType === "session.end") {
+      cleanupFrictionSession(event.sessionId);
     }
 
     return c.json({ ok: true });

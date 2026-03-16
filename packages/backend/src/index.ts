@@ -22,7 +22,14 @@ import { startPatternAnalysis } from "./jobs/patternAnalysis";
 import { startSessionTitleGeneration } from "./jobs/sessionTitleGeneration";
 import { startDataRetention } from "./jobs/dataRetention";
 import { startToolingHealthCheck } from "./jobs/toolingHealth";
+import { startClaudeMdCorrelation } from "./jobs/claudeMdCorrelation";
+import { startTopologyComputation } from "./jobs/topologyComputation";
+import { startWorkflowProfileComputation } from "./jobs/workflowProfileComputation";
 import { aiRoutes } from "./routes/ai";
+import { frictionRoutes } from "./routes/friction";
+import { claudeMdRoutes } from "./routes/claudeMd";
+import { topologyRoutes } from "./routes/topology";
+import { workflowProfileRoutes } from "./routes/workflowProfiles";
 import { patternsRoutes } from "./routes/patterns";
 import { skillsRoutes } from "./routes/skills";
 import { playbooksRoutes } from "./routes/playbooks";
@@ -35,6 +42,7 @@ import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware, getClientIp } from "./middleware/rateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
 import { getPublicStats } from "./db/queries";
+import { seedDefaultFrictionRules } from "./db";
 import { flushEthicsAudit } from "./utils/ethicsAudit";
 import type { Context, Next } from "hono";
 
@@ -64,6 +72,12 @@ startPatternAnalysis(sql);
 startSessionTitleGeneration(sql);
 startDataRetention(sql);
 startToolingHealthCheck(sql);
+startClaudeMdCorrelation(sql);
+startTopologyComputation(sql);
+startWorkflowProfileComputation(sql);
+
+// Seed default friction rules
+await seedDefaultFrictionRules(sql);
 
 // Seed a default alert rule if none exist
 const [existingRules] = await sql`SELECT COUNT(*)::INT as cnt FROM alert_rules`;
@@ -242,6 +256,14 @@ app.use("/api/ethics/*", orgScopeMiddleware(sql));
 app.use("/api/ethics", orgScopeMiddleware(sql));
 app.use("/api/privacy/*", orgScopeMiddleware(sql));
 app.use("/api/privacy", orgScopeMiddleware(sql));
+app.use("/api/friction/*", orgScopeMiddleware(sql));
+app.use("/api/friction", orgScopeMiddleware(sql));
+app.use("/api/claude-md/*", orgScopeMiddleware(sql));
+app.use("/api/claude-md", orgScopeMiddleware(sql));
+app.use("/api/topology/*", orgScopeMiddleware(sql));
+app.use("/api/topology", orgScopeMiddleware(sql));
+app.use("/api/workflow-profiles/*", orgScopeMiddleware(sql));
+app.use("/api/workflow-profiles", orgScopeMiddleware(sql));
 
 app.route("/api/events", eventsRoutes(sql));
 app.route("/api/sessions", sessionsRoutes(sql));
@@ -258,6 +280,10 @@ app.route("/api/team-skills", teamSkillsRoutes(sql));
 app.route("/api/ethics", ethicsRoutes(sql));
 app.route("/api/privacy", privacyRoutes(sql));
 app.route("/api/account", accountRoutes(sql));
+app.route("/api/friction", frictionRoutes(sql));
+app.route("/api/claude-md", claudeMdRoutes(sql));
+app.route("/api/topology", topologyRoutes(sql));
+app.route("/api/workflow-profiles", workflowProfileRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })
