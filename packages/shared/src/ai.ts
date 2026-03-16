@@ -83,11 +83,14 @@ export interface AiQueryResponse {
   tool_calls?: AiToolCall[];
 }
 
+export type ReportPersona = "team-lead" | "developer" | "executive" | "investor";
+
 export interface AiReportGenerateRequest {
   report_type: ReportType;
   title?: string;
   period_start?: string;
   period_end?: string;
+  persona?: ReportPersona;
 }
 
 // --- Upskilling Platform Types ---

@@ -5,3 +5,4 @@ export * from "./patternQueries";
 export * from "./antiPatternQueries";
 export * from "./playbookQueries";
 export * from "./teamSkillQueries";
+export * from "./platformQueries";

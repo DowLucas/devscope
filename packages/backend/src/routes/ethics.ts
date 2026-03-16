@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
-import { getEthicsAuditLog, getEthicsAuditSummary } from "../db";
+import { getEthicsAuditLog, getEthicsAuditSummary, getTransparencyReport } from "../db";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
   if (!val) return def;
@@ -32,6 +32,16 @@ export function ethicsRoutes(sql: SQL) {
     const days = clampInt(c.req.query("days"), 7, 365);
     const summary = await getEthicsAuditSummary(sql, orgId, days);
     return c.json(summary);
+  });
+
+  // GET /api/ethics/transparency-report — stakeholder-facing transparency report
+  app.get("/transparency-report", async (c) => {
+    const orgId = c.get("orgId" as never) as string | undefined;
+    if (!orgId) return c.json({ error: "No active organization" }, 400);
+
+    const days = clampInt(c.req.query("days"), 30, 365);
+    const report = await getTransparencyReport(sql, orgId, days);
+    return c.json(report);
   });
 
   return app;

@@ -17,6 +17,11 @@ import {
   getProjectActivityOverTime,
   getActivityPerMinute,
   getSkillUsageBreakdown,
+  getLatestMaturity,
+  getMaturityHistory,
+  getBenchmarkPositions,
+  isBenchmarkOptedIn,
+  setBenchmarkOptIn,
 } from "../db";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
@@ -164,6 +169,52 @@ export function insightsRoutes(sql: SQL) {
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     return c.json(await getProjectActivityOverTime(sql, name, days, devIds));
+  });
+
+  // --- Maturity Index ---
+  app.get("/maturity", async (c) => {
+    const orgId = c.get("orgId" as never) as string | undefined;
+    if (!orgId) return c.json({ error: "No active organization" }, 400);
+    const latest = await getLatestMaturity(sql, orgId);
+    return c.json(latest);
+  });
+
+  app.get("/maturity/history", async (c) => {
+    const orgId = c.get("orgId" as never) as string | undefined;
+    if (!orgId) return c.json({ error: "No active organization" }, 400);
+    const days = clampInt(c.req.query("days"), 90, 365);
+    const history = await getMaturityHistory(sql, orgId, days);
+    return c.json(history);
+  });
+
+  // --- Benchmarking ---
+  app.get("/benchmarks", async (c) => {
+    const orgId = c.get("orgId" as never) as string | undefined;
+    if (!orgId) return c.json({ error: "No active organization" }, 400);
+
+    const optedIn = await isBenchmarkOptedIn(sql, orgId);
+    if (!optedIn) {
+      return c.json({ opted_in: false, positions: [] });
+    }
+
+    // Get latest period start (most recent Sunday)
+    const now = new Date();
+    const dayOfWeek = now.getUTCDay();
+    const lastSunday = new Date(now.getTime() - dayOfWeek * 86400000);
+    const periodStart = lastSunday.toISOString().split("T")[0];
+
+    const positions = await getBenchmarkPositions(sql, orgId, periodStart);
+    return c.json({ opted_in: true, positions });
+  });
+
+  app.post("/benchmarks/opt-in", async (c) => {
+    const orgId = c.get("orgId" as never) as string | undefined;
+    if (!orgId) return c.json({ error: "No active organization" }, 400);
+
+    const body = await c.req.json();
+    const optIn = !!body.opt_in;
+    await setBenchmarkOptIn(sql, orgId, optIn);
+    return c.json({ ok: true, benchmark_opt_in: optIn });
   });
 
   return app;

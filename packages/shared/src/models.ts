@@ -33,6 +33,10 @@ export type WsMessageType =
   | "ai.skill.new"
   | "ai.skill.updated"
   | "ethics.audit.new"
+  | "session.health.alert"
+  | "maturity.updated"
+  | "benchmark.updated"
+  | "marketplace.playbook.new"
   | "subscribe"
   | "connected";
 

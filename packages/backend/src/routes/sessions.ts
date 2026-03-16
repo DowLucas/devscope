@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
-import { getActiveSessions, getActiveAgents, getAllSessions, getSessionDetail, getSessionTitleHistory } from "../db";
+import { getActiveSessions, getActiveAgents, getAllSessions, getSessionDetail, getSessionTitleHistory, getLatestSessionHealth, getSessionHealthHistory } from "../db";
 import { getDeveloperIdForUser } from "../services/developerLink";
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 
@@ -98,6 +98,17 @@ export function sessionsRoutes(sql: SQL) {
         };
       }),
     });
+  });
+
+  // GET /api/sessions/:id/health — session health score
+  app.get("/:id/health", async (c) => {
+    const id = c.req.param("id");
+    const history = c.req.query("history") === "true";
+    if (history) {
+      return c.json(await getSessionHealthHistory(sql, id));
+    }
+    const latest = await getLatestSessionHealth(sql, id);
+    return c.json(latest);
   });
 
   app.get("/:id/titles", async (c) => {

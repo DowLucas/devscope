@@ -106,8 +106,14 @@ async function generateOutline(
 ): Promise<Partial<ReportStateType>> {
   const dataStr = JSON.stringify(state.data, null, 2).slice(0, 25_000);
 
+  const personaMap: Record<string, string> = {
+    "team-lead": "Team Lead — focus on project progress, blockers, tool issues, and team velocity trends.",
+    "developer": "Developer — focus on tool adoption, failure patterns, and project health. Practical and actionable.",
+    "executive": "Executive/CTO — focus on AI tool ROI, team capacity trends, strategic recommendations for AI adoption, and cost-per-prompt efficiency. High-level, strategic framing.",
+    "investor": "Investor/Board — focus on quantifiable AI adoption metrics, team throughput benchmarks, operational efficiency gains. Format for inclusion in board-level reporting. Include period-over-period deltas and trend lines.",
+  };
   const personaGuidance = state.persona
-    ? `\n\nAudience: ${state.persona === "team-lead" ? "Team Lead — focus on project progress, blockers, tool issues, and team velocity trends." : state.persona === "developer" ? "Developer — focus on tool adoption, failure patterns, and project health. Practical and actionable." : "Team Lead — focus on project progress, blockers, tool issues, and team velocity trends."}`
+    ? `\n\nAudience: ${personaMap[state.persona] ?? personaMap["team-lead"]}`
     : "";
 
   const response = await callGemini(
@@ -154,8 +160,14 @@ async function writeReport(
 ): Promise<Partial<ReportStateType>> {
   const dataStr = JSON.stringify(state.data, null, 2).slice(0, 25_000);
 
+  const personaReqMap: Record<string, string> = {
+    "team-lead": "a Team Lead audience: focus on project progress, blockers, team velocity trends, and tool issues",
+    "developer": "a Developer audience: focus on tool adoption patterns, failure analysis, and practical recommendations",
+    "executive": "an Executive audience: lead with ROI and strategic impact. Include AI maturity score trend, cost efficiency metrics, and strategic recommendations. Use professional, concise language suitable for C-suite",
+    "investor": "an Investor/Board audience: lead with quantifiable metrics and period-over-period deltas. Include AI adoption benchmarks, operational efficiency gains, and team capacity utilization. Format for board deck inclusion with clear data points",
+  };
   const personaRequirements = state.persona
-    ? `\n- Tailored for ${state.persona === "team-lead" ? "a Team Lead audience: focus on project progress, blockers, team velocity trends, and tool issues" : state.persona === "developer" ? "a Developer audience: focus on tool adoption patterns, failure analysis, and practical recommendations" : "a Team Lead audience: focus on project progress, blockers, team velocity trends, and tool issues"}`
+    ? `\n- Tailored for ${personaReqMap[state.persona] ?? personaReqMap["team-lead"]}`
     : "";
 
   const response = await callGemini(

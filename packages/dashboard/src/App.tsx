@@ -22,7 +22,11 @@ import { TeamView } from "@/components/team/TeamView";
 import { InviteAcceptPage } from "@/components/team/InviteAcceptPage";
 import { SkillsView } from "@/components/skills/SkillsView";
 import { PlaybooksView } from "@/components/playbooks/PlaybooksView";
+import { MarketplaceView } from "@/components/playbooks/MarketplaceView";
 import { PrivacyDashboard } from "@/components/privacy/PrivacyDashboard";
+import { MaturityIndex } from "@/components/insights/MaturityIndex";
+import { BenchmarkView } from "@/components/insights/BenchmarkView";
+import { TransparencyReportView } from "@/components/privacy/TransparencyReport";
 import { useDevscopeSocket } from "@/hooks/useWebSocket";
 import { useActivityStore, type ActiveAgent, type ActivityState } from "@/stores/activityStore";
 import { apiFetch } from "@/lib/api";
@@ -87,6 +91,10 @@ function AppContent() {
         <Route path="/dashboard/assistant/*?" component={AiView} />
         <Route path="/dashboard/skills/*?" component={SkillsView} />
         <Route path="/dashboard/playbooks/*?" component={PlaybooksView} />
+        <Route path="/dashboard/marketplace/*?" component={MarketplaceView} />
+        <Route path="/dashboard/maturity" component={MaturityIndex} />
+        <Route path="/dashboard/benchmarks" component={BenchmarkView} />
+        <Route path="/dashboard/privacy/transparency" component={TransparencyReportView} />
         <Route path="/dashboard/privacy/*?" component={PrivacyDashboard} />
         <Route path="/dashboard/team/*?" component={TeamView} />
         <Route path="/dashboard/account/*?" component={SettingsPage} />

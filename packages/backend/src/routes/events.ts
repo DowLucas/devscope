@@ -15,6 +15,7 @@ import { broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg } from "../services/developerLink";
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 import { logEthicsEvent } from "../utils/ethicsAudit";
+import { scoreSessionHealth, clearSessionCounters, getHealthLevel } from "../services/sessionHealthScorer";
 
 const eventSchema = z.object({
   id: z.string().min(1).max(200),
@@ -173,6 +174,33 @@ export function eventsRoutes(sql: SQL) {
       if (alert) {
         broadcastToDevOrgs({ type: "alert.triggered", data: alert });
       }
+    }
+
+    // Session health scoring on tool events (Feature 5)
+    if (event.eventType === "tool.complete" || event.eventType === "tool.fail") {
+      const toolName = (event.payload as { toolName?: string }).toolName;
+      const healthScore = await scoreSessionHealth(sql, {
+        sessionId: event.sessionId,
+        eventType: event.eventType,
+        toolName,
+      });
+      if (healthScore && getHealthLevel(healthScore.score) !== "healthy") {
+        broadcastToDevOrgs({
+          type: "session.health.alert",
+          data: {
+            session_id: event.sessionId,
+            score: healthScore.score,
+            level: getHealthLevel(healthScore.score),
+            risk_factors: healthScore.risk_factors,
+            suggested_playbook_id: healthScore.suggested_playbook_id,
+          },
+        });
+      }
+    }
+
+    // Clear health counters on session end
+    if (event.eventType === "session.end") {
+      clearSessionCounters(event.sessionId);
     }
 
     return c.json({ ok: true });

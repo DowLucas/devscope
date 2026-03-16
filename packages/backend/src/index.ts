@@ -22,6 +22,8 @@ import { startPatternAnalysis } from "./jobs/patternAnalysis";
 import { startSessionTitleGeneration } from "./jobs/sessionTitleGeneration";
 import { startDataRetention } from "./jobs/dataRetention";
 import { startToolingHealthCheck } from "./jobs/toolingHealth";
+import { startMaturitySnapshotJob } from "./jobs/maturitySnapshot";
+import { startBenchmarkComputation } from "./jobs/benchmarkComputation";
 import { aiRoutes } from "./routes/ai";
 import { patternsRoutes } from "./routes/patterns";
 import { skillsRoutes } from "./routes/skills";
@@ -30,6 +32,7 @@ import { teamSkillsRoutes } from "./routes/teamSkills";
 import { ethicsRoutes } from "./routes/ethics";
 import { privacyRoutes } from "./routes/privacy";
 import { accountRoutes } from "./routes/account";
+import { marketplaceRoutes } from "./routes/marketplace";
 import { waitlistRoutes } from "./routes/waitlist";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware, getClientIp } from "./middleware/rateLimit";
@@ -64,6 +67,8 @@ startPatternAnalysis(sql);
 startSessionTitleGeneration(sql);
 startDataRetention(sql);
 startToolingHealthCheck(sql);
+startMaturitySnapshotJob(sql);
+startBenchmarkComputation(sql);
 
 // Seed a default alert rule if none exist
 const [existingRules] = await sql`SELECT COUNT(*)::INT as cnt FROM alert_rules`;
@@ -242,6 +247,8 @@ app.use("/api/ethics/*", orgScopeMiddleware(sql));
 app.use("/api/ethics", orgScopeMiddleware(sql));
 app.use("/api/privacy/*", orgScopeMiddleware(sql));
 app.use("/api/privacy", orgScopeMiddleware(sql));
+app.use("/api/marketplace/*", orgScopeMiddleware(sql));
+app.use("/api/marketplace", orgScopeMiddleware(sql));
 
 app.route("/api/events", eventsRoutes(sql));
 app.route("/api/sessions", sessionsRoutes(sql));
@@ -258,6 +265,7 @@ app.route("/api/team-skills", teamSkillsRoutes(sql));
 app.route("/api/ethics", ethicsRoutes(sql));
 app.route("/api/privacy", privacyRoutes(sql));
 app.route("/api/account", accountRoutes(sql));
+app.route("/api/marketplace", marketplaceRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })
