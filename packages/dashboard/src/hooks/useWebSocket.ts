@@ -88,6 +88,9 @@ export function useDevscopeSocket() {
             case "alert.triggered":
               store.addAlert(msg.data);
               break;
+            case "friction.alert":
+              store.addFrictionAlert(msg.data);
+              break;
           }
         } catch {
           // Ignore malformed messages

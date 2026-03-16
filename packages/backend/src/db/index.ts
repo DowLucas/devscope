@@ -5,3 +5,7 @@ export * from "./patternQueries";
 export * from "./antiPatternQueries";
 export * from "./playbookQueries";
 export * from "./teamSkillQueries";
+export * from "./frictionQueries";
+export * from "./claudeMdQueries";
+export * from "./topologyQueries";
+export * from "./workflowProfileQueries";

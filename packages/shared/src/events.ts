@@ -54,6 +54,12 @@ export interface SessionStartPayload {
   gitBranch?: string;
   gitCommit?: string;
   gitRemoteUrl?: string;
+  claudeMdFiles?: Array<{
+    path: string;
+    hash: string;
+    size: number;
+    content?: string;
+  }>;
 }
 
 export interface SessionEndPayload {

@@ -33,6 +33,7 @@ export type WsMessageType =
   | "ai.skill.new"
   | "ai.skill.updated"
   | "ethics.audit.new"
+  | "friction.alert"
   | "subscribe"
   | "connected";
 

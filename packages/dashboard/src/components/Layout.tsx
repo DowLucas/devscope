@@ -1,6 +1,6 @@
 import { type ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Activity, Users, GitBranch, BarChart3, AlertTriangle, FolderOpen, Sparkles, Clock, Settings, LogOut, UsersRound, Mail, Cog, TrendingUp, BookOpen, Shield } from "lucide-react";
+import { Activity, Users, GitBranch, BarChart3, AlertTriangle, FolderOpen, Sparkles, Clock, Settings, LogOut, UsersRound, Mail, Cog, TrendingUp, BookOpen, Shield, FileText, Fingerprint } from "lucide-react";
 import { useActivityStore } from "@/stores/activityStore";
 import { authClient } from "@/lib/auth-client";
 import { useTeamStore } from "@/stores/teamStore";
@@ -52,6 +52,8 @@ function useNavBadges(): Record<string, NavBadge | null> {
     (e) => new Date(e.timestamp).getTime() > oneMinuteAgo
   ).length;
 
+  const frictionAlerts = useActivityStore((s) => s.frictionAlerts);
+  const unacknowledgedFriction = frictionAlerts.filter((a) => !a.acknowledged).length;
   const unacknowledgedCount = alerts.filter((a) => !a.acknowledged).length;
   const activeDeveloperCount = developers.filter(
     (d) => (d.activeSessions ?? 0) > 0
@@ -64,8 +66,8 @@ function useNavBadges(): Record<string, NavBadge | null> {
       ? { count: activeSessions.length, variant: "success" } : null,
     "/dashboard/sessions": activeSessions.length > 0
       ? { count: activeSessions.length, variant: "info" } : null,
-    "/dashboard/incidents": unacknowledgedCount > 0
-      ? { count: unacknowledgedCount, variant: "destructive" } : null,
+    "/dashboard/incidents": (unacknowledgedCount + unacknowledgedFriction) > 0
+      ? { count: unacknowledgedCount + unacknowledgedFriction, variant: "destructive" } : null,
     "/dashboard/developers": activeDeveloperCount > 0
       ? { count: activeDeveloperCount, variant: "muted" } : null,
   };
@@ -92,6 +94,7 @@ const BASE_NAV_GROUPS = [
     items: [
       { path: "/dashboard/metrics", label: "Metrics", icon: BarChart3 },
       { path: "/dashboard/projects", label: "Projects", icon: FolderOpen },
+      { path: "/dashboard/claudemd", label: "CLAUDE.md", icon: FileText },
     ],
   },
   {
@@ -108,6 +111,7 @@ const BASE_NAV_GROUPS = [
       { path: "/dashboard/assistant", label: "AI Assistant", icon: Sparkles },
       { path: "/dashboard/skills", label: "Team Skills", icon: TrendingUp },
       { path: "/dashboard/playbooks", label: "Playbooks", icon: BookOpen },
+      { path: "/dashboard/workflow", label: "Workflow DNA", icon: Fingerprint },
     ],
   },
 ];
@@ -117,7 +121,7 @@ function isActive(location: string, path: string): boolean {
   return location === path || location.startsWith(path + "/");
 }
 
-const WIDE_VIEWS = ["/dashboard/topology", "/dashboard/metrics", "/dashboard/projects", "/dashboard/incidents", "/dashboard/assistant", "/dashboard/skills", "/dashboard/playbooks", "/dashboard/account", "/dashboard/team", "/dashboard/privacy"];
+const WIDE_VIEWS = ["/dashboard/topology", "/dashboard/metrics", "/dashboard/projects", "/dashboard/claudemd", "/dashboard/incidents", "/dashboard/assistant", "/dashboard/skills", "/dashboard/playbooks", "/dashboard/workflow", "/dashboard/account", "/dashboard/team", "/dashboard/privacy"];
 
 function useNavGroups() {
   const admin = useTeamStore((s) => s.isAdmin());

@@ -6,6 +6,7 @@ import { FailureRateChart } from "./FailureRateChart";
 import { FailureClustersTable } from "./FailureClustersTable";
 import { AlertRulesConfig } from "./AlertRulesConfig";
 import { ToolingHealthCard } from "./ToolingHealthCard";
+import { FrictionFeed } from "@/components/friction/FrictionFeed";
 
 export function FailuresView() {
   const { days } = useDateRange();
@@ -26,6 +27,11 @@ export function FailuresView() {
       <div className="grid gap-6 lg:grid-cols-2">
         <FailureClustersTable data={clusters.data} loading={clusters.loading} />
         <AlertRulesConfig />
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Friction Alerts</h2>
+        <FrictionFeed />
       </div>
     </div>
   );

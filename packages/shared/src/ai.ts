@@ -3,7 +3,7 @@
 export type InsightType = "anomaly" | "trend" | "comparison" | "recommendation" | "coaching";
 export type InsightSeverity = "info" | "warning" | "critical";
 export type ReportStatus = "generating" | "completed" | "failed";
-export type ReportType = "daily" | "weekly" | "custom";
+export type ReportType = "daily" | "weekly" | "custom" | "session";
 
 export interface AiConversation {
   id: string;

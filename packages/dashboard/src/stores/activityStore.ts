@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { DevscopeEvent, Developer, Session, AlertEvent } from "@devscope/shared";
+import type { DevscopeEvent, Developer, Session, AlertEvent, FrictionAlert } from "@devscope/shared";
 
 export interface ActiveAgent {
   agentId: string;
@@ -24,6 +24,7 @@ export interface ActivityState {
   connected: boolean;
   fetchGeneration: number;
   alerts: AlertEvent[];
+  frictionAlerts: FrictionAlert[];
 
   addEvent: (event: DevscopeEvent) => void;
   setDevelopers: (devs: Developer[]) => void;
@@ -38,6 +39,8 @@ export interface ActivityState {
   updateSessionTitle: (sessionId: string, title: string) => void;
   addAlert: (alert: AlertEvent) => void;
   acknowledgeAlert: (alertId: string) => void;
+  addFrictionAlert: (alert: FrictionAlert) => void;
+  acknowledgeFrictionAlert: (alertId: string) => void;
   cleanupStale: () => void;
 }
 
@@ -53,6 +56,7 @@ export const useActivityStore = create<ActivityState>((set) => ({
   connected: false,
   fetchGeneration: 0,
   alerts: [],
+  frictionAlerts: [],
 
   addEvent: (event) =>
     set((state) => {
@@ -142,6 +146,19 @@ export const useActivityStore = create<ActivityState>((set) => ({
   acknowledgeAlert: (alertId) =>
     set((state) => ({
       alerts: state.alerts.map((a) =>
+        a.id === alertId ? { ...a, acknowledged: true } : a
+      ),
+    })),
+
+  addFrictionAlert: (alert) =>
+    set((state) => {
+      if (state.frictionAlerts.some((a) => a.id === alert.id)) return state;
+      return { frictionAlerts: [alert, ...state.frictionAlerts].slice(0, 50) };
+    }),
+
+  acknowledgeFrictionAlert: (alertId) =>
+    set((state) => ({
+      frictionAlerts: state.frictionAlerts.map((a) =>
         a.id === alertId ? { ...a, acknowledged: true } : a
       ),
     })),

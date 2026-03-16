@@ -12,6 +12,7 @@ import { SkillRadarChart } from "./SkillRadarChart";
 import { GrowthSummaryBanner } from "./GrowthSummaryBanner";
 import { CoachingSection } from "./CoachingSection";
 import { TeamSkillsSection } from "../team-skills/TeamSkillsSection";
+import { TeamTopologyTab } from "@/components/topology/TeamTopologyTab";
 
 export function SkillsView() {
   const {
@@ -32,7 +33,7 @@ export function SkillsView() {
     generateInsights,
   } = useSkillStore();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "ai-skills">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "ai-skills" | "topology">("overview");
 
   useEffect(() => {
     fetchAll();
@@ -63,6 +64,16 @@ export function SkillsView() {
           }`}
         >
           Skills
+        </button>
+        <button
+          onClick={() => setActiveTab("topology")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "topology"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Topology
         </button>
       </div>
 
@@ -147,6 +158,8 @@ export function SkillsView() {
             loading={loading}
           />
         </div>
+      ) : activeTab === "topology" ? (
+        <TeamTopologyTab />
       ) : (
         <TeamSkillsSection />
       )}
