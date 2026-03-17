@@ -8,6 +8,7 @@ const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // Daily
 
 export function startWorkflowProfileComputation(sql: SQL) {
   const g = globalThis as any;
+  if (g.__gc_workflow_startup_timeout) clearTimeout(g.__gc_workflow_startup_timeout);
   if (g.__gc_workflow_interval) clearInterval(g.__gc_workflow_interval);
 
   async function compute() {
@@ -18,9 +19,9 @@ export function startWorkflowProfileComputation(sql: SQL) {
 
       // Normalize to day boundaries so the upsert unique constraint
       // (developer_id, period_start, period_end) can deduplicate properly
-      const now = new Date();
-      now.setUTCHours(0, 0, 0, 0);
-      const periodStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const periodEnd = new Date();
+      periodEnd.setUTCHours(0, 0, 0, 0);
+      const periodStart = new Date(periodEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
 
       for (const org of orgs as any[]) {
         const orgId = org.organization_id;
@@ -37,7 +38,7 @@ export function startWorkflowProfileComputation(sql: SQL) {
 
           if (existing) {
             const lastComputed = new Date(existing.computed_at);
-            if (now.getTime() - lastComputed.getTime() < 6 * 24 * 60 * 60 * 1000) continue;
+            if (periodEnd.getTime() - lastComputed.getTime() < 6 * 24 * 60 * 60 * 1000) continue;
           }
 
           // Get session data for this developer in the period
@@ -47,6 +48,7 @@ export function startWorkflowProfileComputation(sql: SQL) {
             FROM sessions
             WHERE developer_id = ${devId}
               AND started_at >= ${periodStart.toISOString()}::timestamptz
+              AND started_at < ${periodEnd.toISOString()}::timestamptz
           ` as any[];
 
           if (sessions.length === 0) continue;
@@ -155,7 +157,7 @@ export function startWorkflowProfileComputation(sql: SQL) {
             organization_id: orgId,
             developer_id: devId,
             period_start: periodStart.toISOString(),
-            period_end: now.toISOString(),
+            period_end: periodEnd.toISOString(),
             iterative_vs_planning: iterativeVsPlanning,
             tool_diversity: toolDiversity,
             recovery_speed: recoverySpeed,
@@ -181,7 +183,7 @@ export function startWorkflowProfileComputation(sql: SQL) {
   }
 
   // Run immediately on startup, then daily
-  setTimeout(compute, 5_000);
+  g.__gc_workflow_startup_timeout = setTimeout(compute, 5_000);
   g.__gc_workflow_interval = setInterval(compute, CHECK_INTERVAL_MS);
   console.log("[workflow] Workflow profile computation started (daily)");
 }
