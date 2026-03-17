@@ -292,8 +292,7 @@ export function eventsRoutes(sql: SQL) {
 
   // --- HTTP Hook Endpoint ---
   // Accepts raw Claude Code hook JSON and normalizes it into a DevscopeEvent.
-  // Used by HTTP-type hooks (Notification, TaskCompleted, PermissionRequest,
-  // WorktreeCreate, WorktreeRemove, ConfigChange, TeammateIdle).
+  // Supports all event types that can be sent via HTTP hooks.
   const hookEventMap: Record<string, string> = {
     "notification": "notification",
     "task.completed": "task.completed",
@@ -302,6 +301,10 @@ export function eventsRoutes(sql: SQL) {
     "worktree.remove": "worktree.remove",
     "config.change": "config.change",
     "teammate.idle": "teammate.idle",
+    "compact.complete": "compact.complete",
+    "elicitation.request": "elicitation.request",
+    "elicitation.response": "elicitation.response",
+    "instructions.loaded": "instructions.loaded",
   };
 
   // Map snake_case hook fields to camelCase payload fields per event type
@@ -344,6 +347,30 @@ export function eventsRoutes(sql: SQL) {
           teamName: raw.team_name ?? raw.teamName ?? "",
           agentId: raw.agent_id ?? raw.agentId ?? undefined,
           idleReason: raw.idle_reason ?? raw.idleReason ?? undefined,
+        };
+      case "compact.complete":
+        return {
+          summary: raw.summary ?? undefined,
+          tokensBefore: raw.tokens_before ?? raw.tokensBefore ?? undefined,
+          tokensAfter: raw.tokens_after ?? raw.tokensAfter ?? undefined,
+          reductionPercent: raw.reduction_percent ?? raw.reductionPercent ?? undefined,
+        };
+      case "elicitation.request":
+        return {
+          mcpServerName: raw.mcp_server_name ?? raw.mcpServerName ?? "",
+          message: raw.message ?? undefined,
+        };
+      case "elicitation.response":
+        return {
+          mcpServerName: raw.mcp_server_name ?? raw.mcpServerName ?? "",
+          duration: raw.duration ?? undefined,
+          responded: raw.responded ?? false,
+          response: raw.response ?? undefined,
+        };
+      case "instructions.loaded":
+        return {
+          files: raw.files ?? [],
+          trigger: raw.trigger ?? "unknown",
         };
       default:
         return raw;
