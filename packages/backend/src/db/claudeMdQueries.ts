@@ -20,6 +20,7 @@ export async function upsertClaudeMdSnapshot(
       content_hash,
       content_size,
       content_text,
+      file_type,
       session_id,
       developer_id
     ) VALUES (
@@ -30,6 +31,7 @@ export async function upsertClaudeMdSnapshot(
       ${data.content_hash},
       ${data.content_size},
       ${data.content_text ?? null},
+      ${data.file_type ?? "claude_md"},
       ${data.session_id},
       ${data.developer_id}
     )

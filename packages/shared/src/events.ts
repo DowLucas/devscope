@@ -14,7 +14,12 @@ export type EventType =
   | "permission.request"
   | "worktree.create"
   | "worktree.remove"
-  | "config.change";
+  | "config.change"
+  | "compact.complete"
+  | "elicitation.request"
+  | "elicitation.response"
+  | "instructions.loaded"
+  | "teammate.idle";
 
 export interface DevscopeEvent {
   id: string;
@@ -42,7 +47,12 @@ export type EventPayload =
   | PermissionRequestPayload
   | WorktreeCreatePayload
   | WorktreeRemovePayload
-  | ConfigChangePayload;
+  | ConfigChangePayload
+  | PostCompactPayload
+  | ElicitationPayload
+  | ElicitationResultPayload
+  | InstructionsLoadedPayload
+  | TeammateIdlePayload;
 
 export interface SessionStartPayload {
   startType: string;
@@ -132,4 +142,41 @@ export interface WorktreeRemovePayload {
 export interface ConfigChangePayload {
   source: string;
   filePath: string;
+}
+
+export interface PostCompactPayload {
+  summary?: string;
+  tokensBefore?: number;
+  tokensAfter?: number;
+  reductionPercent?: number;
+}
+
+export interface ElicitationPayload {
+  mcpServerName: string;
+  message?: string;
+}
+
+export interface ElicitationResultPayload {
+  mcpServerName: string;
+  duration?: number;
+  responded: boolean;
+  response?: string;
+}
+
+export interface InstructionsLoadedPayload {
+  files: Array<{
+    path: string;
+    hash: string;
+    size: number;
+    content?: string;
+    type: "claude_md" | "rule";
+  }>;
+  trigger: string;
+}
+
+export interface TeammateIdlePayload {
+  teammateName: string;
+  teamName: string;
+  agentId?: string;
+  idleReason?: string;
 }

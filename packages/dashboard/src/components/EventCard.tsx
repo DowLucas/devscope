@@ -19,6 +19,11 @@ const EVENT_COLORS: Record<string, string> = {
   "worktree.create": "border-indigo-500/50 bg-indigo-500/5",
   "worktree.remove": "border-indigo-500/30 bg-indigo-500/5",
   "config.change": "border-slate-500/50 bg-slate-500/5",
+  "compact.complete": "border-orange-500/50 bg-orange-500/5",
+  "elicitation.request": "border-violet-500/50 bg-violet-500/5",
+  "elicitation.response": "border-violet-500/30 bg-violet-500/5",
+  "instructions.loaded": "border-sky-500/50 bg-sky-500/5",
+  "teammate.idle": "border-gray-500/30 bg-gray-500/5",
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -38,6 +43,11 @@ const EVENT_LABELS: Record<string, string> = {
   "worktree.create": "Worktree Created",
   "worktree.remove": "Worktree Removed",
   "config.change": "Config Changed",
+  "compact.complete": "Context Compacted",
+  "elicitation.request": "MCP Elicitation",
+  "elicitation.response": "Elicitation Response",
+  "instructions.loaded": "Instructions Loaded",
+  "teammate.idle": "Teammate Idle",
 };
 
 function getInitials(name: string): string {
@@ -79,6 +89,31 @@ function getEventSummary(event: DevscopeEvent): string {
       return String(p.worktreePath ?? "worktree");
     case "config.change":
       return String(p.filePath ?? p.source ?? "config");
+    case "compact.complete": {
+      const reduction = Number(p.reductionPercent ?? p.reduction_percent ?? 0);
+      const before = Number(p.tokensBefore ?? p.tokens_before ?? 0);
+      return before > 0
+        ? `${before.toLocaleString()} tokens (${reduction}% reduction)`
+        : "Context compacted";
+    }
+    case "elicitation.request":
+      return `MCP: ${String(p.mcpServerName ?? p.mcp_server_name ?? "server")}`;
+    case "elicitation.response": {
+      const dur = Number(p.duration ?? 0);
+      const server = String(p.mcpServerName ?? p.mcp_server_name ?? "server");
+      return dur > 0
+        ? `${server} (${dur > 1000 ? `${(dur / 1000).toFixed(1)}s` : `${dur}ms`})`
+        : server;
+    }
+    case "instructions.loaded": {
+      const files = Array.isArray(p.files) ? p.files : [];
+      return `${files.length} file${files.length !== 1 ? "s" : ""} loaded`;
+    }
+    case "teammate.idle": {
+      const name = String(p.teammateName ?? p.teammate_name ?? "agent");
+      const reason = p.idleReason ?? p.idle_reason;
+      return name + (reason ? ` (${String(reason)})` : "");
+    }
     default:
       return event.eventType;
   }

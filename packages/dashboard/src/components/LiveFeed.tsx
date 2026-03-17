@@ -17,6 +17,10 @@ import {
   Settings,
   RefreshCw,
   ExternalLink,
+  Maximize2,
+  MessageCircleQuestion,
+  FileText,
+  UserX,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -49,7 +53,11 @@ type FeedItem =
   | { kind: "permission"; key: string; event: DevscopeEvent }
   | { kind: "worktree"; key: string; event: DevscopeEvent }
   | { kind: "config"; key: string; event: DevscopeEvent }
-  | { kind: "context-boundary"; key: string; event: DevscopeEvent };
+  | { kind: "context-boundary"; key: string; event: DevscopeEvent }
+  | { kind: "compact-complete"; key: string; event: DevscopeEvent }
+  | { kind: "elicitation"; key: string; event: DevscopeEvent }
+  | { kind: "instructions"; key: string; event: DevscopeEvent }
+  | { kind: "teammate-idle"; key: string; event: DevscopeEvent };
 
 // ---------------------------------------------------------------------------
 // Build compacted feed from raw events
@@ -153,6 +161,23 @@ function buildFeedItems(events: DevscopeEvent[]): FeedItem[] {
       case "config.change":
         flushTools();
         items.push({ kind: "config", key: event.id, event });
+        break;
+      case "compact.complete":
+        flushTools();
+        items.push({ kind: "compact-complete", key: event.id, event });
+        break;
+      case "elicitation.request":
+      case "elicitation.response":
+        flushTools();
+        items.push({ kind: "elicitation", key: event.id, event });
+        break;
+      case "instructions.loaded":
+        flushTools();
+        items.push({ kind: "instructions", key: event.id, event });
+        break;
+      case "teammate.idle":
+        flushTools();
+        items.push({ kind: "teammate-idle", key: event.id, event });
         break;
     }
   }
@@ -631,6 +656,158 @@ function ConfigItem({
   );
 }
 
+function CompactCompleteItem({
+  event,
+  isLast,
+}: {
+  event: DevscopeEvent;
+  isLast: boolean;
+}) {
+  const p = event.payload as unknown as Record<string, unknown>;
+  const before = Number(p.tokensBefore ?? 0);
+  const after = Number(p.tokensAfter ?? 0);
+  const reduction = Number(p.reductionPercent ?? 0);
+  return (
+    <TimelineNode
+      dotColor="bg-orange-600"
+      icon={<Maximize2 className="h-3.5 w-3.5 text-white" />}
+      isLast={isLast}
+    >
+      <div className="flex items-center gap-2 pt-1">
+        <span className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">
+            {event.developerName}
+          </span>
+          {" compacted context"}
+        </span>
+        {before > 0 && (
+          <Badge
+            variant="secondary"
+            className="text-[10px] px-1.5 py-0 text-orange-400"
+          >
+            {before.toLocaleString()} → {after.toLocaleString()} tokens ({reduction}% reduction)
+          </Badge>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {timeAgo(event.timestamp)}
+        </span>
+      </div>
+    </TimelineNode>
+  );
+}
+
+function ElicitationItem({
+  event,
+  isLast,
+}: {
+  event: DevscopeEvent;
+  isLast: boolean;
+}) {
+  const p = event.payload as unknown as Record<string, unknown>;
+  const isRequest = event.eventType === "elicitation.request";
+  const serverName = String(p.mcpServerName ?? "MCP");
+  return (
+    <TimelineNode
+      dotColor="bg-violet-600"
+      icon={<MessageCircleQuestion className="h-3.5 w-3.5 text-white" />}
+      isLast={isLast}
+    >
+      <div className="flex items-center gap-2 pt-1">
+        <span className="text-sm text-muted-foreground">
+          {isRequest ? "MCP elicitation from " : "Elicitation response for "}
+          <Badge
+            variant="secondary"
+            className="text-[10px] px-1.5 py-0 text-violet-400"
+          >
+            {serverName}
+          </Badge>
+        </span>
+        {!isRequest && p.duration != null && (
+          <span className="text-xs text-muted-foreground">
+            {Number(p.duration) > 1000
+              ? `${(Number(p.duration) / 1000).toFixed(1)}s`
+              : `${p.duration}ms`}
+          </span>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {timeAgo(event.timestamp)}
+        </span>
+      </div>
+    </TimelineNode>
+  );
+}
+
+function InstructionsItem({
+  event,
+  isLast,
+}: {
+  event: DevscopeEvent;
+  isLast: boolean;
+}) {
+  const p = event.payload as unknown as Record<string, unknown>;
+  const files = Array.isArray(p.files) ? p.files : [];
+  const trigger = String(p.trigger ?? "");
+  return (
+    <TimelineNode
+      dotColor="bg-sky-600"
+      icon={<FileText className="h-3.5 w-3.5 text-white" />}
+      isLast={isLast}
+    >
+      <div className="flex items-center gap-2 pt-1">
+        <span className="text-sm text-muted-foreground">
+          Loaded {files.length} instruction file{files.length !== 1 ? "s" : ""}
+        </span>
+        {trigger && (
+          <Badge
+            variant="secondary"
+            className="text-[10px] px-1.5 py-0 text-sky-400"
+          >
+            {trigger}
+          </Badge>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {timeAgo(event.timestamp)}
+        </span>
+      </div>
+    </TimelineNode>
+  );
+}
+
+function TeammateIdleItem({
+  event,
+  isLast,
+}: {
+  event: DevscopeEvent;
+  isLast: boolean;
+}) {
+  const p = event.payload as unknown as Record<string, unknown>;
+  return (
+    <TimelineNode
+      dotColor="bg-gray-500"
+      icon={<UserX className="h-3.5 w-3.5 text-white" />}
+      isLast={isLast}
+    >
+      <div className="flex items-center gap-2 pt-1">
+        <span className="text-sm text-muted-foreground">
+          Teammate{" "}
+          <span className="font-medium text-foreground">
+            {String(p.teammateName ?? "agent")}
+          </span>
+          {" went idle"}
+        </span>
+        {p.idleReason && (
+          <span className="text-xs text-muted-foreground">
+            ({String(p.idleReason)})
+          </span>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {timeAgo(event.timestamp)}
+        </span>
+      </div>
+    </TimelineNode>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -721,6 +898,18 @@ export function LiveFeed() {
                 )}
                 {item.kind === "context-boundary" && (
                   <ContextBoundaryItem event={item.event} isLast={isLast} />
+                )}
+                {item.kind === "compact-complete" && (
+                  <CompactCompleteItem event={item.event} isLast={isLast} />
+                )}
+                {item.kind === "elicitation" && (
+                  <ElicitationItem event={item.event} isLast={isLast} />
+                )}
+                {item.kind === "instructions" && (
+                  <InstructionsItem event={item.event} isLast={isLast} />
+                )}
+                {item.kind === "teammate-idle" && (
+                  <TeammateIdleItem event={item.event} isLast={isLast} />
                 )}
               </motion.div>
             );

@@ -6,6 +6,7 @@ export interface ClaudeMdSnapshot {
   content_hash: string;
   content_size: number;
   content_text: string | null;
+  file_type?: string | null;
   session_id: string;
   developer_id: string;
   captured_at: string;
