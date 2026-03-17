@@ -16,7 +16,10 @@ export function startWorkflowProfileComputation(sql: SQL) {
         SELECT DISTINCT organization_id FROM organization_developer
         WHERE organization_id IS NOT NULL`;
 
+      // Normalize to day boundaries so the upsert unique constraint
+      // (developer_id, period_start, period_end) can deduplicate properly
       const now = new Date();
+      now.setUTCHours(0, 0, 0, 0);
       const periodStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
       for (const org of orgs as any[]) {
@@ -140,11 +143,12 @@ export function startWorkflowProfileComputation(sql: SQL) {
               }
             }
           }
+          // No failures = perfect recovery; otherwise scale inversely with avg recovery time
           const avgRecovery =
             recoveryTimes.length > 0
               ? recoveryTimes.reduce((a, b) => a + b, 0) / recoveryTimes.length
-              : 60;
-          const recoverySpeed = 1 / (1 + avgRecovery / 60);
+              : 0;
+          const recoverySpeed = recoveryTimes.length === 0 ? 1 : 1 / (1 + avgRecovery / 60);
 
           await upsertWorkflowProfile(sql, {
             id: crypto.randomUUID(),
@@ -176,6 +180,8 @@ export function startWorkflowProfileComputation(sql: SQL) {
     }
   }
 
+  // Run immediately on startup, then daily
+  setTimeout(compute, 5_000);
   g.__gc_workflow_interval = setInterval(compute, CHECK_INTERVAL_MS);
   console.log("[workflow] Workflow profile computation started (daily)");
 }
