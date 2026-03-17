@@ -26,6 +26,11 @@ const EVENT_LABELS: Record<string, string> = {
   "worktree.create": "Worktree Created",
   "worktree.remove": "Worktree Removed",
   "config.change": "Config Changed",
+  "compact.complete": "Context Compacted",
+  "elicitation.request": "MCP Elicitation",
+  "elicitation.response": "Elicitation Response",
+  "instructions.loaded": "Instructions Loaded",
+  "teammate.idle": "Teammate Idle",
 };
 
 const EVENT_COLORS: Record<string, string> = {
@@ -45,6 +50,11 @@ const EVENT_COLORS: Record<string, string> = {
   "worktree.create": "text-indigo-400 bg-indigo-500/15",
   "worktree.remove": "text-indigo-400 bg-indigo-500/15",
   "config.change": "text-slate-400 bg-slate-500/15",
+  "compact.complete": "text-orange-400 bg-orange-500/15",
+  "elicitation.request": "text-violet-400 bg-violet-500/15",
+  "elicitation.response": "text-violet-400 bg-violet-500/15",
+  "instructions.loaded": "text-sky-400 bg-sky-500/15",
+  "teammate.idle": "text-gray-400 bg-gray-500/15",
 };
 
 const STATE_CONFIG: Record<SessionActivityState, {

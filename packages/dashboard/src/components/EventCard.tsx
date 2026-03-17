@@ -19,6 +19,11 @@ const EVENT_COLORS: Record<string, string> = {
   "worktree.create": "border-indigo-500/50 bg-indigo-500/5",
   "worktree.remove": "border-indigo-500/30 bg-indigo-500/5",
   "config.change": "border-slate-500/50 bg-slate-500/5",
+  "compact.complete": "border-orange-500/50 bg-orange-500/5",
+  "elicitation.request": "border-violet-500/50 bg-violet-500/5",
+  "elicitation.response": "border-violet-500/30 bg-violet-500/5",
+  "instructions.loaded": "border-sky-500/50 bg-sky-500/5",
+  "teammate.idle": "border-gray-500/30 bg-gray-500/5",
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -38,6 +43,11 @@ const EVENT_LABELS: Record<string, string> = {
   "worktree.create": "Worktree Created",
   "worktree.remove": "Worktree Removed",
   "config.change": "Config Changed",
+  "compact.complete": "Context Compacted",
+  "elicitation.request": "MCP Elicitation",
+  "elicitation.response": "Elicitation Response",
+  "instructions.loaded": "Instructions Loaded",
+  "teammate.idle": "Teammate Idle",
 };
 
 function getInitials(name: string): string {
