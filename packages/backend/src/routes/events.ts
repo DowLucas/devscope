@@ -229,6 +229,7 @@ export function eventsRoutes(sql: SQL) {
                 content_hash: file.hash,
                 content_size: file.size,
                 content_text: file.content ?? null,
+                file_type: file.type ?? "claude_md",
                 session_id: event.sessionId,
                 developer_id: event.developerId,
               });
@@ -370,20 +371,19 @@ export function eventsRoutes(sql: SQL) {
       return c.json({ error: "HTTP hooks require API key authentication" }, 401);
     }
 
-    // Look up the API key owner's developer record via their org membership
-    const [ownerMember] = await sql`
-      SELECT m."userId" FROM member m WHERE m."userId" = ${apiKeyUserId} LIMIT 1
-    `;
-    const userId = (ownerMember as any)?.userId ?? apiKeyUserId;
+    // Require session_id from Claude Code hook input
+    const sessionId = body.session_id ?? body.sessionId;
+    if (!sessionId || typeof sessionId !== "string") {
+      return c.json({ error: "Missing required field 'session_id'. Claude Code hooks must supply session_id for proper session grouping." }, 400);
+    }
 
-    // Extract session_id and cwd from raw hook JSON
-    const sessionId = String(body.session_id ?? body.sessionId ?? crypto.randomUUID());
+    // Extract cwd from raw hook JSON
     const cwd = String(body.cwd ?? "");
     const projectName = cwd ? cwd.split("/").pop() ?? "unknown" : "unknown";
 
-    // Generate a developer ID from the API key user ID (consistent hash)
-    const developerId = `apikey-${userId}`;
-    const developerName = `API Key User`;
+    // Use API key user ID directly as developer identity
+    const developerId = `apikey-${apiKeyUserId}`;
+    const developerName = "API Key User";
 
     // Build the normalized event
     const event: DevscopeEvent = {
@@ -403,9 +403,12 @@ export function eventsRoutes(sql: SQL) {
     await upsertDeveloper(sql, event.developerId, event.developerName, "");
     await autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId);
 
-    // Ensure session exists
+    // Ensure session exists and is active (mirrors main POST / handler behavior)
     const [existingSession] = await sql`SELECT status FROM sessions WHERE id = ${event.sessionId}`;
     if (!existingSession) {
+      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, null, null);
+    } else if ((existingSession as any).status === "ended") {
+      // Reactivate ended session — same pattern as the main event handler
       await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, null, null);
     }
 

@@ -89,6 +89,28 @@ function getEventSummary(event: DevscopeEvent): string {
       return String(p.worktreePath ?? "worktree");
     case "config.change":
       return String(p.filePath ?? p.source ?? "config");
+    case "compact.complete": {
+      const reduction = Number(p.reductionPercent ?? 0);
+      const before = Number(p.tokensBefore ?? 0);
+      return before > 0
+        ? `${before.toLocaleString()} tokens (${reduction}% reduction)`
+        : "Context compacted";
+    }
+    case "elicitation.request":
+      return `MCP: ${String(p.mcpServerName ?? "server")}`;
+    case "elicitation.response": {
+      const dur = Number(p.duration ?? 0);
+      const server = String(p.mcpServerName ?? "server");
+      return dur > 0
+        ? `${server} (${dur > 1000 ? `${(dur / 1000).toFixed(1)}s` : `${dur}ms`})`
+        : server;
+    }
+    case "instructions.loaded": {
+      const files = Array.isArray(p.files) ? p.files : [];
+      return `${files.length} file${files.length !== 1 ? "s" : ""} loaded`;
+    }
+    case "teammate.idle":
+      return String(p.teammateName ?? "agent") + (p.idleReason ? ` (${String(p.idleReason)})` : "");
     default:
       return event.eventType;
   }
