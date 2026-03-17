@@ -97,7 +97,15 @@ export async function getTeamWorkflowSummary(
     };
   }
 
+  // Use only the latest profile per developer to avoid weighting by history depth
   const [agg] = await sql`
+    WITH latest AS (
+      SELECT DISTINCT ON (developer_id) *
+      FROM workflow_profiles
+      WHERE developer_id IN (${inList(developerIds)})
+        AND organization_id = ${orgId}
+      ORDER BY developer_id, computed_at DESC
+    )
     SELECT
       AVG(iterative_vs_planning) AS avg_iterative_vs_planning,
       AVG(tool_diversity)        AS avg_tool_diversity,
@@ -122,9 +130,7 @@ export async function getTeamWorkflowSummary(
       COUNT(DISTINCT developer_id) AS developer_count,
       MIN(period_start)            AS period_start,
       MAX(period_end)              AS period_end
-    FROM workflow_profiles
-    WHERE developer_id IN (${inList(developerIds)})
-      AND organization_id = ${orgId}
+    FROM latest
   ` as any[];
 
   if (!agg) {
