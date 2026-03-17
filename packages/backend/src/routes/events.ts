@@ -69,6 +69,122 @@ function clampInt(val: string | undefined, def: number, max: number): number {
 export function eventsRoutes(sql: SQL) {
   const app = new Hono();
 
+  // --- Shared post-insert handler ---
+  // Called by both POST / and POST /hook after insertEvent to run common
+  // side-effects: compaction tracking, instruction snapshots, broadcasts.
+  async function runPostInsertHandlers(
+    event: DevscopeEvent,
+    opts: {
+      sessionCreatedOrReactivated: boolean;
+      sessionEnded: boolean;
+    }
+  ) {
+    // Look up developer's orgs for scoped broadcasting
+    const devOrgs = await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${event.developerId}`;
+
+    function broadcastToDevOrgs(msg: any) {
+      for (const row of devOrgs as any[]) {
+        broadcastToOrg(row.organization_id, msg);
+      }
+    }
+
+    // Session status broadcasts
+    if (opts.sessionCreatedOrReactivated) {
+      broadcastToDevOrgs({ type: "session.update", data: { sessionId: event.sessionId, status: "active" } });
+      broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
+    } else if (opts.sessionEnded) {
+      broadcastToDevOrgs({ type: "session.update", data: { sessionId: event.sessionId, status: "ended" } });
+      broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
+    }
+
+    // Broadcast the event (strip sensitive fields for team-visible WebSocket feed)
+    const rawPayload = event.payload as Record<string, unknown>;
+    broadcastToDevOrgs({
+      type: "event.new",
+      data: {
+        ...event,
+        payload: stripSensitivePayload(rawPayload),
+      },
+    });
+
+    // Increment compaction count on compact.complete
+    if (event.eventType === "compact.complete") {
+      try {
+        await sql`UPDATE sessions SET compaction_count = compaction_count + 1 WHERE id = ${event.sessionId}`;
+      } catch {
+        // Don't block event ingestion
+      }
+    }
+
+    // Capture instruction files on instructions.loaded (privacy-aware)
+    if (event.eventType === "instructions.loaded") {
+      const files = (event.payload as any).files;
+      if (Array.isArray(files)) {
+        // Look up the session's privacy mode to respect redaction
+        let sessionPrivacyMode: string | null = null;
+        try {
+          const [sessionRow] = await sql`SELECT privacy_mode FROM sessions WHERE id = ${event.sessionId}`;
+          sessionPrivacyMode = (sessionRow as any)?.privacy_mode ?? null;
+        } catch {
+          // Default to null (standard mode) if lookup fails
+        }
+
+        for (const row of devOrgs as any[]) {
+          for (const file of files.slice(0, 10)) {
+            try {
+              await upsertClaudeMdSnapshot(sql, {
+                organization_id: row.organization_id,
+                project_name: event.projectName,
+                project_path: event.projectPath,
+                content_hash: file.hash,
+                content_size: file.size,
+                content_text: sessionPrivacyMode === "private" ? null : (file.content ?? null),
+                file_type: file.type ?? "claude_md",
+                session_id: event.sessionId,
+                developer_id: event.developerId,
+              });
+            } catch {
+              // Ignore snapshot errors
+            }
+          }
+        }
+      }
+    }
+
+    // Check alert thresholds on tool failures
+    if (event.eventType === "tool.fail") {
+      const toolName = (event.payload as { toolName?: string }).toolName ?? "unknown";
+      const alert = await checkAlertThresholds(sql, event.sessionId, toolName);
+      if (alert) {
+        broadcastToDevOrgs({ type: "alert.triggered", data: alert });
+      }
+    }
+
+    // Friction detection for active sessions
+    if (["tool.fail", "prompt.submit", "tool.complete", "response.complete"].includes(event.eventType)) {
+      try {
+        for (const row of devOrgs as any[]) {
+          const orgId = row.organization_id;
+          const rules = await getFrictionRules(sql, orgId);
+          const frictionAlert = evaluateFriction(event.sessionId, event, rules);
+          if (frictionAlert) {
+            const saved = await insertFrictionAlert(sql, { ...frictionAlert, organization_id: orgId });
+            broadcastToDevOrgs({ type: "friction.alert", data: saved });
+          }
+        }
+      } catch {
+        // Don't block event ingestion on friction errors
+      }
+    }
+
+    // Clean up friction state on session end
+    if (event.eventType === "session.end") {
+      cleanupFrictionSession(event.sessionId);
+    }
+
+    return { devOrgs };
+  }
+
   app.post("/", zValidator("json", eventSchema), async (c) => {
     const event = c.req.valid("json") as unknown as DevscopeEvent;
     event.timestamp = sanitizeTimestamp(event.timestamp);
@@ -128,40 +244,15 @@ export function eventsRoutes(sql: SQL) {
 
     await insertEvent(sql, event);
 
-    // Look up developer's orgs for scoped broadcasting
-    const devOrgs = await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${event.developerId}`;
-
-    function broadcastToDevOrgs(msg: any) {
-      if (devOrgs.length > 0) {
-        for (const row of devOrgs as any[]) {
-          broadcastToOrg(row.organization_id, msg);
-        }
-      }
-      // No fallback broadcast -- events from unlinked developers are not broadcast
-    }
-
-    // Broadcasts after DB insert
-    if (broadcastSessionActive) {
-      broadcastToDevOrgs({ type: "session.update", data: { sessionId: event.sessionId, status: "active" } });
-      broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
-    } else if (broadcastSessionEnded) {
-      broadcastToDevOrgs({ type: "session.update", data: { sessionId: event.sessionId, status: "ended" } });
-      broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
-    }
-
-    // Strip opt-in sensitive fields (promptText, toolInput) from broadcasts.
-    // WebSocket goes to all dashboard viewers — we can't scope to self-view here.
-    const rawPayload = event.payload as Record<string, unknown>;
-    const hadSensitiveFields = "promptText" in rawPayload || "toolInput" in rawPayload || "responseText" in rawPayload;
-    broadcastToDevOrgs({
-      type: "event.new",
-      data: {
-        ...event,
-        payload: stripSensitivePayload(rawPayload),
-      },
+    // Run shared post-insert handlers (broadcasts, compaction, snapshots, friction)
+    const { devOrgs } = await runPostInsertHandlers(event, {
+      sessionCreatedOrReactivated: broadcastSessionActive,
+      sessionEnded: broadcastSessionEnded,
     });
 
-    // Log ethics event when sensitive fields were stripped
+    // Log ethics event when sensitive fields were stripped from broadcast
+    const rawPayload = event.payload as Record<string, unknown>;
+    const hadSensitiveFields = "promptText" in rawPayload || "toolInput" in rawPayload || "responseText" in rawPayload;
     if (hadSensitiveFields && devOrgs.length > 0) {
       const strippedFields = ["promptText", "toolInput", "responseText"].filter((f) => f in rawPayload);
       for (const row of devOrgs as any[]) {
@@ -172,16 +263,7 @@ export function eventsRoutes(sql: SQL) {
       }
     }
 
-    // Check alert thresholds on tool failures
-    if (event.eventType === "tool.fail") {
-      const toolName = (event.payload as { toolName?: string }).toolName ?? "unknown";
-      const alert = await checkAlertThresholds(sql, event.sessionId, toolName);
-      if (alert) {
-        broadcastToDevOrgs({ type: "alert.triggered", data: alert });
-      }
-    }
-
-    // Capture CLAUDE.md files on session start (after devOrgs is available)
+    // Capture CLAUDE.md files on session start (uses privacyMode from the event payload)
     if (event.eventType === "session.start") {
       const claudeMdFiles = (event.payload as any).claudeMdFiles;
       if (Array.isArray(claudeMdFiles)) {
@@ -204,63 +286,6 @@ export function eventsRoutes(sql: SQL) {
           }
         }
       }
-    }
-
-    // Increment compaction count on compact.complete
-    if (event.eventType === "compact.complete") {
-      try {
-        await sql`UPDATE sessions SET compaction_count = compaction_count + 1 WHERE id = ${event.sessionId}`;
-      } catch {
-        // Don't block event ingestion
-      }
-    }
-
-    // Capture instruction files on instructions.loaded (reuses CLAUDE.md snapshot logic)
-    if (event.eventType === "instructions.loaded") {
-      const files = (event.payload as any).files;
-      if (Array.isArray(files)) {
-        for (const row of devOrgs as any[]) {
-          for (const file of files.slice(0, 10)) {
-            try {
-              await upsertClaudeMdSnapshot(sql, {
-                organization_id: row.organization_id,
-                project_name: event.projectName,
-                project_path: event.projectPath,
-                content_hash: file.hash,
-                content_size: file.size,
-                content_text: file.content ?? null,
-                file_type: file.type ?? "claude_md",
-                session_id: event.sessionId,
-                developer_id: event.developerId,
-              });
-            } catch {
-              // Ignore snapshot errors
-            }
-          }
-        }
-      }
-    }
-
-    // Friction detection for active sessions
-    if (["tool.fail", "prompt.submit", "tool.complete", "response.complete"].includes(event.eventType)) {
-      try {
-        for (const row of devOrgs as any[]) {
-          const orgId = row.organization_id;
-          const rules = await getFrictionRules(sql, orgId);
-          const frictionAlert = evaluateFriction(event.sessionId, event, rules);
-          if (frictionAlert) {
-            const saved = await insertFrictionAlert(sql, { ...frictionAlert, organization_id: orgId });
-            broadcastToDevOrgs({ type: "friction.alert", data: saved });
-          }
-        }
-      } catch {
-        // Don't block event ingestion on friction errors
-      }
-    }
-
-    // Clean up friction state on session end
-    if (event.eventType === "session.end") {
-      cleanupFrictionSession(event.sessionId);
     }
 
     return c.json({ ok: true });
@@ -432,24 +457,19 @@ export function eventsRoutes(sql: SQL) {
 
     // Ensure session exists and is active (mirrors main POST / handler behavior)
     const [existingSession] = await sql`SELECT status FROM sessions WHERE id = ${event.sessionId}`;
-    if (!existingSession) {
-      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, null, null);
-    } else if ((existingSession as any).status === "ended") {
-      // Reactivate ended session — same pattern as the main event handler
+    const sessionCreatedOrReactivated = !existingSession || (existingSession as any).status === "ended";
+    if (sessionCreatedOrReactivated) {
       await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, null, null);
     }
 
     // Insert the event
     await insertEvent(sql, event);
 
-    // Broadcast to org
-    const devOrgs = await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${event.developerId}`;
-    for (const row of devOrgs as any[]) {
-      broadcastToOrg(row.organization_id, {
-        type: "event.new",
-        data: { ...event, payload: stripSensitivePayload(event.payload as Record<string, unknown>) },
-      });
-    }
+    // Run shared post-insert handlers (broadcasts, compaction, snapshots, friction)
+    await runPostInsertHandlers(event, {
+      sessionCreatedOrReactivated,
+      sessionEnded: false,
+    });
 
     return c.json({ ok: true });
   });
