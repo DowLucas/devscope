@@ -30,25 +30,26 @@ export function WorkflowRadarChart({ profile, teamSummary }: Props) {
       <h3 className="text-sm font-medium mb-4">Workflow Profile</h3>
       <ResponsiveContainer width="100%" height={300}>
         <RadarChart data={data} cx="50%" cy="50%" outerRadius="70%">
-          <PolarGrid stroke="hsl(var(--border))" />
+          <PolarGrid stroke="var(--border)" />
           <PolarAngleAxis
             dataKey="dimension"
-            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
           />
           <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
           <Radar
             name="You"
             dataKey="personal"
-            stroke="hsl(var(--primary))"
-            fill="hsl(var(--primary))"
-            fillOpacity={0.2}
+            stroke="var(--chart-1)"
+            fill="var(--chart-1)"
+            fillOpacity={0.25}
           />
           {teamSummary && (
             <Radar
               name="Team Average"
               dataKey="team"
-              stroke="hsl(var(--muted-foreground))"
-              fill="none"
+              stroke="var(--chart-2)"
+              fill="var(--chart-2)"
+              fillOpacity={0.1}
               strokeDasharray="4 4"
             />
           )}
