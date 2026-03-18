@@ -17,6 +17,10 @@ interface LinkedDeveloper {
   email: string;
 }
 
+interface ErrorBody {
+  error?: string;
+}
+
 export function LinkedEmailsCard() {
   const [developers, setDevelopers] = useState<LinkedDeveloper[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,14 +34,14 @@ export function LinkedEmailsCard() {
   const primaryEmail = session?.user?.email ?? "";
   const activeOrgId = activeOrg?.id ?? null;
 
-  const fetchLinked = useCallback(async () => {
+  const fetchLinked = useCallback(async (_orgId?: string) => {
     setLoading(true);
     setError(null);
     try {
       const res = await apiFetch("/api/teams/my-linked-developers");
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as any).error ?? "Failed to load linked emails");
+        const body: ErrorBody = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to load linked emails");
       }
       const data = (await res.json()) as LinkedDeveloper[];
       setDevelopers(data);
@@ -48,11 +52,12 @@ export function LinkedEmailsCard() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrgId]);
+  }, []);
 
   useEffect(() => {
-    fetchLinked();
-  }, [fetchLinked]);
+    if (!activeOrgId) return;
+    fetchLinked(activeOrgId);
+  }, [activeOrgId, fetchLinked]);
 
   async function handleLink() {
     const trimmed = email.trim();
