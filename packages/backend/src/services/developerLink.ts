@@ -54,21 +54,31 @@ export async function getAllDeveloperIdsForUser(sql: SQL, authUserId: string): P
 
 export async function getLinkedDevelopersForUser(
   sql: SQL,
-  authUserId: string
+  authUserId: string,
+  orgId: string
 ): Promise<{ developer_id: string; name: string; email: string }[]> {
   const rows = await sql`
     SELECT d.id AS developer_id, d.name, d.email
     FROM user_developer_link udl
     JOIN developers d ON d.id = udl.developer_id
-    WHERE udl.auth_user_id = ${authUserId}`;
+    JOIN organization_developer od ON od.developer_id = udl.developer_id
+    WHERE udl.auth_user_id = ${authUserId}
+      AND od.organization_id = ${orgId}`;
   return rows as any[];
 }
 
 export async function unlinkDeveloperFromUser(
   sql: SQL,
   authUserId: string,
-  developerId: string
+  developerId: string,
+  orgId: string
 ): Promise<boolean> {
+  // Verify the developer belongs to the caller's organization
+  const [inOrg] = await sql`
+    SELECT 1 FROM organization_developer
+    WHERE organization_id = ${orgId} AND developer_id = ${developerId}`;
+  if (!inOrg) return false;
+
   const result = await sql`
     DELETE FROM user_developer_link
     WHERE auth_user_id = ${authUserId} AND developer_id = ${developerId}
@@ -92,20 +102,26 @@ export async function linkAdditionalEmail(
     return { error: "No developer found with this email in your organization" };
   }
 
-  // Verify not already linked to another user
-  const [existingLink] = await sql`
-    SELECT auth_user_id FROM user_developer_link
-    WHERE developer_id = ${developerId}`;
-  if (existingLink && (existingLink as any).auth_user_id !== authUserId) {
-    return { error: "This developer is already linked to another account" };
-  }
-
-  await sql`
+  // Atomically attempt the link; ON CONFLICT DO NOTHING avoids races
+  const inserted = await sql`
     INSERT INTO user_developer_link (auth_user_id, developer_id)
     VALUES (${authUserId}, ${developerId})
-    ON CONFLICT DO NOTHING`;
+    ON CONFLICT DO NOTHING
+    RETURNING auth_user_id`;
 
-  return { developerId };
+  if (inserted.length > 0) {
+    return { developerId };
+  }
+
+  // Row already exists — check if it belongs to this user (idempotent re-link)
+  const [existing] = await sql`
+    SELECT auth_user_id FROM user_developer_link
+    WHERE developer_id = ${developerId}`;
+  if (existing && (existing as any).auth_user_id === authUserId) {
+    return { developerId };
+  }
+
+  return { error: "This developer is already linked to another account" };
 }
 
 export async function getOrgDeveloperIds(sql: SQL, orgId: string): Promise<string[]> {

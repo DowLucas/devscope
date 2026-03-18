@@ -33,8 +33,8 @@ export function LinkedEmailsCard() {
       if (!res.ok) throw new Error();
       const data = (await res.json()) as LinkedDeveloper[];
       setDevelopers(data);
-    } catch {
-      // silently leave empty
+    } catch (err) {
+      console.error("fetchLinked failed:", err);
     } finally {
       setLoading(false);
     }

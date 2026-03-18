@@ -427,7 +427,7 @@ describe("GET /sessions/:id", () => {
     expect(mockStripSensitivePayload).toHaveBeenCalledTimes(1);
   });
 
-  test("non-self-view when viewer has no developer link (getDeveloperIdForUser returns null)", async () => {
+  test("non-self-view when viewer has no developer link (getAllDeveloperIdsForUser returns empty array)", async () => {
     const session = makeSessionRow({ developer_id: "dev-aaa" });
     const event = makeEventRow({
       payload: { toolName: "Read", promptText: "secret" },

@@ -87,10 +87,12 @@ export function teamsRoutes(sql: SQL) {
 
   // GET /api/teams/my-linked-developers — list all developer identities linked to current user
   app.get("/my-linked-developers", async (c) => {
+    const session = c.get("session" as never) as any;
     const user = c.get("user" as never) as any;
-    if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+    const orgId = session?.activeOrganizationId;
+    if (!orgId || !user?.id) return c.json({ error: "No active organization" }, 400);
 
-    const developers = await getLinkedDevelopersForUser(sql, user.id);
+    const developers = await getLinkedDevelopersForUser(sql, user.id, orgId);
     return c.json(developers);
   });
 
@@ -117,8 +119,10 @@ export function teamsRoutes(sql: SQL) {
     "/unlink-email",
     zValidator("json", z.object({ developer_id: z.string() })),
     async (c) => {
+      const session = c.get("session" as never) as any;
       const user = c.get("user" as never) as any;
-      if (!user?.id) return c.json({ error: "Unauthorized" }, 401);
+      const orgId = session?.activeOrganizationId;
+      if (!orgId || !user?.id) return c.json({ error: "No active organization" }, 400);
 
       const { developer_id } = c.req.valid("json");
 
@@ -128,7 +132,7 @@ export function teamsRoutes(sql: SQL) {
         return c.json({ error: "Cannot unlink your primary email" }, 400);
       }
 
-      const unlinked = await unlinkDeveloperFromUser(sql, user.id, developer_id);
+      const unlinked = await unlinkDeveloperFromUser(sql, user.id, developer_id, orgId);
       if (!unlinked) return c.json({ error: "Developer not linked to your account" }, 404);
       return c.json({ success: true });
     }
