@@ -45,6 +45,7 @@ export function buildTurns(events: RawEvent[]): SessionTurn[] {
         if (event.event_type === "tool.start") {
           turn.toolCalls.push({
             toolName: String(p.toolName ?? "Unknown"),
+            toolSubcommand: p.toolSubcommand ? String(p.toolSubcommand) : undefined,
             toolInput,
             timestamp: event.created_at,
           });
@@ -58,9 +59,11 @@ export function buildTurns(events: RawEvent[]): SessionTurn[] {
             existing.duration = p.duration as number | undefined;
             existing.errorMessage = p.errorMessage as string | undefined;
             if (toolInput) existing.toolInput = toolInput;
+            if (p.toolSubcommand) existing.toolSubcommand = String(p.toolSubcommand);
           } else {
             turn.toolCalls.push({
               toolName: String(p.toolName ?? "Unknown"),
+              toolSubcommand: p.toolSubcommand ? String(p.toolSubcommand) : undefined,
               toolInput,
               success: event.event_type === "tool.complete",
               duration: p.duration as number | undefined,

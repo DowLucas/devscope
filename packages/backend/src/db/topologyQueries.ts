@@ -29,6 +29,7 @@ export async function computeTeamToolTopology(
   const rows = await sql`
     SELECT
       e.payload->>'toolName' AS tool_name,
+      e.payload->>'toolSubcommand' AS tool_subcommand,
       COUNT(*)::INT AS total_uses,
       COUNT(DISTINCT s.developer_id)::INT AS unique_users,
       COUNT(*) FILTER (WHERE e.event_type = 'tool.complete')::INT AS success_count,
@@ -41,7 +42,7 @@ export async function computeTeamToolTopology(
       AND s.developer_id IN (${inList(developerIds)})
       AND e.created_at >= ${periodStart}::TIMESTAMPTZ
       AND e.created_at < ${periodEnd}::TIMESTAMPTZ
-    GROUP BY e.payload->>'toolName'`;
+    GROUP BY e.payload->>'toolName', e.payload->>'toolSubcommand'`;
 
   const teamSize = developerIds.length;
 
@@ -57,7 +58,7 @@ export async function computeTeamToolTopology(
 
     await sql`
       INSERT INTO team_tool_topology (
-        id, organization_id, tool_name,
+        id, organization_id, tool_name, tool_subcommand,
         period_start, period_end,
         total_uses, unique_users,
         success_count, failure_count,
@@ -65,7 +66,7 @@ export async function computeTeamToolTopology(
         proficiency_level, coverage_level,
         computed_at
       ) VALUES (
-        ${id}, ${orgId}, ${row.tool_name},
+        ${id}, ${orgId}, ${row.tool_name}, ${row.tool_subcommand ?? null},
         ${periodStart}::TIMESTAMPTZ, ${periodEnd}::TIMESTAMPTZ,
         ${totalUses}, ${uniqueUsers},
         ${row.success_count ?? 0}, ${failureCount},
@@ -73,7 +74,7 @@ export async function computeTeamToolTopology(
         ${proficiencyLevel}, ${coverageLevel},
         NOW()
       )
-      ON CONFLICT (organization_id, tool_name, period_start, period_end)
+      ON CONFLICT (organization_id, tool_name, COALESCE(tool_subcommand, ''), period_start, period_end)
       DO UPDATE SET
         total_uses = EXCLUDED.total_uses,
         unique_users = EXCLUDED.unique_users,
