@@ -20,25 +20,35 @@ interface LinkedDeveloper {
 export function LinkedEmailsCard() {
   const [developers, setDevelopers] = useState<LinkedDeveloper[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [linking, setLinking] = useState(false);
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
 
   const { data: session } = authClient.useSession();
+  const { data: activeOrg } = authClient.useActiveOrganization();
   const primaryEmail = session?.user?.email ?? "";
+  const activeOrgId = activeOrg?.id ?? null;
 
   const fetchLinked = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const res = await apiFetch("/api/teams/my-linked-developers");
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as any).error ?? "Failed to load linked emails");
+      }
       const data = (await res.json()) as LinkedDeveloper[];
       setDevelopers(data);
     } catch (err) {
       console.error("fetchLinked failed:", err);
+      setDevelopers([]);
+      setError(err instanceof Error ? err.message : "Failed to load linked emails");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeOrgId]);
 
   useEffect(() => {
     fetchLinked();
@@ -109,6 +119,8 @@ export function LinkedEmailsCard() {
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading linked emails…
           </div>
+        ) : error ? (
+          <p className="text-sm text-destructive">{error}</p>
         ) : (
           <ul className="space-y-2">
             {developers.map((dev) => {

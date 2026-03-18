@@ -102,11 +102,12 @@ export async function linkAdditionalEmail(
     return { error: "No developer found with this email in your organization" };
   }
 
-  // Atomically attempt the link; ON CONFLICT DO NOTHING avoids races
+  // Atomically attempt the link; conflict on the UNIQUE(developer_id) constraint
+  // means another user already owns this developer
   const inserted = await sql`
     INSERT INTO user_developer_link (auth_user_id, developer_id)
     VALUES (${authUserId}, ${developerId})
-    ON CONFLICT DO NOTHING
+    ON CONFLICT (developer_id) DO NOTHING
     RETURNING auth_user_id`;
 
   if (inserted.length > 0) {
