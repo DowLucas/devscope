@@ -21,7 +21,7 @@ import {
   getTokenUsageSummary,
   getTodayTokenCount,
 } from "../db";
-import { getDeveloperIdForUser } from "../services/developerLink";
+import { getAllDeveloperIdsForUser } from "../services/developerLink";
 import { broadcast, broadcastToOrg } from "../ws/handler";
 import type { Content } from "@google/genai";
 import type { InsightType, InsightSeverity, ReportType } from "@devscope/shared";
@@ -334,8 +334,8 @@ export function aiRoutes(sql: SQL) {
     }
 
     // Determine if the viewer is the session's own developer (self-view)
-    const viewerDevId = user?.id ? await getDeveloperIdForUser(sql, user.id) : null;
-    const isSelfView = viewerDevId != null && viewerDevId === sessionRow.developer_id;
+    const viewerDevIds = user?.id ? await getAllDeveloperIdsForUser(sql, user.id) : [];
+    const isSelfView = viewerDevIds.length > 0 && viewerDevIds.includes(sessionRow.developer_id);
     const contentIncluded = isSelfView && privacyMode === "open";
 
     // Check cache: return existing report if available for same privacy tier

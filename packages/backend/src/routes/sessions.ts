@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
 import { getActiveSessions, getActiveAgents, getAllSessions, getSessionDetail, getSessionTitleHistory } from "../db";
-import { getDeveloperIdForUser } from "../services/developerLink";
+import { getAllDeveloperIdsForUser } from "../services/developerLink";
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
@@ -81,9 +81,9 @@ export function sessionsRoutes(sql: SQL) {
     // Determine if the viewer is the session's developer (self-view).
     // Only the developer themselves can see their own prompt text and tool inputs.
     const user = c.get("user" as never) as any;
-    const viewerDevId = user?.id ? await getDeveloperIdForUser(sql, user.id) : null;
+    const viewerDevIds = user?.id ? await getAllDeveloperIdsForUser(sql, user.id) : [];
     const sessionDevId = (detail.session as any).developer_id;
-    const isSelfView = viewerDevId != null && viewerDevId === sessionDevId;
+    const isSelfView = viewerDevIds.length > 0 && viewerDevIds.includes(sessionDevId);
 
     return c.json({
       session: mapSession(detail.session),

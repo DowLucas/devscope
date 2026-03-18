@@ -253,8 +253,13 @@ function MemberRow({
     <tr className="border-b last:border-0 hover:bg-muted/30 transition-colors">
       <td className="px-4 py-3">
         <div>
-          <p className="font-medium text-foreground">
+          <p className="font-medium text-foreground flex items-center gap-1.5">
             {member.developer_name}
+            {(member.linked_email_count ?? 0) > 1 && (
+              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs text-primary">
+                {member.linked_email_count} emails
+              </span>
+            )}
           </p>
           <p className="text-xs text-muted-foreground">
             {member.developer_email}

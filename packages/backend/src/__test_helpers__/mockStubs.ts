@@ -125,9 +125,20 @@ export function stripSensitiveFieldsStubs(overrides: Record<string, unknown> = {
 /** All exports from `../../services/developerLink`. */
 export function developerLinkStubs(overrides: Record<string, unknown> = {}) {
   return {
-    computeDeveloperId: mock((_email: string) => "mock-dev-id"),
+    // computeDeveloperId uses the real SHA-256 implementation so that
+    // developerLink.test.ts tests still pass even when mock contamination occurs.
+    computeDeveloperId: mock((email: string) => {
+      const normalized = email.toLowerCase().trim();
+      const hash = new Bun.CryptoHasher("sha256");
+      hash.update(normalized);
+      return hash.digest("hex");
+    }),
     linkUserToDeveloper: mock(() => Promise.resolve()),
     getDeveloperIdForUser: mock(() => Promise.resolve(null)),
+    getAllDeveloperIdsForUser: mock(() => Promise.resolve([])),
+    getLinkedDevelopersForUser: mock(() => Promise.resolve([])),
+    unlinkDeveloperFromUser: mock(() => Promise.resolve(false)),
+    linkAdditionalEmail: mock(() => Promise.resolve({ developerId: "mock-dev-id" })),
     getOrgDeveloperIds: mock(() => Promise.resolve([])),
     autoLinkDeveloperToOrg: mock(() => Promise.resolve()),
     autoLinkUserToDeveloper: mock(() => Promise.resolve()),

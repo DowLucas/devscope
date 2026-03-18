@@ -13,6 +13,7 @@ export interface OrgMemberStatus {
   total_sessions: number;
   total_events: number;
   role: OrgRole;
+  linked_email_count?: number;
 }
 
 export interface OrgSettings {
