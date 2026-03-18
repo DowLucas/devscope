@@ -53,7 +53,11 @@ export async function getOrgDeveloperStatuses(
       END AS is_inactive,
       COALESCE(ds.total_sessions, 0)::INT AS total_sessions,
       COALESCE(ds.total_events, 0)::INT AS total_events,
-      COALESCE(m.role, 'member') AS role
+      COALESCE(m.role, 'member') AS role,
+      (
+        SELECT COUNT(*)::INT FROM user_developer_link udl2
+        WHERE udl2.auth_user_id = udl.auth_user_id
+      ) AS linked_email_count
     FROM org_devs od
     JOIN developers d ON d.id = od.developer_id
     LEFT JOIN user_developer_link udl ON udl.developer_id = d.id

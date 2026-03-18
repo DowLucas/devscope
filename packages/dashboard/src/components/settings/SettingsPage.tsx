@@ -3,16 +3,18 @@ import {
   AccountSettingsCards,
   SecuritySettingsCards,
 } from "@daveyplate/better-auth-ui";
-import { KeyRound, User, Eye, ShieldCheck } from "lucide-react";
+import { KeyRound, User, Eye, ShieldCheck, Mail } from "lucide-react";
 import { ApiKeysCard } from "./ApiKeysCard";
 import { DataSharingCard } from "./DataSharingCard";
 import { DeleteAccountCard } from "./DeleteAccountCard";
+import { LinkedEmailsCard } from "./LinkedEmailsCard";
 
 const SECTIONS = [
   { id: "account", label: "Account", icon: User },
   { id: "security", label: "Security", icon: ShieldCheck },
   { id: "api-keys", label: "API Keys", icon: KeyRound },
   { id: "privacy", label: "Data Sharing", icon: Eye },
+  { id: "linked-emails", label: "Linked Emails", icon: Mail },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -21,6 +23,7 @@ function getSectionFromPath(path: string): SectionId {
   if (path.includes("/security")) return "security";
   if (path.includes("/api-keys")) return "api-keys";
   if (path.includes("/privacy")) return "privacy";
+  if (path.includes("/linked-emails")) return "linked-emails";
   return "account";
 }
 
@@ -32,6 +35,8 @@ export function SettingsPage() {
     if (id === "account") setLocation("/dashboard/account");
     else setLocation(`/dashboard/account/${id}`);
   }
+
+
 
   return (
     <div className="flex gap-8">
@@ -67,6 +72,7 @@ export function SettingsPage() {
         {active === "security" && <SecuritySettingsCards />}
         {active === "api-keys" && <ApiKeysCard />}
         {active === "privacy" && <DataSharingCard />}
+        {active === "linked-emails" && <LinkedEmailsCard />}
       </div>
     </div>
   );

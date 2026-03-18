@@ -46,6 +46,68 @@ export async function getDeveloperIdForUser(sql: SQL, authUserId: string): Promi
   return (row as any)?.developer_id ?? null;
 }
 
+export async function getAllDeveloperIdsForUser(sql: SQL, authUserId: string): Promise<string[]> {
+  const rows = await sql`
+    SELECT developer_id FROM user_developer_link WHERE auth_user_id = ${authUserId}`;
+  return (rows as any[]).map((r) => r.developer_id);
+}
+
+export async function getLinkedDevelopersForUser(
+  sql: SQL,
+  authUserId: string
+): Promise<{ developer_id: string; name: string; email: string }[]> {
+  const rows = await sql`
+    SELECT d.id AS developer_id, d.name, d.email
+    FROM user_developer_link udl
+    JOIN developers d ON d.id = udl.developer_id
+    WHERE udl.auth_user_id = ${authUserId}`;
+  return rows as any[];
+}
+
+export async function unlinkDeveloperFromUser(
+  sql: SQL,
+  authUserId: string,
+  developerId: string
+): Promise<boolean> {
+  const result = await sql`
+    DELETE FROM user_developer_link
+    WHERE auth_user_id = ${authUserId} AND developer_id = ${developerId}
+    RETURNING developer_id`;
+  return result.length > 0;
+}
+
+export async function linkAdditionalEmail(
+  sql: SQL,
+  authUserId: string,
+  email: string,
+  orgId: string
+): Promise<{ developerId: string } | { error: string }> {
+  const developerId = computeDeveloperId(email);
+
+  // Verify developer exists in this org
+  const [exists] = await sql`
+    SELECT 1 FROM organization_developer
+    WHERE organization_id = ${orgId} AND developer_id = ${developerId}`;
+  if (!exists) {
+    return { error: "No developer found with this email in your organization" };
+  }
+
+  // Verify not already linked to another user
+  const [existingLink] = await sql`
+    SELECT auth_user_id FROM user_developer_link
+    WHERE developer_id = ${developerId}`;
+  if (existingLink && (existingLink as any).auth_user_id !== authUserId) {
+    return { error: "This developer is already linked to another account" };
+  }
+
+  await sql`
+    INSERT INTO user_developer_link (auth_user_id, developer_id)
+    VALUES (${authUserId}, ${developerId})
+    ON CONFLICT DO NOTHING`;
+
+  return { developerId };
+}
+
 export async function getOrgDeveloperIds(sql: SQL, orgId: string): Promise<string[]> {
   const rows = await sql`
     SELECT developer_id FROM organization_developer WHERE organization_id = ${orgId}`;

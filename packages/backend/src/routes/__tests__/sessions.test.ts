@@ -20,10 +20,10 @@ mock.module("../../db", () => dbStubs({
   getSessionTitleHistory: mockGetSessionTitleHistory,
 }));
 
-const mockGetDeveloperIdForUser = mock(() => Promise.resolve(null as string | null));
+const mockGetAllDeveloperIdsForUser = mock(() => Promise.resolve([] as string[]));
 
 mock.module("../../services/developerLink", () => developerLinkStubs({
-  getDeveloperIdForUser: mockGetDeveloperIdForUser,
+  getAllDeveloperIdsForUser: mockGetAllDeveloperIdsForUser,
 }));
 
 const mockStripSensitivePayload = mock((payload: Record<string, unknown>) => {
@@ -111,7 +111,7 @@ beforeEach(() => {
   mockGetActiveAgents.mockReset();
   mockGetSessionDetail.mockReset();
   mockGetSessionTitleHistory.mockReset();
-  mockGetDeveloperIdForUser.mockReset();
+  mockGetAllDeveloperIdsForUser.mockReset();
   mockStripSensitivePayload.mockReset();
 
   // Restore default implementations
@@ -120,7 +120,7 @@ beforeEach(() => {
   mockGetActiveAgents.mockImplementation(() => Promise.resolve([]));
   mockGetSessionDetail.mockImplementation(() => Promise.resolve(null));
   mockGetSessionTitleHistory.mockImplementation(() => Promise.resolve([]));
-  mockGetDeveloperIdForUser.mockImplementation(() => Promise.resolve(null));
+  mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve([]));
   mockStripSensitivePayload.mockImplementation((payload: Record<string, unknown>) => {
     const stripped = { ...payload };
     delete stripped.promptText;
@@ -388,7 +388,7 @@ describe("GET /sessions/:id", () => {
     mockGetSessionDetail.mockImplementation(() =>
       Promise.resolve({ session, events: [event] })
     );
-    mockGetDeveloperIdForUser.mockImplementation(() => Promise.resolve("dev-aaa"));
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-aaa"]));
 
     const app = buildApp({ orgDeveloperIds: ["dev-aaa"], user: { id: "user-1" } });
     const res = await app.request("/sessions/sess-1");
@@ -412,7 +412,7 @@ describe("GET /sessions/:id", () => {
       Promise.resolve({ session, events: [event] })
     );
     // Viewer is dev-bbb, session belongs to dev-aaa
-    mockGetDeveloperIdForUser.mockImplementation(() => Promise.resolve("dev-bbb"));
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-bbb"]));
 
     const app = buildApp({ orgDeveloperIds: ["dev-aaa", "dev-bbb"], user: { id: "user-2" } });
     const res = await app.request("/sessions/sess-1");
@@ -435,7 +435,7 @@ describe("GET /sessions/:id", () => {
     mockGetSessionDetail.mockImplementation(() =>
       Promise.resolve({ session, events: [event] })
     );
-    mockGetDeveloperIdForUser.mockImplementation(() => Promise.resolve(null));
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve([]));
 
     const app = buildApp({ orgDeveloperIds: ["dev-aaa"], user: { id: "user-1" } });
     const res = await app.request("/sessions/sess-1");
@@ -471,7 +471,7 @@ describe("GET /sessions/:id", () => {
     mockGetSessionDetail.mockImplementation(() =>
       Promise.resolve({ session, events: [event] })
     );
-    mockGetDeveloperIdForUser.mockImplementation(() => Promise.resolve("dev-aaa"));
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-aaa"]));
 
     const app = buildApp({ orgDeveloperIds: ["dev-aaa"], user: { id: "user-1" } });
     const res = await app.request("/sessions/sess-1");
@@ -492,7 +492,7 @@ describe("GET /sessions/:id", () => {
       Promise.resolve({ session, events })
     );
     // Non-self-view
-    mockGetDeveloperIdForUser.mockImplementation(() => Promise.resolve("dev-bbb"));
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-bbb"]));
 
     const app = buildApp({ orgDeveloperIds: ["dev-aaa", "dev-bbb"], user: { id: "user-2" } });
     const res = await app.request("/sessions/sess-1");
