@@ -34,7 +34,7 @@ export function LinkedEmailsCard() {
   const primaryEmail = session?.user?.email ?? "";
   const activeOrgId = activeOrg?.id ?? null;
 
-  const fetchLinked = useCallback(async (_orgId?: string) => {
+  const fetchLinked = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -56,7 +56,7 @@ export function LinkedEmailsCard() {
 
   useEffect(() => {
     if (!activeOrgId) return;
-    fetchLinked(activeOrgId);
+    fetchLinked();
   }, [activeOrgId, fetchLinked]);
 
   async function handleLink() {
