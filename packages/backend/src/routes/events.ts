@@ -15,7 +15,7 @@ import {
   upsertClaudeMdSnapshot,
 } from "../db";
 import { broadcastToOrg } from "../ws/handler";
-import { autoLinkDeveloperToOrg } from "../services/developerLink";
+import { autoLinkDeveloperToOrg, autoLinkUserToDeveloper } from "../services/developerLink";
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 import { logEthicsEvent } from "../utils/ethicsAudit";
 import { evaluateFriction, cleanupFrictionSession } from "../services/frictionDetector";
@@ -195,6 +195,7 @@ export function eventsRoutes(sql: SQL) {
     const apiKeyUserId = c.get("apiKeyUserId" as never) as string | undefined;
     if (apiKeyUserId) {
       await autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId);
+      await autoLinkUserToDeveloper(sql, apiKeyUserId, event.developerId);
     }
 
     // Check if this event is reactivating an ended session (e.g. after backend restart)

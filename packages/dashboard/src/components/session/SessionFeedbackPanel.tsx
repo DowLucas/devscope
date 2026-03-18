@@ -34,6 +34,15 @@ function PrivacyBadge({ privacyMode, isSelfView }: { privacyMode: string | null;
     );
   }
 
+  if (privacyMode === "open" && !isSelfView) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <EyeOff className="h-3 w-3" />
+        Metadata debrief — content only visible to the session owner
+      </span>
+    );
+  }
+
   return (
     <span className="flex items-center gap-1 text-xs text-muted-foreground">
       <EyeOff className="h-3 w-3" />

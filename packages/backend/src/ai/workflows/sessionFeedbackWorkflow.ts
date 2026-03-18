@@ -69,6 +69,8 @@ async function generateFeedback(
     ? `This debrief has access to your full session content (prompts, tool inputs, and responses) because your session privacy mode is **open**. Suggestions will be specific and grounded in your actual prompts and interactions.`
     : privacyMode === "private"
     ? `This session is in **private** mode — no content details are available.`
+    : privacyMode === "open"
+    ? `This debrief is based on session **metadata only** (tool names, event counts, error messages) because you are viewing another developer's session. Content is only included for self-views.`
     : `This debrief is based on session **metadata only** (tool names, event counts, error messages) because your session privacy mode is **standard**. Set \`DEVSCOPE_PRIVACY=open\` for richer, content-aware suggestions.`;
 
   const dataStr = JSON.stringify(state.data, null, 2).slice(0, 20_000);

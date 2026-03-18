@@ -98,7 +98,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {(session as typeof session & { privacyMode?: string }).privacyMode === "private" && (
+                {session.privacyMode === "private" && (
                   <Badge variant="outline" className="gap-1 text-amber-400 border-amber-400/30">
                     <Lock className="h-3 w-3" />
                     Private
@@ -171,7 +171,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           <CardContent className="p-4">
             <SessionFeedbackPanel
               sessionId={session.id}
-              privacyMode={(session as typeof session & { privacyMode?: string }).privacyMode ?? null}
+              privacyMode={session.privacyMode ?? null}
               isSelfView={isSelfView}
             />
           </CardContent>

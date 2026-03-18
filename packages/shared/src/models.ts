@@ -49,6 +49,7 @@ export interface SessionDetail {
     endedAt: string | null;
     status: string;
     permissionMode: string | null;
+    privacyMode: string | null;
     eventCount: number;
   };
   events: Array<{
