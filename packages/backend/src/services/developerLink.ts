@@ -52,6 +52,27 @@ export async function getOrgDeveloperIds(sql: SQL, orgId: string): Promise<strin
   return (rows as any[]).map((r) => r.developer_id);
 }
 
+export async function autoLinkUserToDeveloper(
+  sql: SQL,
+  authUserId: string,
+  developerId: string
+): Promise<void> {
+  const [authUser] = await sql`
+    SELECT email FROM auth_user WHERE id = ${authUserId}` as { email?: string }[];
+  if (!authUser?.email) return;
+
+  const authEmail = authUser.email;
+
+  // Only auto-link if the auth user's email produces the same developer ID
+  const expectedDevId = computeDeveloperId(authEmail);
+  if (expectedDevId === developerId) {
+    await sql`
+      INSERT INTO user_developer_link (auth_user_id, developer_id)
+      VALUES (${authUserId}, ${developerId})
+      ON CONFLICT DO NOTHING`;
+  }
+}
+
 export async function autoLinkDeveloperToOrg(
   sql: SQL,
   authUserId: string,
