@@ -188,7 +188,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
             Developers can opt in to detailed sharing via DEVSCOPE_SHARE_DETAILS.
           </div>
         )}
-        {turns.map((turn, i) => (
+        {[...turns].reverse().map((turn, i) => (
           <SessionTurnCard key={i} turn={turn} index={i} isSelfView={isSelfView} />
         ))}
         {turns.length === 0 && (

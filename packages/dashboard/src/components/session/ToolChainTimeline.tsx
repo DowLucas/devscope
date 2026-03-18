@@ -79,6 +79,14 @@ export function ToolChainTimeline({ toolCalls, isSelfView = false }: ToolChainTi
                   <span className="text-muted-foreground font-normal"> · {tool.toolSubcommand}</span>
                 )}
               </span>
+              {isSelfView && tool.toolInput && (() => {
+                const summary = getToolInputSummary(tool.toolName, tool.toolInput);
+                return summary ? (
+                  <span className="text-muted-foreground font-mono truncate min-w-0" title={summary}>
+                    {summary.length > 60 ? summary.slice(0, 57) + "..." : summary}
+                  </span>
+                ) : null;
+              })()}
 
               {tool.duration != null && tool.duration > 0 && (
                 <Badge variant="outline" className="text-[10px] px-1 py-0 ml-auto">
