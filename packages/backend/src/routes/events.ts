@@ -194,8 +194,11 @@ export function eventsRoutes(sql: SQL) {
     // Auto-link plugin developer to the API key owner's org
     const apiKeyUserId = c.get("apiKeyUserId" as never) as string | undefined;
     if (apiKeyUserId) {
-      await autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId);
-      await autoLinkUserToDeveloper(sql, apiKeyUserId, event.developerId);
+      // Best-effort linking — must not block or abort event ingestion
+      autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId)
+        .catch((err) => console.error("[events] autoLinkDeveloperToOrg failed:", err));
+      autoLinkUserToDeveloper(sql, apiKeyUserId, event.developerId)
+        .catch((err) => console.error("[events] autoLinkUserToDeveloper failed:", err));
     }
 
     // Check if this event is reactivating an ended session (e.g. after backend restart)
@@ -454,7 +457,8 @@ export function eventsRoutes(sql: SQL) {
 
     // Upsert developer
     await upsertDeveloper(sql, event.developerId, event.developerName, "");
-    await autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId);
+    autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId)
+      .catch((err) => console.error("[events/hook] autoLinkDeveloperToOrg failed:", err));
 
     // Ensure session exists and is active (mirrors main POST / handler behavior)
     const [existingSession] = await sql`SELECT status FROM sessions WHERE id = ${event.sessionId}`;

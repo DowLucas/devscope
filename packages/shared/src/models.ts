@@ -1,3 +1,5 @@
+export type PrivacyMode = "private" | "open" | "standard" | null;
+
 export interface Developer {
   id: string;
   name: string;
@@ -15,7 +17,7 @@ export interface Session {
   endedAt: string | null;
   status: "active" | "ended";
   permissionMode: string | null;
-  privacyMode: string | null;
+  privacyMode: PrivacyMode;
   currentTitle?: string | null;
 }
 
@@ -49,7 +51,7 @@ export interface SessionDetail {
     endedAt: string | null;
     status: string;
     permissionMode: string | null;
-    privacyMode: string | null;
+    privacyMode: PrivacyMode;
     eventCount: number;
   };
   events: Array<{

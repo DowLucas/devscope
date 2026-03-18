@@ -58,11 +58,10 @@ export async function autoLinkUserToDeveloper(
   developerId: string
 ): Promise<void> {
   const [authUser] = await sql`
-    SELECT email FROM auth_user WHERE id = ${authUserId}`;
-  if (!authUser) return;
+    SELECT email FROM auth_user WHERE id = ${authUserId}` as { email?: string }[];
+  if (!authUser?.email) return;
 
-  const authEmail = (authUser as any).email;
-  if (!authEmail) return;
+  const authEmail = authUser.email;
 
   // Only auto-link if the auth user's email produces the same developer ID
   const expectedDevId = computeDeveloperId(authEmail);
