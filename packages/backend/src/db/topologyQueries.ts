@@ -103,12 +103,25 @@ export async function detectSkillGaps(
   orgId: string,
   teamSize: number
 ): Promise<void> {
+  // Aggregate subcommand rows back to tool-level for gap detection.
+  // Sum counts across subcommands and recompute failure_rate / max unique_users.
   const topology = await sql`
-    SELECT DISTINCT ON (tool_name)
-      tool_name, failure_rate, unique_users, total_uses
-    FROM team_tool_topology
-    WHERE organization_id = ${orgId}
-    ORDER BY tool_name, computed_at DESC`;
+    SELECT
+      tool_name,
+      SUM(total_uses)::INT AS total_uses,
+      MAX(unique_users)::INT AS unique_users,
+      CASE WHEN SUM(total_uses) > 0
+        THEN SUM(failure_count)::NUMERIC / SUM(total_uses)
+        ELSE NULL
+      END AS failure_rate
+    FROM (
+      SELECT DISTINCT ON (tool_name, COALESCE(tool_subcommand, ''))
+        tool_name, tool_subcommand, total_uses, unique_users, failure_count, computed_at
+      FROM team_tool_topology
+      WHERE organization_id = ${orgId}
+      ORDER BY tool_name, COALESCE(tool_subcommand, ''), computed_at DESC
+    ) latest
+    GROUP BY tool_name`;
 
   for (const row of topology as any[]) {
     const toolName: string = row.tool_name;

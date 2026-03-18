@@ -50,9 +50,14 @@ export function buildTurns(events: RawEvent[]): SessionTurn[] {
             timestamp: event.created_at,
           });
         } else {
-          // Find matching tool.start to update, or add new
+          // Find matching tool.start to update, or add new.
+          // Prefer matching by (toolName, toolSubcommand) when subcommand is present.
+          const toolSub = p.toolSubcommand ? String(p.toolSubcommand) : undefined;
           const existing = turn.toolCalls.findLast(
-            (tc) => tc.toolName === String(p.toolName ?? "") && tc.success === undefined
+            (tc) =>
+              tc.toolName === String(p.toolName ?? "") &&
+              tc.success === undefined &&
+              (toolSub === undefined || tc.toolSubcommand === toolSub)
           );
           if (existing) {
             existing.success = event.event_type === "tool.complete";

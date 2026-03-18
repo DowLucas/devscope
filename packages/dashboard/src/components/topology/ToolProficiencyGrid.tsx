@@ -41,6 +41,7 @@ function groupByTool(data: TeamToolTopology[]): ToolGroup[] {
     const total_uses = items.reduce((s, r) => s + r.total_uses, 0);
     const success_count = items.reduce((s, r) => s + r.success_count, 0);
     const failure_count = items.reduce((s, r) => s + r.failure_count, 0);
+    // Proxy: use max per-subcommand count since we can't deduplicate user IDs client-side
     const unique_users = Math.max(...items.map((r) => r.unique_users));
     const failure_rate = total_uses > 0 ? failure_count / total_uses : null;
 
