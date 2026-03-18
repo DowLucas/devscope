@@ -795,7 +795,7 @@ function TeammateIdleItem({
           </span>
           {" went idle"}
         </span>
-        {p.idleReason && (
+        {!!p.idleReason && (
           <span className="text-xs text-muted-foreground">
             ({String(p.idleReason)})
           </span>
