@@ -45,22 +45,30 @@ export function buildTurns(events: RawEvent[]): SessionTurn[] {
         if (event.event_type === "tool.start") {
           turn.toolCalls.push({
             toolName: String(p.toolName ?? "Unknown"),
+            toolSubcommand: p.toolSubcommand ? String(p.toolSubcommand) : undefined,
             toolInput,
             timestamp: event.created_at,
           });
         } else {
-          // Find matching tool.start to update, or add new
+          // Find matching tool.start to update, or add new.
+          // Prefer matching by (toolName, toolSubcommand) when subcommand is present.
+          const toolSub = p.toolSubcommand ? String(p.toolSubcommand) : undefined;
           const existing = turn.toolCalls.findLast(
-            (tc) => tc.toolName === String(p.toolName ?? "") && tc.success === undefined
+            (tc) =>
+              tc.toolName === String(p.toolName ?? "") &&
+              tc.success === undefined &&
+              (toolSub === undefined || tc.toolSubcommand === toolSub)
           );
           if (existing) {
             existing.success = event.event_type === "tool.complete";
             existing.duration = p.duration as number | undefined;
             existing.errorMessage = p.errorMessage as string | undefined;
             if (toolInput) existing.toolInput = toolInput;
+            if (p.toolSubcommand) existing.toolSubcommand = String(p.toolSubcommand);
           } else {
             turn.toolCalls.push({
               toolName: String(p.toolName ?? "Unknown"),
+              toolSubcommand: p.toolSubcommand ? String(p.toolSubcommand) : undefined,
               toolInput,
               success: event.event_type === "tool.complete",
               duration: p.duration as number | undefined,

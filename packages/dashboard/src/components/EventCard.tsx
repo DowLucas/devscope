@@ -64,8 +64,11 @@ function getEventSummary(event: DevscopeEvent): string {
   switch (event.eventType) {
     case "tool.start":
     case "tool.complete":
-    case "tool.fail":
-      return String(p.toolName ?? "Unknown tool");
+    case "tool.fail": {
+      const tn = String(p.toolName ?? "Unknown tool");
+      const sub = p.toolSubcommand ?? p.tool_subcommand;
+      return sub ? `${tn} · ${String(sub)}` : tn;
+    }
     case "prompt.submit":
       return (p.promptText as string) || `Prompt (${p.promptLength ?? 0} chars)`;
     case "session.start":

@@ -6,6 +6,7 @@ export interface TeamToolTopology {
   id: string;
   organization_id: string;
   tool_name: string;
+  tool_subcommand: string | null;
   period_start: string;
   period_end: string;
   total_uses: number;

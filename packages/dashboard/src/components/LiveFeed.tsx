@@ -73,7 +73,9 @@ function buildFeedItems(events: DevscopeEvent[]): FeedItem[] {
     let callCount = 0;
     for (const e of toolBatch) {
       const p = e.payload as unknown as Record<string, unknown>;
-      const name = String(p.toolName ?? "Unknown");
+      const baseName = String(p.toolName ?? "Unknown");
+      const sub = p.toolSubcommand ? String(p.toolSubcommand) : "";
+      const name = sub ? `${baseName} · ${sub}` : baseName;
       if (e.eventType === "tool.start") {
         callCount++;
         if (!toolNames.includes(name)) toolNames.push(name);
@@ -369,6 +371,7 @@ function ToolFailItem({
       <div className="flex items-center gap-2 pt-1">
         <span className="text-sm text-destructive font-medium">
           Tool failed: {String(p.toolName ?? "Unknown")}
+          {p.toolSubcommand ? <span className="font-normal"> · {String(p.toolSubcommand)}</span> : null}
         </span>
         <span className="text-xs text-muted-foreground">
           {event.developerName}

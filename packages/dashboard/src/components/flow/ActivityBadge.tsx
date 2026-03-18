@@ -41,8 +41,11 @@ export function ActivityBadge({
   if (!displayEvent) return null;
 
   const isToolComplete = displayEvent.eventType === "tool.complete";
-  const completedToolName = isToolComplete
-    ? (displayEvent.payload as ToolEventPayload).toolName
+  const toolPayload = isToolComplete ? (displayEvent.payload as ToolEventPayload) : null;
+  const completedToolName = toolPayload
+    ? toolPayload.toolSubcommand
+      ? `${toolPayload.toolName} · ${toolPayload.toolSubcommand}`
+      : toolPayload.toolName
     : null;
 
   // Stable key during tool running → complete so the chip morphs in place

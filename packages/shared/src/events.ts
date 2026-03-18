@@ -88,6 +88,7 @@ export interface PromptEventPayload {
 
 export interface ToolEventPayload {
   toolName: string;
+  toolSubcommand?: string;
   toolInput?: Record<string, unknown>;
   duration?: number;
   success?: boolean;

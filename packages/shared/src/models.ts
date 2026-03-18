@@ -64,6 +64,7 @@ export interface SessionDetail {
 
 export interface ToolCallEntry {
   toolName: string;
+  toolSubcommand?: string;
   toolInput?: Record<string, unknown>;
   success?: boolean;
   duration?: number;

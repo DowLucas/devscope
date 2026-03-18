@@ -73,7 +73,12 @@ export function ToolChainTimeline({ toolCalls, isSelfView = false }: ToolChainTi
               {tool.success === false && <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
               {tool.success === undefined && <span className="h-3.5 w-3.5 rounded-full bg-muted shrink-0" />}
 
-              <span className="font-mono text-foreground">{tool.toolName}</span>
+              <span className="font-mono text-foreground">
+                {tool.toolName}
+                {tool.toolSubcommand && (
+                  <span className="text-muted-foreground font-normal"> · {tool.toolSubcommand}</span>
+                )}
+              </span>
 
               {tool.duration != null && tool.duration > 0 && (
                 <Badge variant="outline" className="text-[10px] px-1 py-0 ml-auto">
