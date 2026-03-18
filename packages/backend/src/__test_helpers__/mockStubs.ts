@@ -130,6 +130,7 @@ export function developerLinkStubs(overrides: Record<string, unknown> = {}) {
     getDeveloperIdForUser: mock(() => Promise.resolve(null)),
     getOrgDeveloperIds: mock(() => Promise.resolve([])),
     autoLinkDeveloperToOrg: mock(() => Promise.resolve()),
+    autoLinkUserToDeveloper: mock(() => Promise.resolve()),
     ...overrides,
   };
 }
