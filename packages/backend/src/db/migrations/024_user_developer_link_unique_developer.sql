@@ -12,5 +12,13 @@ WHERE ctid NOT IN (
   ORDER BY developer_id, auth_user_id
 );
 
-ALTER TABLE user_developer_link
-  ADD CONSTRAINT uq_user_developer_link_developer_id UNIQUE (developer_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'uq_user_developer_link_developer_id'
+  ) THEN
+    ALTER TABLE user_developer_link
+      ADD CONSTRAINT uq_user_developer_link_developer_id UNIQUE (developer_id);
+  END IF;
+END
+$$;
