@@ -40,6 +40,10 @@ export function useDevscopeSocket() {
         if (isStale()) return;
         try {
           const msg = JSON.parse(e.data);
+          if (msg.type === "ping") {
+            ws.send(JSON.stringify({ type: "pong" }));
+            return;
+          }
           const store = useActivityStore.getState();
           switch (msg.type) {
             case "event.new":

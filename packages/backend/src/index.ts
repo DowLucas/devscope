@@ -14,7 +14,7 @@ import { insightsRoutes } from "./routes/insights";
 import { alertsRoutes } from "./routes/alerts";
 import { exportRoutes } from "./routes/export";
 import { teamsRoutes } from "./routes/teams";
-import { addClient, removeClient, getClientCount, getOrgClientCount, broadcastToOrg } from "./ws/handler";
+import { addClient, removeClient, getClientCount, getOrgClientCount, broadcastToOrg, recordPong } from "./ws/handler";
 import { startStaleSessionCleanup } from "./jobs/cleanupStaleSessions";
 import { startDigestGeneration } from "./jobs/digestGeneration";
 import { startAiInsightGeneration } from "./jobs/aiInsights";
@@ -308,7 +308,7 @@ app.post("/api/verify-connection", async (c) => {
 });
 
 const MAX_WS_CLIENTS = 500;
-const MAX_WS_CLIENTS_PER_ORG = 20;
+const MAX_WS_CLIENTS_PER_ORG = 50;
 
 app.get(
   "/ws",
@@ -325,6 +325,7 @@ app.get(
     // Per-org connection limit
     const orgId = (session.session as any).activeOrganizationId as string | undefined;
     if (orgId && getOrgClientCount(orgId) >= MAX_WS_CLIENTS_PER_ORG) {
+      console.log("[ws] Rejected: org", orgId, "has", getOrgClientCount(orgId), "connections (limit:", MAX_WS_CLIENTS_PER_ORG + ")");
       return c.text("Too many connections for this organization", 503);
     }
     // Store orgId for use in onOpen
@@ -338,11 +339,13 @@ app.get(
         addClient(ws, orgId);
         console.log("[ws] Client connected (" + getClientCount() + " total)");
       },
-      onMessage(event, _ws) {
+      onMessage(event, ws) {
         try {
           const msg = JSON.parse(String(event.data));
           if (msg.type === "subscribe") {
             console.log("[ws] Client subscribed");
+          } else if (msg.type === "pong") {
+            recordPong(ws);
           }
         } catch {
           // Ignore non-JSON messages
