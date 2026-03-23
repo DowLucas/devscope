@@ -175,7 +175,8 @@ function isActive(location: string, path: string): boolean {
 }
 
 function useNavGroups(): NavGroup[] {
-  const admin = useTeamStore((s) => s.isAdmin());
+  const currentRole = useTeamStore((s) => s.currentRole);
+  const admin = currentRole === "admin" || currentRole === "owner";
   const teamItems: NavItem[] = [
     { path: "/dashboard/team", label: "Members", icon: UsersRound },
     { path: "/dashboard/privacy", label: "Privacy", icon: Shield },
