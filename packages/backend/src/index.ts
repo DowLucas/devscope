@@ -176,7 +176,7 @@ async function requireApiKeyOrSession(c: Context, next: Next) {
           if (authUser) {
             c.set("user" as never, authUser as never);
           }
-          const [membership] = await sql`SELECT "organizationId" FROM member WHERE "userId" = ${userId} LIMIT 1` as any[];
+          const [membership] = await sql`SELECT "organizationId" FROM member WHERE "userId" = ${userId} ORDER BY "createdAt" DESC LIMIT 1` as any[];
           if (membership) {
             c.set("session" as never, { activeOrganizationId: membership.organizationId } as never);
           }

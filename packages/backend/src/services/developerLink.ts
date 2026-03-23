@@ -158,7 +158,7 @@ export async function autoLinkDeveloperToOrg(
   developerId: string
 ): Promise<void> {
   const orgs = await sql`
-    SELECT "organizationId" FROM member WHERE "userId" = ${authUserId} LIMIT 1`;
+    SELECT "organizationId" FROM member WHERE "userId" = ${authUserId} ORDER BY "createdAt" DESC LIMIT 1`;
   if (orgs.length > 0) {
     const orgId = (orgs[0] as any).organizationId;
     await sql`
