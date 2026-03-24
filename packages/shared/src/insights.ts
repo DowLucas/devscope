@@ -193,6 +193,18 @@ export interface DigestSummary {
   project_allocation?: { project_name: string; percentage: number }[];
 }
 
+// --- Concrete Tool Details ---
+
+/** Granular breakdown of actual tool usage: specific commands, files, patterns, and directories. */
+export interface ConcreteToolDetails {
+  bash_subcommands: Array<{ subcommand: string; count: number; success_rate: number }>;
+  file_extensions: Array<{ extension: string; tool_name: string; count: number }>;
+  top_files: Array<{ file_path: string; tool_name: string; count: number }>;
+  top_directories: Array<{ directory: string; count: number }>;
+  search_patterns: Array<{ pattern: string; count: number }>;
+  skill_usage: Array<{ skill: string; count: number }>;
+}
+
 // --- Tooling Health ---
 
 export interface SkillUsageDataPoint {

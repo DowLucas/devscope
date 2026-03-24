@@ -7,6 +7,7 @@ import {
   getTeamActivitySummary,
   getProjectsOverview,
   getToolUsageBreakdown,
+  getConcreteToolDetails,
   getSessionStatsSummary,
   getFailureClusters,
   getPatterns,
@@ -59,6 +60,7 @@ async function gatherReportData(
     teamActivity,
     projects,
     toolUsage,
+    concreteDetails,
     sessionSummary,
     failureClusters,
     effectivePatterns,
@@ -69,6 +71,7 @@ async function gatherReportData(
     getTeamActivitySummary(sql, days, devIds),
     getProjectsOverview(sql, days, devIds),
     getToolUsageBreakdown(sql, undefined, days, devIds),
+    getConcreteToolDetails(sql, days, devIds),
     getSessionStatsSummary(sql, undefined, days, devIds),
     getFailureClusters(sql, days, devIds),
     getPatterns(sql, { effectiveness: "effective", limit: 10 }),
@@ -92,6 +95,7 @@ async function gatherReportData(
       teamActivity,
       projects,
       toolUsage,
+      concreteToolDetails: concreteDetails,
       sessionSummary,
       failureClusters,
       effectivePatterns,
@@ -123,9 +127,11 @@ Title: ${state.title}${personaGuidance}
 IMPORTANT: This report should focus on TEAM-LEVEL metrics only. Do NOT include individual developer names, rankings, or performance comparisons. Focus on:
 - Team Claude Code usage trends (sessions, completion rates, feature adoption)
 - Project health and progress
-- Claude Code usage patterns (which features are being leveraged effectively?)
+- CONCRETE tool usage: reference specific bash commands (git, npm, docker), specific files accessed (package.json, tsconfig.json), specific search patterns, and specific directories explored from the concreteToolDetails data
 - Sessions with high failure rates (what prompting strategies could help?)
 - Claude Code Skills: effective developer strategies, common usage pitfalls, and tips for getting better results from Claude Code
+
+IMPORTANT: When discussing tool usage, ALWAYS use specific details from concreteToolDetails rather than generic labels like "Bash-heavy" or "Read-Edit loops". Say "git commands (120x), npm scripts (45x)" not "Bash tool (165x)".
 
 Based on this data, create a detailed outline for the report. Include a "Claude Code Skills" section.
 
@@ -180,7 +186,13 @@ Requirements:
 - Include specific numbers and percentages from the provided data ONLY. Do not fabricate or estimate metrics that are not present — if data is unavailable, state "insufficient data" instead
 - Start with a Summary section
 - Include sections for: Team Usage Overview, Project Health, Claude Code Effectiveness, Developer Strategies, Sessions Needing Attention, Recommendations
-- In the Developer Strategies section: highlight top effective developer approaches with success rates, flag common usage pitfalls with frequency and tips for improvement, and provide 2-3 concrete Claude Code usage tips based on the data (e.g. "Sessions where developers explored the codebase first had fewer failures — try asking Claude to research before editing")
+- CRITICAL: When discussing tool usage, reference SPECIFIC details from concreteToolDetails:
+  - Name actual bash commands and their counts (e.g. "git (120x), npm (45x), docker (8x)") instead of "Bash tool (173x)"
+  - Name actual files accessed (e.g. "package.json (25x), tsconfig.json (15x)") instead of "Read tool (40x)"
+  - Name actual search patterns used (e.g. "export.*function, TODO, fixme") instead of "Grep tool (30x)"
+  - Name actual directories explored instead of "Glob tool"
+  - Name actual skills/slash commands used instead of "Skill tool"
+- In the Developer Strategies section: highlight top effective developer approaches with success rates, flag common usage pitfalls with frequency and tips for improvement, and provide 2-3 concrete Claude Code usage tips based on the data
 - Include an **"Improve Your Claude Code Setup"** section with: (a) 2-3 specific CLAUDE.md additions the team should make based on observed failure patterns and context gaps (show each suggestion as a markdown code block with the text to add), (b) 1-2 Claude Code skill definitions based on effective repeated patterns observed (show the skill body in a code block), (c) any recurring context gaps where Claude Code repeatedly lacked project knowledge
 - End with Action Items focused on improving Claude Code usage and developer workflow
 - NEVER include individual developer names, rankings, or performance comparisons

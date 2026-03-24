@@ -18,6 +18,12 @@ interface DiscoveredPattern {
   category: string;
   session_ids: string[];
   avg_success_rate: number;
+  top_details?: {
+    commands?: string[];
+    files?: string[];
+    patterns?: string[];
+    skills?: string[];
+  };
 }
 
 const PatternState = Annotation.Root({
@@ -40,38 +46,42 @@ async function extractSequences(
 
 const PATTERN_PROMPT = `You are analyzing how developers USE Claude Code to identify recurring developer strategies and habits.
 
-Each session includes: tool call sequences (what Claude Code did), prompt metadata (how the developer communicated), and agent delegation info (whether the developer used sub-agents).
+Each session includes: tool call sequences, prompt metadata, agent delegation info, AND concrete_details showing the actual commands run, files accessed, search patterns used, and skills invoked.
 
-Your goal is to identify the DEVELOPER'S approach — how they prompt, structure tasks, and direct Claude Code — not just what tools Claude Code used internally.
+Your goal is to identify CONCRETE, SPECIFIC patterns — not abstract labels. Use the concrete_details to describe WHAT developers actually do.
 
 For each pattern found, provide:
-- name: a developer-action-oriented name that describes what the DEVELOPER does (e.g. "Explore Before Editing", "Incremental Test-Fix Cycles", "Agent-Assisted Research", "Focused Single-Task Sessions", "Iterative Prompt Refinement")
-  - BAD names (tool-centric): "Glob-Read Exploration", "Bash-heavy execution", "Read-Edit Loop"
-  - GOOD names (developer-centric): "Research-First Approach", "Direct Execution Style", "Careful Refactoring"
-- description: 1-2 sentences explaining the developer's strategy and WHY it works well (or poorly). Frame it as what the developer does, not what Claude does.
-  - BAD: "The developer uses Glob to find files and then reads them"
-  - GOOD: "The developer asks Claude to explore the codebase before making changes, leading to better-informed edits with fewer mistakes"
+- name: a specific, concrete name that describes the actual activity
+  - BAD names (vague/abstract): "Bash-heavy execution", "Glob-Read Exploration", "Read-Edit Loop", "Research-First Approach"
+  - GOOD names (concrete/specific): "Git & npm workflow", "TypeScript config file iteration", "Grep-driven code navigation", "Test-fix-commit cycles"
+- description: 1-2 sentences that reference SPECIFIC commands, files, or patterns from the data. Include actual numbers.
+  - BAD: "The developer uses Bash frequently with a high success rate"
+  - GOOD: "Sessions dominated by git commands (avg 45x) and npm/bun scripts (avg 12x), typically reading package.json and tsconfig.json before running builds. 97% success rate."
 - tool_sequence: canonical ordered tool names (e.g. ["Read", "Edit", "Bash"])
 - effectiveness: "effective" if sessions using it have high success rates (>0.7), "ineffective" if low (<0.4), "neutral" otherwise
 - category: one of "testing", "refactoring", "debugging", "exploration", "writing", "other"
 - session_ids: array of session IDs that exhibited this pattern
 - avg_success_rate: average tool success rate across matching sessions
+- top_details: object with the most significant concrete items for this pattern:
+  - commands: top bash subcommands (e.g. ["git", "npm", "docker"])
+  - files: most frequently accessed files (e.g. ["package.json", "tsconfig.json"])
+  - patterns: most common search patterns (e.g. ["export.*function", "TODO"])
+  - skills: skills used (e.g. ["commit", "review-pr"])
 
 Key signals to consider:
-- prompt_count & avg_prompt_length: How the developer structures their requests (few long prompts = detailed specs, many short = iterative guidance)
-- continuation_ratio: High = developer uses follow-ups effectively; Low = developer gives complete instructions upfront
-- agent_delegations & agent_types: Whether the developer leverages sub-agents for parallel research
-- tool sequence patterns: What workflows the developer's prompts lead to
+- concrete_details.bash_subcommands: Actual commands run and their frequency (e.g. {git: 45, npm: 12, docker: 3})
+- concrete_details.top_files: Most accessed files in the session
+- concrete_details.top_directories: Most explored directories
+- concrete_details.search_patterns: What developers search for with Grep/Glob
+- concrete_details.skill_names: Which skills (slash commands) are used
+- prompt_count & avg_prompt_length: How the developer structures their requests
+- continuation_ratio: High = developer uses follow-ups effectively
+- agent_delegations & agent_types: Whether the developer leverages sub-agents
 - success_rate: How well the developer's approach works
-- prompt_features (when available): Locally-extracted characteristics of how developers write their prompts:
-  - file_references: Number of prompts mentioning specific file paths (high = developer gives precise locations)
-  - code_references: Number of prompts mentioning function/class names (high = developer provides code context)
-  - questions vs directives: Whether the developer asks questions or gives commands
-  - includes_errors: Whether the developer includes error messages in their prompts
-  - avg_specificity: 0-1 score of how specific/detailed the prompts are
-  - slash_commands: Whether the developer uses Claude Code slash commands (/commit, /clear, etc.)
+- prompt_features (when available): Locally-extracted characteristics of prompts:
+  - file_references, code_references, questions, directives, includes_errors, avg_specificity, slash_commands
 
-IMPORTANT: Focus on team-level patterns only. Do not reference individual developers by name, rank, or performance comparisons. All pattern descriptions must be anonymous and team-oriented.
+IMPORTANT: Focus on team-level patterns only. Do not reference individual developers by name, rank, or performance comparisons.
 
 Focus on patterns that appear in 2+ sessions. Merge similar patterns.
 Return a JSON array. Return an empty array if no meaningful patterns found.
@@ -84,7 +94,7 @@ async function clusterPatterns(
     return { discoveredPatterns: [] };
   }
 
-  // Prepare session data for the LLM — include developer behavior signals
+  // Prepare session data for the LLM — include developer behavior signals + concrete details
   // NOTE: prompt_features are extracted locally from prompt text — raw text is never sent
   const sessionData = state.sequences.map(s => ({
     session_id: s.session_id,
@@ -96,6 +106,7 @@ async function clusterPatterns(
     agent_delegations: s.agent_delegations,
     agent_types: s.agent_types,
     duration_minutes: s.duration_minutes,
+    concrete_details: s.concrete_details,
     ...(s.prompt_features ? { prompt_features: s.prompt_features } : {}),
   }));
 
@@ -145,6 +156,7 @@ async function persistPatterns(
       occurrence_count: pattern.session_ids?.length ?? 1,
       effectiveness: pattern.effectiveness ?? "neutral",
       category: pattern.category,
+      data_context: pattern.top_details ? { top_details: pattern.top_details } : undefined,
     });
 
     // Link sessions to this pattern
