@@ -168,7 +168,18 @@ async function requireApiKeyOrSession(c: Context, next: Next) {
         // Resolve the API key owner's userId for auto-linking developers to their org
         const key = (result as any).key;
         if (key?.referenceId) {
-          c.set("apiKeyUserId" as never, key.referenceId as never);
+          const userId = key.referenceId;
+          c.set("apiKeyUserId" as never, userId as never);
+
+          // Resolve user and org context so org-scoped routes work with API key auth
+          const [authUser] = await sql`SELECT id, name, email FROM auth_user WHERE id = ${userId}` as any[];
+          if (authUser) {
+            c.set("user" as never, authUser as never);
+          }
+          const [membership] = await sql`SELECT "organizationId" FROM member WHERE "userId" = ${userId} ORDER BY "createdAt" DESC LIMIT 1` as any[];
+          if (membership) {
+            c.set("session" as never, { activeOrganizationId: membership.organizationId } as never);
+          }
         }
         return next();
       }
@@ -188,11 +199,25 @@ app.use("/api/events", rateLimitMiddleware({ maxRequests: 120, windowMs: 60_000,
 app.use("/api/events/*", requireApiKeyOrSession);
 app.use("/api/events", requireApiKeyOrSession);
 
-// All other API routes require a session (skip health, auth, and events — events use apikey middleware above)
+// Plugin-facing routes: accept API keys or session cookies
+// This allows plugin commands (e.g. /devscope:ask, /devscope:review) to call these endpoints
+const pluginAccessiblePrefixes = ["/api/ai", "/api/insights", "/api/patterns", "/api/playbooks", "/api/skills", "/api/topology", "/api/workflow-profiles", "/api/friction", "/api/sessions"];
+for (const prefix of pluginAccessiblePrefixes) {
+  app.use(`${prefix}/*`, requireApiKeyOrSession);
+  app.use(prefix, requireApiKeyOrSession);
+}
+
+// All other API routes require a session (skip health, auth, events, public, and plugin-accessible routes)
 app.use("/api/*", async (c, next) => {
   const path = c.req.path;
   if (path === "/api/health" || path === "/api/verify-connection" || path.startsWith("/api/auth/") || path.startsWith("/api/events") || path.startsWith("/api/public/")) {
     return next();
+  }
+  // Skip routes already covered by requireApiKeyOrSession above
+  for (const prefix of pluginAccessiblePrefixes) {
+    if (path === prefix || path.startsWith(prefix + "/")) {
+      return next();
+    }
   }
   return requireSession(c, next);
 });
