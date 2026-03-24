@@ -77,7 +77,7 @@ async function generateFeedback(
 
   const contentSections = includeContent
     ? `
-When producing CLAUDE.md suggestions and skill definitions, use specific patterns from the prompt samples and response samples where relevant. Reference what topics or tasks were being worked on, but do NOT reproduce sensitive prompt or response text verbatim.`
+When producing CLAUDE.md suggestions and skill definitions, use specific patterns from the prompt samples, tool input/output samples, and response samples where relevant. Tool results show what Claude Code actually read, searched, or executed — use these to understand what the developer was working on and where friction occurred. Reference what topics or tasks were being worked on, but do NOT reproduce sensitive prompt or response text verbatim.`
     : `
 Since only metadata is available (no prompt or response content), base CLAUDE.md suggestions on the tool failure error messages and tool usage patterns. Keep suggestions practical and general.`;
 

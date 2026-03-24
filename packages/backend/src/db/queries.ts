@@ -2281,6 +2281,7 @@ export interface SessionFeedbackData {
   errorSamples: Array<{ tool_name: string; error_message: string }>;
   promptSamples?: Array<{ prompt_text: string; prompt_length: number }>;
   toolInputSamples?: Array<{ tool_name: string; tool_input: string }>;
+  toolResultSamples?: Array<{ tool_name: string; tool_result: string }>;
   responseSamples?: Array<{ response_text: string; response_length: number }>;
 }
 
@@ -2313,6 +2314,7 @@ export async function getSessionFeedbackData(
   const errorSamples: Array<{ tool_name: string; error_message: string }> = [];
   const promptSamples: Array<{ prompt_text: string; prompt_length: number }> = [];
   const toolInputSamples: Array<{ tool_name: string; tool_input: string }> = [];
+  const toolResultSamples: Array<{ tool_name: string; tool_result: string }> = [];
   const responseSamples: Array<{ response_text: string; response_length: number }> = [];
 
   for (const event of events) {
@@ -2333,6 +2335,12 @@ export async function getSessionFeedbackData(
         toolInputSamples.push({
           tool_name: payload.toolName ?? "unknown",
           tool_input: String(payload.toolInput).slice(0, 500),
+        });
+      }
+      if (includeContent && payload.toolResult && event.event_type === "tool.complete" && toolResultSamples.length < 20) {
+        toolResultSamples.push({
+          tool_name: payload.toolName ?? "unknown",
+          tool_result: String(payload.toolResult).slice(0, 5000),
         });
       }
     } else if (event.event_type === "tool.fail") {
@@ -2382,6 +2390,7 @@ export async function getSessionFeedbackData(
   if (includeContent) {
     if (promptSamples.length > 0) result.promptSamples = promptSamples;
     if (toolInputSamples.length > 0) result.toolInputSamples = toolInputSamples;
+    if (toolResultSamples.length > 0) result.toolResultSamples = toolResultSamples;
     if (responseSamples.length > 0) result.responseSamples = responseSamples;
   }
 
