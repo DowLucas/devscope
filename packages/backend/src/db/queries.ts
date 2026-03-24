@@ -415,7 +415,7 @@ export async function getConcreteToolDetails(
         WHERE e.event_type IN ('tool.complete', 'tool.fail')
           AND e.payload->>'toolName' IN ('Read', 'Write', 'Edit')
           AND e.payload->'toolInput'->>'file_path' IS NOT NULL
-          AND s.privacy_mode != 'private'
+          AND s.privacy_mode IS DISTINCT FROM 'private'
           AND e.created_at >= NOW() - make_interval(days => ${days})
           AND s.developer_id IN (${inList(developerIds!)})
         GROUP BY file_path, tool_name
@@ -431,7 +431,7 @@ export async function getConcreteToolDetails(
         WHERE e.event_type IN ('tool.complete', 'tool.fail')
           AND e.payload->>'toolName' IN ('Read', 'Write', 'Edit')
           AND e.payload->'toolInput'->>'file_path' IS NOT NULL
-          AND s.privacy_mode != 'private'
+          AND s.privacy_mode IS DISTINCT FROM 'private'
           AND e.created_at >= NOW() - make_interval(days => ${days})
         GROUP BY file_path, tool_name
         ORDER BY count DESC
@@ -448,7 +448,7 @@ export async function getConcreteToolDetails(
         WHERE e.event_type IN ('tool.complete', 'tool.fail')
           AND e.payload->>'toolName' = 'Glob'
           AND e.payload->'toolInput'->>'path' IS NOT NULL
-          AND s.privacy_mode != 'private'
+          AND s.privacy_mode IS DISTINCT FROM 'private'
           AND e.created_at >= NOW() - make_interval(days => ${days})
           AND s.developer_id IN (${inList(developerIds!)})
         GROUP BY directory
@@ -463,7 +463,7 @@ export async function getConcreteToolDetails(
         WHERE e.event_type IN ('tool.complete', 'tool.fail')
           AND e.payload->>'toolName' = 'Glob'
           AND e.payload->'toolInput'->>'path' IS NOT NULL
-          AND s.privacy_mode != 'private'
+          AND s.privacy_mode IS DISTINCT FROM 'private'
           AND e.created_at >= NOW() - make_interval(days => ${days})
         GROUP BY directory
         ORDER BY count DESC
@@ -480,7 +480,7 @@ export async function getConcreteToolDetails(
         WHERE e.event_type IN ('tool.complete', 'tool.fail')
           AND e.payload->>'toolName' IN ('Grep', 'Glob')
           AND e.payload->'toolInput'->>'pattern' IS NOT NULL
-          AND s.privacy_mode != 'private'
+          AND s.privacy_mode IS DISTINCT FROM 'private'
           AND e.created_at >= NOW() - make_interval(days => ${days})
           AND s.developer_id IN (${inList(developerIds!)})
         GROUP BY pattern
@@ -495,7 +495,7 @@ export async function getConcreteToolDetails(
         WHERE e.event_type IN ('tool.complete', 'tool.fail')
           AND e.payload->>'toolName' IN ('Grep', 'Glob')
           AND e.payload->'toolInput'->>'pattern' IS NOT NULL
-          AND s.privacy_mode != 'private'
+          AND s.privacy_mode IS DISTINCT FROM 'private'
           AND e.created_at >= NOW() - make_interval(days => ${days})
         GROUP BY pattern
         ORDER BY count DESC

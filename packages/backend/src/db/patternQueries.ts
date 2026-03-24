@@ -141,16 +141,21 @@ export async function getRecentSessionSequences(
         AND e.event_type = 'prompt.submit'
       ORDER BY e.created_at ASC`,
     // 5th query: concrete tool details (subcommands, file paths, patterns)
+    // Join sessions to exclude private sessions from file_path/glob_path/search_pattern
     sql`
       SELECT
         e.session_id,
         e.payload->>'toolName' as tool_name,
         e.payload->>'toolSubcommand' as tool_subcommand,
-        e.payload->'toolInput'->>'file_path' as file_path,
-        e.payload->'toolInput'->>'path' as glob_path,
-        e.payload->'toolInput'->>'pattern' as search_pattern,
+        CASE WHEN s.privacy_mode IS DISTINCT FROM 'private'
+          THEN e.payload->'toolInput'->>'file_path' ELSE NULL END as file_path,
+        CASE WHEN s.privacy_mode IS DISTINCT FROM 'private'
+          THEN e.payload->'toolInput'->>'path' ELSE NULL END as glob_path,
+        CASE WHEN s.privacy_mode IS DISTINCT FROM 'private'
+          THEN e.payload->'toolInput'->>'pattern' ELSE NULL END as search_pattern,
         e.payload->'toolInput'->>'skill' as skill_name
       FROM events e
+      JOIN sessions s ON s.id = e.session_id
       WHERE e.session_id IN (${inList(sessionIds)})
         AND e.event_type IN ('tool.complete', 'tool.fail')
         AND e.payload->>'toolName' IS NOT NULL
@@ -317,12 +322,17 @@ export async function upsertPattern(
     const ex = existing[0] as any;
     const newCount = ex.occurrence_count + pattern.occurrence_count;
     const newRate = (ex.avg_success_rate * ex.occurrence_count + pattern.avg_success_rate * pattern.occurrence_count) / newCount;
+    const updatedContext = JSON.stringify(pattern.data_context ?? ex.data_context ?? {});
 
     await sql`
       UPDATE session_patterns SET
+        name = ${pattern.name},
+        description = ${pattern.description},
         occurrence_count = ${newCount},
         avg_success_rate = ${Math.round(newRate * 1000) / 1000},
         effectiveness = ${pattern.effectiveness},
+        category = ${pattern.category ?? ex.category ?? null},
+        data_context = ${updatedContext}::JSONB,
         updated_at = NOW()
       WHERE id = ${ex.id}`;
 

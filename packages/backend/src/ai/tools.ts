@@ -130,14 +130,25 @@ export const toolRegistry: ToolDefinition[] = [
             type: Type.NUMBER,
             description: "Number of days to look back (default 30, max 365)",
           },
+          developerId: {
+            type: Type.STRING,
+            description: "Optional developer ID to filter by",
+          },
         },
       },
     },
     execute: async (sql, args, developerIds) => {
+      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
+        return JSON.stringify({ error: "Invalid developer ID" });
+      }
+      // If a specific developer is requested, scope to just that developer
+      const scopedIds = args.developerId
+        ? [args.developerId as string]
+        : developerIds;
       const result = await getConcreteToolDetails(
         sql,
         clampDays(args.days as number | undefined),
-        developerIds
+        scopedIds
       );
       return truncateResult(result);
     },
