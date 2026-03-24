@@ -4,6 +4,7 @@ import { Type } from "@google/genai";
 import {
   getDeveloperActivityOverTime,
   getToolUsageBreakdown,
+  getConcreteToolDetails,
   getSessionStats,
   getSessionStatsSummary,
   getTeamActivitySummary,
@@ -89,7 +90,7 @@ export const toolRegistry: ToolDefinition[] = [
     declaration: {
       name: "getToolUsageBreakdown",
       description:
-        "Get tool usage breakdown showing success/failure counts per tool. Returns top 15 tools by usage.",
+        "Get high-level tool usage breakdown showing success/failure counts per tool name (Read, Bash, Grep, etc.). For detailed breakdown of WHAT was actually done (specific commands, files, search patterns), use getConcreteToolDetails instead.",
       parameters: {
         type: Type.OBJECT,
         properties: {
@@ -111,6 +112,30 @@ export const toolRegistry: ToolDefinition[] = [
       const result = await getToolUsageBreakdown(
         sql,
         args.developerId as string | undefined,
+        clampDays(args.days as number | undefined),
+        developerIds
+      );
+      return truncateResult(result);
+    },
+  },
+  {
+    declaration: {
+      name: "getConcreteToolDetails",
+      description:
+        "Get detailed breakdown of actual tool usage: which bash commands are run (git, npm, docker), which files are accessed most (package.json, tsconfig.json), which search patterns are used (regex patterns from Grep/Glob), which directories are explored, and which skills/slash commands are invoked. Much more specific than getToolUsageBreakdown.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          days: {
+            type: Type.NUMBER,
+            description: "Number of days to look back (default 30, max 365)",
+          },
+        },
+      },
+    },
+    execute: async (sql, args, developerIds) => {
+      const result = await getConcreteToolDetails(
+        sql,
         clampDays(args.days as number | undefined),
         developerIds
       );

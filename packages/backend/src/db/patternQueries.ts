@@ -42,6 +42,15 @@ export interface AgentEvent {
   event_type: string; // agent.start or agent.stop
 }
 
+/** Per-session concrete tool usage details — what commands, files, patterns were actually used. */
+export interface SessionConcreteDetails {
+  bash_subcommands: Record<string, number>;
+  top_files: string[];
+  top_directories: string[];
+  search_patterns: string[];
+  skill_names: string[];
+}
+
 export interface SessionSequence {
   session_id: string;
   developer_id: string;
@@ -56,6 +65,7 @@ export interface SessionSequence {
   agent_types: string[];
   duration_minutes: number;
   prompt_features: PromptFeatures | null;
+  concrete_details: SessionConcreteDetails;
 }
 
 export async function getRecentSessionSequences(
@@ -91,8 +101,8 @@ export async function getRecentSessionSequences(
 
   const sessionIds = sessions.map((s: any) => s.session_id as string);
 
-  // Batch-fetch all event data in 4 queries instead of 4×N
-  const [allTools, allPrompts, allAgents, allPromptTexts] = await Promise.all([
+  // Batch-fetch all event data in 5 queries instead of 5×N
+  const [allTools, allPrompts, allAgents, allPromptTexts, allToolDetails] = await Promise.all([
     sql`
       SELECT
         e.session_id,
@@ -130,6 +140,21 @@ export async function getRecentSessionSequences(
       WHERE e.session_id IN (${inList(sessionIds)})
         AND e.event_type = 'prompt.submit'
       ORDER BY e.created_at ASC`,
+    // 5th query: concrete tool details (subcommands, file paths, patterns)
+    sql`
+      SELECT
+        e.session_id,
+        e.payload->>'toolName' as tool_name,
+        e.payload->>'toolSubcommand' as tool_subcommand,
+        e.payload->'toolInput'->>'file_path' as file_path,
+        e.payload->'toolInput'->>'path' as glob_path,
+        e.payload->'toolInput'->>'pattern' as search_pattern,
+        e.payload->'toolInput'->>'skill' as skill_name
+      FROM events e
+      WHERE e.session_id IN (${inList(sessionIds)})
+        AND e.event_type IN ('tool.complete', 'tool.fail')
+        AND e.payload->>'toolName' IS NOT NULL
+      ORDER BY e.created_at ASC`,
   ]);
 
   // Group results by session_id
@@ -159,6 +184,23 @@ export async function getRecentSessionSequences(
     const sid = row.session_id;
     if (!promptTextsBySession.has(sid)) promptTextsBySession.set(sid, []);
     promptTextsBySession.get(sid)!.push(row.prompt_text ?? null);
+  }
+
+  // Group concrete tool details by session
+  interface RawToolDetail {
+    session_id: string;
+    tool_name: string;
+    tool_subcommand: string | null;
+    file_path: string | null;
+    glob_path: string | null;
+    search_pattern: string | null;
+    skill_name: string | null;
+  }
+  const toolDetailsBySession = new Map<string, RawToolDetail[]>();
+  for (const row of allToolDetails as RawToolDetail[]) {
+    const sid = row.session_id;
+    if (!toolDetailsBySession.has(sid)) toolDetailsBySession.set(sid, []);
+    toolDetailsBySession.get(sid)!.push(row);
   }
 
   const sequences: SessionSequence[] = [];
@@ -191,6 +233,43 @@ export async function getRecentSessionSequences(
     const hasAnyText = promptTexts.some(t => t !== null);
     const promptFeatures = hasAnyText ? extractPromptFeatures(promptTexts) : null;
 
+    // Aggregate concrete tool details for this session
+    const details = toolDetailsBySession.get(sid) ?? [];
+    const bashSubs: Record<string, number> = {};
+    const fileCounts: Record<string, number> = {};
+    const dirCounts: Record<string, number> = {};
+    const patternCounts: Record<string, number> = {};
+    const skillSet = new Set<string>();
+
+    for (const d of details) {
+      if (d.tool_name === "Bash" && d.tool_subcommand) {
+        bashSubs[d.tool_subcommand] = (bashSubs[d.tool_subcommand] ?? 0) + 1;
+      }
+      if (d.file_path && ["Read", "Write", "Edit"].includes(d.tool_name)) {
+        fileCounts[d.file_path] = (fileCounts[d.file_path] ?? 0) + 1;
+      }
+      if (d.glob_path && d.tool_name === "Glob") {
+        dirCounts[d.glob_path] = (dirCounts[d.glob_path] ?? 0) + 1;
+      }
+      if (d.search_pattern && ["Grep", "Glob"].includes(d.tool_name)) {
+        patternCounts[d.search_pattern] = (patternCounts[d.search_pattern] ?? 0) + 1;
+      }
+      if (d.skill_name) {
+        skillSet.add(d.skill_name);
+      }
+    }
+
+    const topN = (obj: Record<string, number>, n: number) =>
+      Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => k);
+
+    const concreteDetails: SessionConcreteDetails = {
+      bash_subcommands: bashSubs,
+      top_files: topN(fileCounts, 5),
+      top_directories: topN(dirCounts, 5),
+      search_patterns: topN(patternCounts, 5),
+      skill_names: [...skillSet],
+    };
+
     sequences.push({
       session_id: sid,
       developer_id: (session as any).developer_id,
@@ -205,6 +284,7 @@ export async function getRecentSessionSequences(
       agent_types: agentTypes,
       duration_minutes: (session as any).duration_minutes ?? 0,
       prompt_features: promptFeatures,
+      concrete_details: concreteDetails,
     });
   }
 

@@ -28,6 +28,7 @@ import type {
   EthicsAuditSummary,
   ConsentOverview,
   DataRequest,
+  ConcreteToolDetails,
 } from "@devscope/shared";
 import { inList } from "./utils";
 
@@ -320,6 +321,245 @@ export async function getToolUsageBreakdown(
     GROUP BY tool_name
     ORDER BY total DESC
     LIMIT 15`) as ToolUsageDataPoint[];
+}
+
+export async function getConcreteToolDetails(
+  sql: SQL,
+  days: number = 30,
+  developerIds?: string[]
+): Promise<ConcreteToolDetails> {
+  const devFilter = developerIds && developerIds.length > 0;
+
+  const [bashSubs, fileExts, topFiles, topDirs, searchPats, skillUse] = await Promise.all([
+    // 1. Top Bash subcommands (available in all privacy modes via toolSubcommand)
+    devFilter
+      ? sql`
+        SELECT
+          e.payload->>'toolSubcommand' as subcommand,
+          COUNT(*)::INT as count,
+          ROUND(
+            (SUM(CASE WHEN e.event_type = 'tool.complete' THEN 1 ELSE 0 END)::FLOAT /
+            GREATEST(COUNT(*), 1))::NUMERIC, 3
+          )::FLOAT as success_rate
+        FROM events e
+        JOIN sessions s ON e.session_id = s.id
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' = 'Bash'
+          AND e.payload->>'toolSubcommand' IS NOT NULL
+          AND e.payload->>'toolSubcommand' != ''
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+          AND s.developer_id IN (${inList(developerIds!)})
+        GROUP BY subcommand
+        ORDER BY count DESC
+        LIMIT 20`
+      : sql`
+        SELECT
+          e.payload->>'toolSubcommand' as subcommand,
+          COUNT(*)::INT as count,
+          ROUND(
+            (SUM(CASE WHEN e.event_type = 'tool.complete' THEN 1 ELSE 0 END)::FLOAT /
+            GREATEST(COUNT(*), 1))::NUMERIC, 3
+          )::FLOAT as success_rate
+        FROM events e
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' = 'Bash'
+          AND e.payload->>'toolSubcommand' IS NOT NULL
+          AND e.payload->>'toolSubcommand' != ''
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+        GROUP BY subcommand
+        ORDER BY count DESC
+        LIMIT 20`,
+
+    // 2. File extensions by tool (Read/Write/Edit)
+    devFilter
+      ? sql`
+        SELECT
+          e.payload->>'toolSubcommand' as extension,
+          e.payload->>'toolName' as tool_name,
+          COUNT(*)::INT as count
+        FROM events e
+        JOIN sessions s ON e.session_id = s.id
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' IN ('Read', 'Write', 'Edit')
+          AND e.payload->>'toolSubcommand' IS NOT NULL
+          AND e.payload->>'toolSubcommand' != ''
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+          AND s.developer_id IN (${inList(developerIds!)})
+        GROUP BY extension, tool_name
+        ORDER BY count DESC
+        LIMIT 20`
+      : sql`
+        SELECT
+          e.payload->>'toolSubcommand' as extension,
+          e.payload->>'toolName' as tool_name,
+          COUNT(*)::INT as count
+        FROM events e
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' IN ('Read', 'Write', 'Edit')
+          AND e.payload->>'toolSubcommand' IS NOT NULL
+          AND e.payload->>'toolSubcommand' != ''
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+        GROUP BY extension, tool_name
+        ORDER BY count DESC
+        LIMIT 20`,
+
+    // 3. Top file paths (exclude private sessions for privacy)
+    devFilter
+      ? sql`
+        SELECT
+          e.payload->'toolInput'->>'file_path' as file_path,
+          e.payload->>'toolName' as tool_name,
+          COUNT(*)::INT as count
+        FROM events e
+        JOIN sessions s ON e.session_id = s.id
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' IN ('Read', 'Write', 'Edit')
+          AND e.payload->'toolInput'->>'file_path' IS NOT NULL
+          AND s.privacy_mode != 'private'
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+          AND s.developer_id IN (${inList(developerIds!)})
+        GROUP BY file_path, tool_name
+        ORDER BY count DESC
+        LIMIT 20`
+      : sql`
+        SELECT
+          e.payload->'toolInput'->>'file_path' as file_path,
+          e.payload->>'toolName' as tool_name,
+          COUNT(*)::INT as count
+        FROM events e
+        JOIN sessions s ON e.session_id = s.id
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' IN ('Read', 'Write', 'Edit')
+          AND e.payload->'toolInput'->>'file_path' IS NOT NULL
+          AND s.privacy_mode != 'private'
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+        GROUP BY file_path, tool_name
+        ORDER BY count DESC
+        LIMIT 20`,
+
+    // 4. Top directories from Glob paths (exclude private sessions)
+    devFilter
+      ? sql`
+        SELECT
+          e.payload->'toolInput'->>'path' as directory,
+          COUNT(*)::INT as count
+        FROM events e
+        JOIN sessions s ON e.session_id = s.id
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' = 'Glob'
+          AND e.payload->'toolInput'->>'path' IS NOT NULL
+          AND s.privacy_mode != 'private'
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+          AND s.developer_id IN (${inList(developerIds!)})
+        GROUP BY directory
+        ORDER BY count DESC
+        LIMIT 15`
+      : sql`
+        SELECT
+          e.payload->'toolInput'->>'path' as directory,
+          COUNT(*)::INT as count
+        FROM events e
+        JOIN sessions s ON e.session_id = s.id
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' = 'Glob'
+          AND e.payload->'toolInput'->>'path' IS NOT NULL
+          AND s.privacy_mode != 'private'
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+        GROUP BY directory
+        ORDER BY count DESC
+        LIMIT 15`,
+
+    // 5. Top search patterns from Grep/Glob (exclude private sessions)
+    devFilter
+      ? sql`
+        SELECT
+          e.payload->'toolInput'->>'pattern' as pattern,
+          COUNT(*)::INT as count
+        FROM events e
+        JOIN sessions s ON e.session_id = s.id
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' IN ('Grep', 'Glob')
+          AND e.payload->'toolInput'->>'pattern' IS NOT NULL
+          AND s.privacy_mode != 'private'
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+          AND s.developer_id IN (${inList(developerIds!)})
+        GROUP BY pattern
+        ORDER BY count DESC
+        LIMIT 15`
+      : sql`
+        SELECT
+          e.payload->'toolInput'->>'pattern' as pattern,
+          COUNT(*)::INT as count
+        FROM events e
+        JOIN sessions s ON e.session_id = s.id
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' IN ('Grep', 'Glob')
+          AND e.payload->'toolInput'->>'pattern' IS NOT NULL
+          AND s.privacy_mode != 'private'
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+        GROUP BY pattern
+        ORDER BY count DESC
+        LIMIT 15`,
+
+    // 6. Skill usage
+    devFilter
+      ? sql`
+        SELECT
+          e.payload->'toolInput'->>'skill' as skill,
+          COUNT(*)::INT as count
+        FROM events e
+        JOIN sessions s ON e.session_id = s.id
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' = 'Skill'
+          AND e.payload->'toolInput'->>'skill' IS NOT NULL
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+          AND s.developer_id IN (${inList(developerIds!)})
+        GROUP BY skill
+        ORDER BY count DESC
+        LIMIT 10`
+      : sql`
+        SELECT
+          e.payload->'toolInput'->>'skill' as skill,
+          COUNT(*)::INT as count
+        FROM events e
+        WHERE e.event_type IN ('tool.complete', 'tool.fail')
+          AND e.payload->>'toolName' = 'Skill'
+          AND e.payload->'toolInput'->>'skill' IS NOT NULL
+          AND e.created_at >= NOW() - make_interval(days => ${days})
+        GROUP BY skill
+        ORDER BY count DESC
+        LIMIT 10`,
+  ]);
+
+  return {
+    bash_subcommands: (bashSubs as any[]).map(r => ({
+      subcommand: r.subcommand,
+      count: r.count,
+      success_rate: r.success_rate,
+    })),
+    file_extensions: (fileExts as any[]).map(r => ({
+      extension: r.extension,
+      tool_name: r.tool_name,
+      count: r.count,
+    })),
+    top_files: (topFiles as any[]).map(r => ({
+      file_path: r.file_path,
+      tool_name: r.tool_name,
+      count: r.count,
+    })),
+    top_directories: (topDirs as any[]).map(r => ({
+      directory: r.directory,
+      count: r.count,
+    })),
+    search_patterns: (searchPats as any[]).map(r => ({
+      pattern: r.pattern,
+      count: r.count,
+    })),
+    skill_usage: (skillUse as any[]).map(r => ({
+      skill: r.skill,
+      count: r.count,
+    })),
+  };
 }
 
 export async function getSkillUsageBreakdown(

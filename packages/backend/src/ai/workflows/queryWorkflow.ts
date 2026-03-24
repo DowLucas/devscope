@@ -96,7 +96,8 @@ Guidelines:
 - If the data is empty or insufficient, say so honestly rather than speculating.
 - Keep responses concise but thorough. Use bullet points for lists of metrics.
 - When asked about trends, include both the direction and magnitude of change.
-- Prefer showing data and letting the user refine, rather than asking upfront what they want.`;
+- Prefer showing data and letting the user refine, rather than asking upfront what they want.
+- IMPORTANT: When asked about tool usage patterns, ALWAYS use getConcreteToolDetails to show specific commands, files, and patterns — not just tool name counts. Say "git (120x), npm (45x)" not "Bash (165x)". Say "package.json (25x read)" not "Read tool (40x)".`;
 
 const QueryState = Annotation.Root({
   question: Annotation<string>,
