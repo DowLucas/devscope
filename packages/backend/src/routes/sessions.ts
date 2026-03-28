@@ -26,6 +26,11 @@ function mapSession(row: any) {
     eventCount: row.event_count,
     contextClearCount: row.context_clear_count ?? 0,
     currentTitle: row.current_title ?? null,
+    totalInputTokens: Number(row.total_input_tokens ?? 0),
+    totalOutputTokens: Number(row.total_output_tokens ?? 0),
+    totalCacheCreationTokens: Number(row.total_cache_creation_tokens ?? 0),
+    totalCacheReadTokens: Number(row.total_cache_read_tokens ?? 0),
+    estimatedCostUsd: Number(row.estimated_cost_usd ?? 0),
   };
 }
 

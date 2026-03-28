@@ -72,12 +72,20 @@ export interface SessionStartPayload {
   }>;
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+}
+
 export interface SessionEndPayload {
   endReason: string;
   duration?: number;
   filesChanged?: string[];
   gitBranch?: string;
   gitCommit?: string;
+  tokenUsage?: TokenUsage;
 }
 
 export interface PromptEventPayload {
@@ -107,6 +115,7 @@ export interface ResponsePayload {
   responseLength?: number;
   toolsUsed?: string[];
   responseText?: string;
+  tokenUsage?: TokenUsage;
 }
 
 export interface NotificationPayload {

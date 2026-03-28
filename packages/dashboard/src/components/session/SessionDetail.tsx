@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowLeft, Clock, Wrench, MessageSquare, User, Sparkles, Lock } from "lucide-react";
+import { ArrowLeft, Clock, Wrench, MessageSquare, User, Sparkles, Lock, Zap, DollarSign } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { SessionTurnCard } from "./SessionTurnCard";
@@ -8,7 +8,7 @@ import { SessionFeedbackPanel } from "./SessionFeedbackPanel";
 import { buildTurns } from "@/lib/buildTurns";
 import type { SessionDetail as SessionDetailType, SessionTitle } from "@devscope/shared";
 import type { SessionTurn } from "@devscope/shared";
-import { parseUTC } from "@/lib/utils";
+import { parseUTC, formatTokenCount, formatCost } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 
 interface SessionDetailProps {
@@ -74,6 +74,11 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   const totalTools = turns.reduce((sum, t) => sum + t.toolCalls.length, 0);
   const totalFails = turns.reduce((sum, t) => sum + t.toolCalls.filter((tc) => tc.success === false).length, 0);
 
+  // Token data (available via mapSession, accessed as any since SessionDetail type doesn't include them yet)
+  const s = session as any;
+  const sessionTokens = (Number(s.totalInputTokens) || 0) + (Number(s.totalOutputTokens) || 0);
+  const sessionCost = Number(s.estimatedCostUsd) || 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -113,7 +118,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-4 text-sm">
               <div className="flex items-center gap-2">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                 <span>{durationMin}m</span>
@@ -129,6 +134,18 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
               <div className="flex items-center gap-2 text-destructive">
                 {totalFails > 0 && <span>{totalFails} failures</span>}
               </div>
+              {sessionTokens > 0 && (
+                <div className="flex items-center gap-2">
+                  <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>{formatTokenCount(sessionTokens)} tokens</span>
+                </div>
+              )}
+              {sessionCost > 0 && (
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>{formatCost(sessionCost)}</span>
+                </div>
+              )}
             </div>
 
             <p className="text-xs text-muted-foreground mt-2">

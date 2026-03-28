@@ -19,6 +19,11 @@ export interface Session {
   permissionMode: string | null;
   privacyMode: PrivacyMode;
   currentTitle?: string | null;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalCacheCreationTokens?: number;
+  totalCacheReadTokens?: number;
+  estimatedCostUsd?: number;
 }
 
 export type WsMessageType =

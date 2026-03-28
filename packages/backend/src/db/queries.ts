@@ -29,6 +29,8 @@ import type {
   ConsentOverview,
   DataRequest,
   ConcreteToolDetails,
+  TokenUsageSummary,
+  TokenUsageOverTime,
 } from "@devscope/shared";
 import { inList } from "./utils";
 
@@ -2431,4 +2433,121 @@ export async function detectToolingAnomalies(
     WHERE t.total_calls >= 5
       AND t.failure_rate > COALESCE(b.avg_rate, 0) * 2
       AND t.failure_rate >= 10` as unknown as any[];
+}
+
+// --- Token Usage ---
+
+export interface TokenUsageInput {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+}
+
+/**
+ * Update session token usage from a response.complete or session.end event.
+ * Uses segment peaks to correctly accumulate across compaction boundaries.
+ * Cost is computed from the token_pricing table.
+ */
+export async function updateSessionTokens(
+  sql: SQL,
+  sessionId: string,
+  usage: TokenUsageInput
+) {
+  await sql`
+    UPDATE sessions SET
+      total_input_tokens = (total_input_tokens - segment_peak_input) + GREATEST(segment_peak_input, ${usage.inputTokens}),
+      total_output_tokens = (total_output_tokens - segment_peak_output) + GREATEST(segment_peak_output, ${usage.outputTokens}),
+      total_cache_creation_tokens = (total_cache_creation_tokens - segment_peak_cache_creation) + GREATEST(segment_peak_cache_creation, ${usage.cacheCreationTokens}),
+      total_cache_read_tokens = (total_cache_read_tokens - segment_peak_cache_read) + GREATEST(segment_peak_cache_read, ${usage.cacheReadTokens}),
+      segment_peak_input = GREATEST(segment_peak_input, ${usage.inputTokens}),
+      segment_peak_output = GREATEST(segment_peak_output, ${usage.outputTokens}),
+      segment_peak_cache_creation = GREATEST(segment_peak_cache_creation, ${usage.cacheCreationTokens}),
+      segment_peak_cache_read = GREATEST(segment_peak_cache_read, ${usage.cacheReadTokens}),
+      estimated_cost_usd = (
+        SELECT
+          ((s.total_input_tokens - s.segment_peak_input) + GREATEST(s.segment_peak_input, ${usage.inputTokens})) * p.input_price_per_mtok / 1000000.0 +
+          ((s.total_output_tokens - s.segment_peak_output) + GREATEST(s.segment_peak_output, ${usage.outputTokens})) * p.output_price_per_mtok / 1000000.0 +
+          ((s.total_cache_creation_tokens - s.segment_peak_cache_creation) + GREATEST(s.segment_peak_cache_creation, ${usage.cacheCreationTokens})) * p.cache_creation_price_per_mtok / 1000000.0 +
+          ((s.total_cache_read_tokens - s.segment_peak_cache_read) + GREATEST(s.segment_peak_cache_read, ${usage.cacheReadTokens})) * p.cache_read_price_per_mtok / 1000000.0
+        FROM sessions s
+        CROSS JOIN token_pricing p
+        WHERE s.id = ${sessionId} AND p.id = 'default'
+      )
+    WHERE id = ${sessionId}`;
+}
+
+/**
+ * Finalize the current compaction segment: reset peaks so the next segment starts fresh.
+ * Called on compact.complete. Totals already reflect the segment via updateSessionTokens.
+ */
+export async function finalizeTokenSegment(sql: SQL, sessionId: string) {
+  await sql`
+    UPDATE sessions SET
+      segment_peak_input = 0,
+      segment_peak_output = 0,
+      segment_peak_cache_creation = 0,
+      segment_peak_cache_read = 0
+    WHERE id = ${sessionId}`;
+}
+
+export async function getTokenUsageSummary(
+  sql: SQL,
+  days: number,
+  developerIds: string[]
+): Promise<TokenUsageSummary> {
+  const devList = inList(developerIds);
+  const rows = await sql`
+    SELECT
+      COALESCE(SUM(total_input_tokens), 0)::BIGINT AS total_input_tokens,
+      COALESCE(SUM(total_output_tokens), 0)::BIGINT AS total_output_tokens,
+      COALESCE(SUM(total_cache_creation_tokens), 0)::BIGINT AS total_cache_creation_tokens,
+      COALESCE(SUM(total_cache_read_tokens), 0)::BIGINT AS total_cache_read_tokens,
+      COALESCE(SUM(estimated_cost_usd), 0)::NUMERIC AS total_estimated_cost_usd,
+      COUNT(*) FILTER (WHERE total_input_tokens > 0 OR total_output_tokens > 0) AS sessions_with_token_data
+    FROM sessions
+    WHERE developer_id IN (${devList})
+      AND started_at >= NOW() - make_interval(days => ${days})` as unknown as any[];
+
+  const row = rows[0] ?? {};
+  const totalInput = Number(row.total_input_tokens ?? 0);
+  const totalCacheCreation = Number(row.total_cache_creation_tokens ?? 0);
+  const totalCacheRead = Number(row.total_cache_read_tokens ?? 0);
+  const sessionsWithData = Number(row.sessions_with_token_data ?? 0);
+  const totalCost = Number(row.total_estimated_cost_usd ?? 0);
+  const totalTokensForCache = totalInput + totalCacheCreation + totalCacheRead;
+
+  return {
+    total_input_tokens: totalInput,
+    total_output_tokens: Number(row.total_output_tokens ?? 0),
+    total_cache_creation_tokens: totalCacheCreation,
+    total_cache_read_tokens: totalCacheRead,
+    total_estimated_cost_usd: totalCost,
+    avg_cost_per_session_usd: sessionsWithData > 0 ? totalCost / sessionsWithData : 0,
+    cache_hit_rate: totalTokensForCache > 0 ? (totalCacheRead / totalTokensForCache) * 100 : 0,
+    sessions_with_token_data: sessionsWithData,
+  };
+}
+
+export async function getTokenUsageOverTime(
+  sql: SQL,
+  days: number,
+  developerIds: string[]
+): Promise<TokenUsageOverTime[]> {
+  const devList = inList(developerIds);
+  return await sql`
+    SELECT
+      TO_CHAR(started_at::date, 'YYYY-MM-DD') AS day,
+      COALESCE(SUM(total_input_tokens), 0)::BIGINT AS input_tokens,
+      COALESCE(SUM(total_output_tokens), 0)::BIGINT AS output_tokens,
+      COALESCE(SUM(total_cache_creation_tokens), 0)::BIGINT AS cache_creation_tokens,
+      COALESCE(SUM(total_cache_read_tokens), 0)::BIGINT AS cache_read_tokens,
+      COALESCE(SUM(estimated_cost_usd), 0)::NUMERIC AS estimated_cost_usd,
+      COUNT(*) AS session_count
+    FROM sessions
+    WHERE developer_id IN (${devList})
+      AND started_at >= NOW() - make_interval(days => ${days})
+      AND (total_input_tokens > 0 OR total_output_tokens > 0)
+    GROUP BY started_at::date
+    ORDER BY day` as unknown as TokenUsageOverTime[];
 }

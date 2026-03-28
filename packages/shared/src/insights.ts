@@ -215,6 +215,29 @@ export interface SkillUsageDataPoint {
   avg_duration_ms: number;
 }
 
+// --- Token Usage Analytics ---
+
+export interface TokenUsageSummary {
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cache_creation_tokens: number;
+  total_cache_read_tokens: number;
+  total_estimated_cost_usd: number;
+  avg_cost_per_session_usd: number;
+  cache_hit_rate: number;
+  sessions_with_token_data: number;
+}
+
+export interface TokenUsageOverTime {
+  day: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  estimated_cost_usd: number;
+  session_count: number;
+}
+
 export interface ToolingHealthSummary {
   tool_name: string;
   project_name: string | null;

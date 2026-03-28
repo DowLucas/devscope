@@ -168,6 +168,11 @@ describe("GET /sessions", () => {
       eventCount: 5,
       contextClearCount: 1,
       currentTitle: "Fixing auth bug",
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalCacheCreationTokens: 0,
+      totalCacheReadTokens: 0,
+      estimatedCostUsd: 0,
     });
   });
 

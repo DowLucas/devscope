@@ -13,6 +13,8 @@ import {
   insertFrictionAlert,
   getFrictionRules,
   upsertClaudeMdSnapshot,
+  updateSessionTokens,
+  finalizeTokenSegment,
 } from "../db";
 import { broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg, autoLinkUserToDeveloper } from "../services/developerLink";
@@ -107,12 +109,29 @@ export function eventsRoutes(sql: SQL) {
       },
     });
 
-    // Increment compaction count on compact.complete
+    // Increment compaction count on compact.complete and finalize token segment
     if (event.eventType === "compact.complete") {
       try {
         await sql`UPDATE sessions SET compaction_count = compaction_count + 1 WHERE id = ${event.sessionId}`;
       } catch {
         // Don't block event ingestion
+      }
+      try {
+        await finalizeTokenSegment(sql, event.sessionId);
+      } catch {
+        // Don't block event ingestion
+      }
+    }
+
+    // Update session token usage on response.complete or session.end
+    if (event.eventType === "response.complete" || event.eventType === "session.end") {
+      const tokenUsage = (event.payload as any).tokenUsage;
+      if (tokenUsage && typeof tokenUsage.inputTokens === "number") {
+        try {
+          await updateSessionTokens(sql, event.sessionId, tokenUsage);
+        } catch {
+          // Don't block event ingestion
+        }
       }
     }
 
