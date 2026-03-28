@@ -58,6 +58,11 @@ export interface SessionDetail {
     permissionMode: string | null;
     privacyMode: PrivacyMode;
     eventCount: number;
+    totalInputTokens?: number;
+    totalOutputTokens?: number;
+    totalCacheCreationTokens?: number;
+    totalCacheReadTokens?: number;
+    estimatedCostUsd?: number;
   };
   events: Array<{
     id: string;

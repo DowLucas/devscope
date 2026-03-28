@@ -74,10 +74,8 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   const totalTools = turns.reduce((sum, t) => sum + t.toolCalls.length, 0);
   const totalFails = turns.reduce((sum, t) => sum + t.toolCalls.filter((tc) => tc.success === false).length, 0);
 
-  // Token data (available via mapSession, accessed as any since SessionDetail type doesn't include them yet)
-  const s = session as any;
-  const sessionTokens = (Number(s.totalInputTokens) || 0) + (Number(s.totalOutputTokens) || 0);
-  const sessionCost = Number(s.estimatedCostUsd) || 0;
+  const sessionTokens = (session.totalInputTokens ?? 0) + (session.totalOutputTokens ?? 0);
+  const sessionCost = session.estimatedCostUsd ?? 0;
 
   return (
     <div className="space-y-6">
