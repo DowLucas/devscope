@@ -17,8 +17,8 @@ import {
   getProjectActivityOverTime,
   getActivityPerMinute,
   getSkillUsageBreakdown,
-  getTokenUsageSummary,
-  getTokenUsageOverTime,
+  getSessionTokenUsageSummary,
+  getSessionTokenUsageOverTime,
 } from "../db";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
@@ -174,14 +174,14 @@ export function insightsRoutes(sql: SQL) {
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     if (!devIds || devIds.length === 0) return c.json({ total_input_tokens: 0, total_output_tokens: 0, total_cache_creation_tokens: 0, total_cache_read_tokens: 0, total_estimated_cost_usd: 0, avg_cost_per_session_usd: 0, cache_hit_rate: 0, sessions_with_token_data: 0 });
-    return c.json(await getTokenUsageSummary(sql, days, devIds));
+    return c.json(await getSessionTokenUsageSummary(sql, days, devIds));
   });
 
   app.get("/tokens/over-time", async (c) => {
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     if (!devIds || devIds.length === 0) return c.json([]);
-    return c.json(await getTokenUsageOverTime(sql, days, devIds));
+    return c.json(await getSessionTokenUsageOverTime(sql, days, devIds));
   });
 
   return app;

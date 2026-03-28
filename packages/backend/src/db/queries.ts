@@ -2491,7 +2491,7 @@ export async function finalizeTokenSegment(sql: SQL, sessionId: string) {
     WHERE id = ${sessionId}`;
 }
 
-export async function getTokenUsageSummary(
+export async function getSessionTokenUsageSummary(
   sql: SQL,
   days: number,
   developerIds: string[]
@@ -2529,7 +2529,7 @@ export async function getTokenUsageSummary(
   };
 }
 
-export async function getTokenUsageOverTime(
+export async function getSessionTokenUsageOverTime(
   sql: SQL,
   days: number,
   developerIds: string[]

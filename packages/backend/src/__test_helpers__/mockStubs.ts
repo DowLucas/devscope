@@ -86,8 +86,8 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     // token usage (queries.ts)
     updateSessionTokens: noop,
     finalizeTokenSegment: noop,
-    getTokenUsageSummary: noop,
-    getTokenUsageOverTime: noopArr,
+    getSessionTokenUsageSummary: noop,
+    getSessionTokenUsageOverTime: noopArr,
     ...overrides,
   };
 }
