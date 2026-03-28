@@ -118,8 +118,8 @@ export function eventsRoutes(sql: SQL) {
       }
       try {
         await finalizeTokenSegment(sql, event.sessionId);
-      } catch {
-        // Don't block event ingestion
+      } catch (e) {
+        console.error("[tokens] finalizeTokenSegment failed:", (e as Error).message);
       }
     }
 
@@ -129,8 +129,8 @@ export function eventsRoutes(sql: SQL) {
       if (tokenUsage && typeof tokenUsage.inputTokens === "number") {
         try {
           await updateSessionTokens(sql, event.sessionId, tokenUsage);
-        } catch {
-          // Don't block event ingestion
+        } catch (e) {
+          console.error("[tokens] updateSessionTokens failed:", (e as Error).message);
         }
       }
     }
