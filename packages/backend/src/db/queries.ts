@@ -2508,13 +2508,15 @@ export async function getSessionTokenUsageSummary(
       COALESCE(SUM(estimated_cost_usd), 0)::NUMERIC AS total_estimated_cost_usd,
       COUNT(*) FILTER (WHERE total_input_tokens > 0 OR total_output_tokens > 0) AS sessions_with_token_data,
       COALESCE(AVG(
-        CASE WHEN duration > 60 AND (total_input_tokens + total_output_tokens) > 0
-        THEN (total_input_tokens + total_output_tokens)::NUMERIC / (duration / 60.0)
+        CASE WHEN ended_at IS NOT NULL AND EXTRACT(EPOCH FROM (ended_at - started_at)) > 60
+             AND (total_input_tokens + total_output_tokens) > 0
+        THEN (total_input_tokens + total_output_tokens)::NUMERIC / (EXTRACT(EPOCH FROM (ended_at - started_at)) / 60.0)
         END
       ), 0)::NUMERIC AS avg_burn_rate,
       COALESCE(MAX(
-        CASE WHEN duration > 60 AND (total_input_tokens + total_output_tokens) > 0
-        THEN (total_input_tokens + total_output_tokens)::NUMERIC / (duration / 60.0)
+        CASE WHEN ended_at IS NOT NULL AND EXTRACT(EPOCH FROM (ended_at - started_at)) > 60
+             AND (total_input_tokens + total_output_tokens) > 0
+        THEN (total_input_tokens + total_output_tokens)::NUMERIC / (EXTRACT(EPOCH FROM (ended_at - started_at)) / 60.0)
         END
       ), 0)::NUMERIC AS max_burn_rate,
       COUNT(*) FILTER (WHERE compaction_count > 0) AS sessions_compacted,
