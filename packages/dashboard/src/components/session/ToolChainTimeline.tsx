@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { CheckCircle, XCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { CheckCircle, XCircle, Ban, ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { ToolCallEntry } from "@devscope/shared";
 
@@ -70,7 +70,8 @@ export function ToolChainTimeline({ toolCalls, isSelfView = false }: ToolChainTi
               }`}
             >
               {tool.success === true && <CheckCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />}
-              {tool.success === false && <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+              {tool.success === false && tool.isInterrupt && <Ban className="h-3.5 w-3.5 text-amber-400 shrink-0" />}
+              {tool.success === false && !tool.isInterrupt && <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
               {tool.success === undefined && <span className="h-3.5 w-3.5 rounded-full bg-muted shrink-0" />}
 
               <span className="font-mono text-foreground">
@@ -118,8 +119,8 @@ export function ToolChainTimeline({ toolCalls, isSelfView = false }: ToolChainTi
                       </p>
                     )}
                     {tool.errorMessage && (
-                      <p className={`text-destructive ${isSelfView && tool.toolInput ? "mt-1" : ""}`}>
-                        Error: {tool.errorMessage}
+                      <p className={`${tool.isInterrupt ? "text-amber-400" : "text-destructive"} ${isSelfView && tool.toolInput ? "mt-1" : ""}`}>
+                        {tool.isInterrupt ? "Interrupted" : "Error"}: {tool.errorMessage}
                       </p>
                     )}
                   </div>

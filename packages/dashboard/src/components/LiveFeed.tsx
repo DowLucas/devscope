@@ -6,6 +6,7 @@ import {
   Play,
   Square,
   AlertTriangle,
+  Ban,
   Wrench,
   Bot,
   BotOff,
@@ -46,6 +47,7 @@ type FeedItem =
     }
   | { kind: "lifecycle"; key: string; event: DevscopeEvent }
   | { kind: "tool-fail"; key: string; event: DevscopeEvent }
+  | { kind: "tool-interrupt"; key: string; event: DevscopeEvent }
   | { kind: "agent"; key: string; event: DevscopeEvent }
   | { kind: "notification"; key: string; event: DevscopeEvent }
   | { kind: "compact"; key: string; event: DevscopeEvent }
@@ -105,10 +107,16 @@ function buildFeedItems(events: DevscopeEvent[]): FeedItem[] {
       case "tool.complete":
         toolBatch.push(event);
         break;
-      case "tool.fail":
+      case "tool.fail": {
         flushTools();
-        items.push({ kind: "tool-fail", key: event.id, event });
+        const failPayload = event.payload as unknown as Record<string, unknown>;
+        items.push({
+          kind: failPayload.isInterrupt ? "tool-interrupt" : "tool-fail",
+          key: event.id,
+          event,
+        });
         break;
+      }
       case "prompt.submit":
         flushTools();
         items.push({ kind: "prompt", key: event.id, event });
@@ -371,6 +379,36 @@ function ToolFailItem({
       <div className="flex items-center gap-2 pt-1">
         <span className="text-sm text-destructive font-medium">
           Tool failed: {String(p.toolName ?? "Unknown")}
+          {p.toolSubcommand ? <span className="font-normal"> · {String(p.toolSubcommand)}</span> : null}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {event.developerName}
+        </span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {timeAgo(event.timestamp)}
+        </span>
+      </div>
+    </TimelineNode>
+  );
+}
+
+function ToolInterruptItem({
+  event,
+  isLast,
+}: {
+  event: DevscopeEvent;
+  isLast: boolean;
+}) {
+  const p = event.payload as unknown as Record<string, unknown>;
+  return (
+    <TimelineNode
+      dotColor="bg-amber-600"
+      icon={<Ban className="h-3.5 w-3.5 text-white" />}
+      isLast={isLast}
+    >
+      <div className="flex items-center gap-2 pt-1">
+        <span className="text-sm text-amber-400 font-medium">
+          Tool interrupted: {String(p.toolName ?? "Unknown")}
           {p.toolSubcommand ? <span className="font-normal"> · {String(p.toolSubcommand)}</span> : null}
         </span>
         <span className="text-xs text-muted-foreground">
@@ -877,6 +915,9 @@ export function LiveFeed() {
                 )}
                 {item.kind === "tool-fail" && (
                   <ToolFailItem event={item.event} isLast={isLast} />
+                )}
+                {item.kind === "tool-interrupt" && (
+                  <ToolInterruptItem event={item.event} isLast={isLast} />
                 )}
                 {item.kind === "agent" && (
                   <AgentItem event={item.event} isLast={isLast} />

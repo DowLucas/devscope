@@ -123,7 +123,14 @@ function getEventSummary(event: DevscopeEvent): string {
 }
 
 export function EventCard({ event }: { event: DevscopeEvent }) {
-  const colorClass = EVENT_COLORS[event.eventType] ?? "border-gray-500/50 bg-gray-500/5";
+  const p = event.payload as unknown as Record<string, unknown>;
+  const isInterrupt = event.eventType === "tool.fail" && p.isInterrupt === true;
+  const colorClass = isInterrupt
+    ? "border-amber-500/50 bg-amber-500/5"
+    : (EVENT_COLORS[event.eventType] ?? "border-gray-500/50 bg-gray-500/5");
+  const label = isInterrupt
+    ? "Tool Interrupted"
+    : (EVENT_LABELS[event.eventType] ?? event.eventType);
 
   return (
     <motion.div
@@ -145,7 +152,7 @@ export function EventCard({ event }: { event: DevscopeEvent }) {
             <span className="text-gray-300 font-mono text-xs">{event.projectName}</span>
           </div>
           <div className="text-sm text-gray-400 truncate">
-            <span className="text-gray-500">{EVENT_LABELS[event.eventType] ?? event.eventType}:</span>{" "}
+            <span className="text-gray-500">{label}:</span>{" "}
             {getEventSummary(event)}
           </div>
         </div>

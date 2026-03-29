@@ -173,7 +173,7 @@ export function insightsRoutes(sql: SQL) {
   app.get("/tokens", async (c) => {
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    if (!devIds || devIds.length === 0) return c.json({ total_input_tokens: 0, total_output_tokens: 0, total_cache_creation_tokens: 0, total_cache_read_tokens: 0, total_estimated_cost_usd: 0, avg_cost_per_session_usd: 0, cache_hit_rate: 0, sessions_with_token_data: 0 });
+    if (!devIds || devIds.length === 0) return c.json({ total_input_tokens: 0, total_output_tokens: 0, total_cache_creation_tokens: 0, total_cache_read_tokens: 0, total_estimated_cost_usd: 0, avg_cost_per_session_usd: 0, cache_hit_rate: 0, sessions_with_token_data: 0, avg_burn_rate: 0, max_burn_rate: 0, sessions_compacted: 0, total_compactions: 0, avg_peak_context_tokens: 0, max_peak_context_tokens: 0 });
     return c.json(await getSessionTokenUsageSummary(sql, days, devIds));
   });
 

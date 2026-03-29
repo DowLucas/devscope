@@ -61,6 +61,7 @@ export function buildTurns(events: RawEvent[]): SessionTurn[] {
           );
           if (existing) {
             existing.success = event.event_type === "tool.complete";
+            existing.isInterrupt = (p.isInterrupt as boolean) || undefined;
             existing.duration = p.duration as number | undefined;
             existing.errorMessage = p.errorMessage as string | undefined;
             if (toolInput) existing.toolInput = toolInput;
@@ -71,6 +72,7 @@ export function buildTurns(events: RawEvent[]): SessionTurn[] {
               toolSubcommand: p.toolSubcommand ? String(p.toolSubcommand) : undefined,
               toolInput,
               success: event.event_type === "tool.complete",
+              isInterrupt: (p.isInterrupt as boolean) || undefined,
               duration: p.duration as number | undefined,
               errorMessage: p.errorMessage as string | undefined,
               timestamp: event.created_at,

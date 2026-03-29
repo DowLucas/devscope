@@ -77,6 +77,7 @@ export interface ToolCallEntry {
   toolSubcommand?: string;
   toolInput?: Record<string, unknown>;
   success?: boolean;
+  isInterrupt?: boolean;
   duration?: number;
   errorMessage?: string;
   timestamp: string;

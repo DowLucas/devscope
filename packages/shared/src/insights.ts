@@ -226,6 +226,13 @@ export interface TokenUsageSummary {
   avg_cost_per_session_usd: number;
   cache_hit_rate: number;
   sessions_with_token_data: number;
+  avg_burn_rate: number;          // tokens/min across all sessions
+  max_burn_rate: number;          // highest single-session tokens/min
+  // Context health
+  sessions_compacted: number;     // sessions that had at least 1 compaction
+  total_compactions: number;      // total compaction events
+  avg_peak_context_tokens: number; // avg peak context tokens before compaction
+  max_peak_context_tokens: number; // highest peak context tokens before compaction
 }
 
 export interface TokenUsageOverTime {

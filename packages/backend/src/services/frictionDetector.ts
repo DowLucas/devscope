@@ -56,6 +56,12 @@ export function evaluateFriction(
     const toolName = payload.toolName ?? "unknown";
     const now = Date.now();
 
+    // Interrupts (user cancelled, timeout, context limit) are not errors —
+    // don't count them toward failure thresholds or friction alerts.
+    if (payload.isInterrupt) {
+      return null;
+    }
+
     state.recentFailures.push({ toolName, timestamp: now });
     state.consecutiveFailCount += 1;
 

@@ -1307,6 +1307,7 @@ export async function checkAlertThresholds(
         SELECT COUNT(*)::INT as cnt FROM events
         WHERE session_id = ${sessionId}
           AND event_type = 'tool.fail'
+          AND (payload->>'isInterrupt')::BOOLEAN IS NOT TRUE
           AND created_at >= NOW() - make_interval(mins => ${rule.window_minutes})
           AND payload->>'toolName' = ${rule.tool_name}`;
     } else {
@@ -1314,6 +1315,7 @@ export async function checkAlertThresholds(
         SELECT COUNT(*)::INT as cnt FROM events
         WHERE session_id = ${sessionId}
           AND event_type = 'tool.fail'
+          AND (payload->>'isInterrupt')::BOOLEAN IS NOT TRUE
           AND created_at >= NOW() - make_interval(mins => ${rule.window_minutes})`;
     }
 
@@ -2504,7 +2506,21 @@ export async function getSessionTokenUsageSummary(
       COALESCE(SUM(total_cache_creation_tokens), 0)::BIGINT AS total_cache_creation_tokens,
       COALESCE(SUM(total_cache_read_tokens), 0)::BIGINT AS total_cache_read_tokens,
       COALESCE(SUM(estimated_cost_usd), 0)::NUMERIC AS total_estimated_cost_usd,
-      COUNT(*) FILTER (WHERE total_input_tokens > 0 OR total_output_tokens > 0) AS sessions_with_token_data
+      COUNT(*) FILTER (WHERE total_input_tokens > 0 OR total_output_tokens > 0) AS sessions_with_token_data,
+      COALESCE(AVG(
+        CASE WHEN duration > 60 AND (total_input_tokens + total_output_tokens) > 0
+        THEN (total_input_tokens + total_output_tokens)::NUMERIC / (duration / 60.0)
+        END
+      ), 0)::NUMERIC AS avg_burn_rate,
+      COALESCE(MAX(
+        CASE WHEN duration > 60 AND (total_input_tokens + total_output_tokens) > 0
+        THEN (total_input_tokens + total_output_tokens)::NUMERIC / (duration / 60.0)
+        END
+      ), 0)::NUMERIC AS max_burn_rate,
+      COUNT(*) FILTER (WHERE compaction_count > 0) AS sessions_compacted,
+      COALESCE(SUM(compaction_count), 0)::INT AS total_compactions,
+      COALESCE(AVG(CASE WHEN peak_context_tokens > 0 THEN peak_context_tokens END), 0)::BIGINT AS avg_peak_context_tokens,
+      COALESCE(MAX(peak_context_tokens), 0)::BIGINT AS max_peak_context_tokens
     FROM sessions
     WHERE developer_id IN (${devList})
       AND started_at >= NOW() - make_interval(days => ${days})` as unknown as any[];
@@ -2526,6 +2542,12 @@ export async function getSessionTokenUsageSummary(
     avg_cost_per_session_usd: sessionsWithData > 0 ? totalCost / sessionsWithData : 0,
     cache_hit_rate: totalTokensForCache > 0 ? (totalCacheRead / totalTokensForCache) * 100 : 0,
     sessions_with_token_data: sessionsWithData,
+    avg_burn_rate: Math.round(Number(row.avg_burn_rate ?? 0)),
+    max_burn_rate: Math.round(Number(row.max_burn_rate ?? 0)),
+    sessions_compacted: Number(row.sessions_compacted ?? 0),
+    total_compactions: Number(row.total_compactions ?? 0),
+    avg_peak_context_tokens: Number(row.avg_peak_context_tokens ?? 0),
+    max_peak_context_tokens: Number(row.max_peak_context_tokens ?? 0),
   };
 }
 

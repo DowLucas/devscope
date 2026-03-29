@@ -109,10 +109,14 @@ export function eventsRoutes(sql: SQL) {
       },
     });
 
-    // Increment compaction count on compact.complete and finalize token segment
+    // Increment compaction count on compact.complete, track peak context usage, and finalize token segment
     if (event.eventType === "compact.complete") {
       try {
-        await sql`UPDATE sessions SET compaction_count = compaction_count + 1 WHERE id = ${event.sessionId}`;
+        const tokensBefore = Number((event.payload as any).tokensBefore ?? 0);
+        await sql`UPDATE sessions SET
+          compaction_count = compaction_count + 1,
+          peak_context_tokens = GREATEST(peak_context_tokens, ${tokensBefore})
+        WHERE id = ${event.sessionId}`;
       } catch {
         // Don't block event ingestion
       }
@@ -170,12 +174,15 @@ export function eventsRoutes(sql: SQL) {
       }
     }
 
-    // Check alert thresholds on tool failures
+    // Check alert thresholds on tool failures (skip interrupts — they're not errors)
     if (event.eventType === "tool.fail") {
-      const toolName = (event.payload as { toolName?: string }).toolName ?? "unknown";
-      const alert = await checkAlertThresholds(sql, event.sessionId, toolName);
-      if (alert) {
-        broadcastToDevOrgs({ type: "alert.triggered", data: alert });
+      const toolPayload = event.payload as { toolName?: string; isInterrupt?: boolean };
+      if (!toolPayload.isInterrupt) {
+        const toolName = toolPayload.toolName ?? "unknown";
+        const alert = await checkAlertThresholds(sql, event.sessionId, toolName);
+        if (alert) {
+          broadcastToDevOrgs({ type: "alert.triggered", data: alert });
+        }
       }
     }
 
