@@ -21,47 +21,42 @@ export async function initializeDatabase(databaseUrl?: string): Promise<SQL> {
     .filter((f) => f.endsWith(".sql"))
     .sort();
 
-  // Separate index-only migrations (can be deferred) from schema migrations (must run before server starts)
-  const deferredIndexFiles: string[] = [];
+  // Run schema migrations synchronously (must complete before server starts).
+  // Index-only migrations (file contains only CREATE INDEX statements and comments)
+  // are deferred to run after the server starts to avoid healthcheck timeouts.
+  const deferred: Array<{ file: string; content: string }> = [];
   for (const file of files) {
-    const migration = readFileSync(join(migrationsDir, file), "utf-8");
-    const statements = migration
+    const content = readFileSync(join(migrationsDir, file), "utf-8");
+
+    // Check if this migration only creates indexes (safe to defer)
+    const stripped = content.replace(/--[^\n]*/g, "").trim();
+    const isIndexOnly = stripped.length > 0 && stripped
       .split(";")
       .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.startsWith("--"));
+      .filter((s) => s.length > 0)
+      .every((s) => /^CREATE\s+INDEX/i.test(s));
 
-    // If every statement is CREATE INDEX, defer it to run after server starts
-    const allIndexes = statements.every((s) => /^CREATE\s+INDEX/i.test(s));
-    if (allIndexes && statements.length > 0) {
-      deferredIndexFiles.push(file);
-      continue;
+    if (isIndexOnly) {
+      deferred.push({ file, content });
+    } else {
+      await sql.unsafe(content);
     }
-
-    await sql.unsafe(migration);
   }
 
-  // Clear prepared statement cache after schema changes to prevent
-  // "cached plan must not change result type" errors
+  // Clear prepared statement cache after schema changes
   await sql.unsafe("DISCARD ALL");
 
-  // Run deferred index migrations in the background (non-blocking)
-  if (deferredIndexFiles.length > 0) {
+  // Run index migrations in the background — server can start serving immediately
+  if (deferred.length > 0) {
     (async () => {
-      for (const file of deferredIndexFiles) {
-        const migration = readFileSync(join(migrationsDir, file), "utf-8");
-        const statements = migration
-          .split(";")
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0 && !s.startsWith("--"));
-        for (const stmt of statements) {
-          try {
-            await sql.unsafe(stmt);
-          } catch (e) {
-            console.error(`[migrations] Deferred index failed (${file}):`, (e as Error).message);
-          }
+      for (const { file, content } of deferred) {
+        try {
+          await sql.unsafe(content);
+          console.log(`[migrations] Index migration complete: ${file}`);
+        } catch (e) {
+          console.error(`[migrations] Index migration failed (${file}):`, (e as Error).message);
         }
       }
-      console.log(`[migrations] Deferred indexes complete: ${deferredIndexFiles.join(", ")}`);
     })();
   }
 
