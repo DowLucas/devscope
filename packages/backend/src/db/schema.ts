@@ -26,5 +26,9 @@ export async function initializeDatabase(databaseUrl?: string): Promise<SQL> {
     await sql.unsafe(migration);
   }
 
+  // Clear prepared statement cache after schema changes to prevent
+  // "cached plan must not change result type" errors
+  await sql.unsafe("DISCARD ALL");
+
   return sql;
 }
