@@ -1048,8 +1048,10 @@ export async function getPeriodComparison(
     return row;
   }
 
-  const current = await getMetrics(days, 0);
-  const previous = await getMetrics(days * 2, days);
+  const [current, previous] = await Promise.all([
+    getMetrics(days, 0),
+    getMetrics(days * 2, days),
+  ]);
 
   const safeDiv = (a: number, b: number) => b === 0 ? 0 : Math.round(((a - b) / b) * 100);
 
