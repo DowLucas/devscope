@@ -7,7 +7,7 @@ if (!GEMINI_API_KEY) {
 
 const client = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 
-export const DEFAULT_MODEL = "gemini-2.0-flash";
+export const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-3-flash";
 
 export const TEMPERATURE = {
   query: 0.3,
