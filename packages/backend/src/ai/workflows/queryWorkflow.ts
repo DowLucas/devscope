@@ -373,10 +373,20 @@ export async function runQueryWorkflowStreaming(
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
       } catch (err) {
-        console.error("[devscope] AI chat error:", err);
+        const e = err as { message?: string; stack?: string; name?: string; status?: number; code?: string };
+        console.error("[devscope] AI chat error", {
+          name: e?.name,
+          message: e?.message,
+          status: e?.status,
+          code: e?.code,
+          geminiKeyPresent: Boolean(process.env.GEMINI_API_KEY),
+          stack: e?.stack,
+        });
+        const exposeDetail = process.env.NODE_ENV !== "production" || process.env.AI_VERBOSE_ERRORS === "1";
+        const detail = exposeDetail && e?.message ? `: ${e.message}` : "";
         controller.enqueue(
           encoder.encode(
-            `data: ${JSON.stringify({ type: "error", content: "An error occurred while processing your request. Please try again." })}\n\n`
+            `data: ${JSON.stringify({ type: "error", content: `An error occurred while processing your request${detail}. Please try again.` })}\n\n`
           )
         );
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));

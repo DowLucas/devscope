@@ -16,6 +16,20 @@ const TITLE_INTERVAL_MINUTES = Math.max(
   1
 );
 
+const RATE_LIMIT_COOLDOWN_MS = Math.max(
+  Number(process.env.SESSION_TITLE_COOLDOWN_MS ?? 15 * 60_000),
+  60_000
+);
+
+let cooldownUntil = 0;
+
+function isRateLimit(err: unknown): boolean {
+  const e = err as { status?: number; message?: string };
+  if (e?.status === 429) return true;
+  const msg = e?.message ?? "";
+  return msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED");
+}
+
 export function startSessionTitleGeneration(sql: SQL) {
   const g = globalThis as any;
 
@@ -28,11 +42,17 @@ export function startSessionTitleGeneration(sql: SQL) {
     return;
   }
 
+  if (process.env.DISABLE_SESSION_TITLES === "1") {
+    console.log("[session-titles] Disabled via DISABLE_SESSION_TITLES=1");
+    return;
+  }
+
   async function check() {
+    if (Date.now() < cooldownUntil) return;
     try {
       const orgs = await sql`SELECT id FROM organization`;
 
-      for (const org of orgs as any[]) {
+      outer: for (const org of orgs as any[]) {
         const orgId = org.id;
         const devIds = await getOrgDeveloperIds(sql, orgId);
         if (devIds.length === 0) continue;
@@ -90,9 +110,16 @@ export function startSessionTitleGeneration(sql: SQL) {
               data: { sessionId: session.id, title },
             });
           } catch (err) {
+            if (isRateLimit(err)) {
+              cooldownUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+              console.warn(
+                `[session-titles] Gemini 429 — cooling down for ${Math.round(RATE_LIMIT_COOLDOWN_MS / 60_000)}m`
+              );
+              break outer;
+            }
             console.error(
               `[session-titles] Failed for session ${session.id}:`,
-              err
+              (err as Error)?.message ?? err
             );
           }
         }
