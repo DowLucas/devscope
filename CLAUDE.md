@@ -125,7 +125,9 @@ DevScope exists to improve **team workflow and tooling** — not to monitor, ran
 
 When in doubt, ask: "Does this feature help the team improve their tools and workflow, or does it enable monitoring individuals?" Only build the former.
 
-## Docker
+## Docker & Deployment
+
+### Docker Commands
 
 ```bash
 # Production (Caddy with auto-TLS on :80/:443)
@@ -135,12 +137,48 @@ docker compose -f docker-compose.yml up --build
 docker compose up --build
 ```
 
-**Files**: `docker/backend.Dockerfile`, `docker/caddy.Dockerfile`, `docker/Caddyfile`, `docker/dashboard.Dockerfile` (dev only), `docker/nginx/nginx.conf` (legacy/dev), `docker-compose.yml`, `docker-compose.override.yml`.
+### Files
 
-**Production**: Caddy serves dashboard static files, reverse-proxies `/api` + `/ws` to backend:6767, and handles TLS via Let's Encrypt automatically. Set `DOMAIN` env var for your domain. PostgreSQL data persists in named volume `gc-pgdata`. Caddy TLS certs persist in `caddy-data`.
+`docker/backend.Dockerfile`, `docker/caddy.Dockerfile`, `docker/Caddyfile`, `docker/dashboard.Dockerfile` (dev only), `docker/nginx/nginx.conf` (legacy/dev), `docker-compose.yml`, `docker-compose.override.yml`.
 
-**Development**: Vite dev server + backend hot reload with source bind-mounts. Caddy is disabled via profiles. PostgreSQL exposed on port 5432 for local tooling.
+### Dockerfile Structure
 
-**Docker env vars**: `DATABASE_URL` (PostgreSQL connection string, set automatically by compose), `POSTGRES_PASSWORD` (defaults to `devscope`), `DOMAIN` (for Caddy auto-TLS, defaults to `localhost`), `GC_CORS_ORIGIN` (allowed CORS origins), `VITE_PROXY_TARGET` (proxy target for Vite dev server, defaults to `localhost:6767`).
+Both `backend.Dockerfile` and `dashboard.Dockerfile` follow the same multi-stage pattern:
 
-**Pitfall**: Both Dockerfiles must COPY all workspace `package.json` files (shared, backend, dashboard) or `bun install --frozen-lockfile` fails — Bun validates the lockfile against the full workspace graph.
+1. **Base stage**: `FROM oven/bun:1` with `WORKDIR /app`
+2. **Install stage**: Copy root `package.json`, `bun.lock`, `tsconfig.base.json`, then each workspace `packages/*/package.json` (shared, backend, dashboard). Run `bun install --frozen-lockfile`. Bun validates the full workspace graph — missing any `package.json` fails the install.
+3. **Build stage**: Copy all source, run `bun run build`
+4. **Production stage**: Copy build output, expose port, set healthcheck
+
+Key patterns:
+```dockerfile
+COPY package.json bun.lock tsconfig.base.json ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/backend/package.json packages/backend/
+COPY packages/dashboard/package.json packages/dashboard/
+```
+
+### Healthcheck
+
+Backend Dockerfile uses: `HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD curl -f http://localhost:6767/api/health || exit 1`
+
+### Environment
+
+- `DATABASE_URL` — PostgreSQL connection string (set automatically by compose)
+- `POSTGRES_PASSWORD` — defaults to `devscope`
+- `DOMAIN` — for Caddy auto-TLS, defaults to `localhost`
+- `GC_CORS_ORIGIN` — allowed CORS origins
+- `VITE_PROXY_TARGET` — proxy target for Vite dev server, defaults to `localhost:6767`
+
+### Production Deployment
+
+Production runs on a self-hosted Docker host, exposed via Cloudflare Tunnel (no inbound ports).
+
+**Deploy pipeline:**
+1. Push to `main` → `.github/workflows/ci.yml` runs tests/lint/typecheck, then builds `docker/railway.Dockerfile` and pushes `ghcr.io/dowlucas/devscope-backend:latest` + `:<sha>` to GHCR.
+2. Watchtower polls GHCR every 5 minutes on the production host and restarts the `devscope-backend` container in-place when a new `:latest` digest appears. The container is labeled `com.centurylinklabs.watchtower.enable=true` to opt in.
+3. Postgres runs alongside the backend in the same compose stack; it is **not** managed by Watchtower and is upgraded manually.
+
+**Rolling back:** pin the compose `image:` to a specific `:<sha>` tag (all images are immutable by SHA on GHCR) and `docker compose up -d backend`. Watchtower will leave the pinned tag alone.
+
+Operational specifics (host address, SSH, file paths, secrets) live in `DEPLOY.local.md` (gitignored).
