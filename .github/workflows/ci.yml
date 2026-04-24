@@ -68,7 +68,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/railway.Dockerfile
+          file: docker/production.Dockerfile
           push: true
           platforms: linux/amd64
           tags: |

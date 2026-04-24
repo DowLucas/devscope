@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Hosting migration from Railway to self-hosted Docker.** Production now runs on a self-hosted Docker host behind Cloudflare Tunnel instead of Railway. CI publishes `ghcr.io/dowlucas/devscope-backend:{latest,sha}` on every push to `main`, and Watchtower auto-deploys by polling GHCR every 5 minutes. The Postgres database was dumped from Railway and restored on the new host with full row-count verification; no data loss. The public endpoint (`https://devscope.sh`) and plugin contract are unchanged.
+- Renamed `docker/railway.Dockerfile` → `docker/production.Dockerfile` (the file is no longer Railway-specific).
+- Removed `railway.toml` (Railway no longer in use).
+
 ## [0.4.1] - 2026-03-04
 
 ### Changed

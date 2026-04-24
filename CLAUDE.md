@@ -175,7 +175,7 @@ Backend Dockerfile uses: `HEALTHCHECK --interval=30s --timeout=5s --start-period
 Production runs on a self-hosted Docker host, exposed via Cloudflare Tunnel (no inbound ports).
 
 **Deploy pipeline:**
-1. Push to `main` → `.github/workflows/ci.yml` runs tests/lint/typecheck, then builds `docker/railway.Dockerfile` and pushes `ghcr.io/dowlucas/devscope-backend:latest` + `:<sha>` to GHCR.
+1. Push to `main` → `.github/workflows/ci.yml` runs tests/lint/typecheck, then builds `docker/production.Dockerfile` and pushes `ghcr.io/dowlucas/devscope-backend:latest` + `:<sha>` to GHCR.
 2. Watchtower polls GHCR every 5 minutes on the production host and restarts the `devscope-backend` container in-place when a new `:latest` digest appears. The container is labeled `com.centurylinklabs.watchtower.enable=true` to opt in.
 3. Postgres runs alongside the backend in the same compose stack; it is **not** managed by Watchtower and is upgraded manually.
 

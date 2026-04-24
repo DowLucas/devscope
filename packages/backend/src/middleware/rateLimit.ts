@@ -23,7 +23,7 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 export function getClientIp(c: Context): string {
-  // X-Real-IP is set by the trusted proxy (Railway/Caddy) from the TCP connection
+  // X-Real-IP is set by the trusted proxy (Cloudflare Tunnel / Caddy) from the TCP connection
   // and cannot be spoofed by clients — prefer it over X-Forwarded-For.
   const realIp = c.req.header("x-real-ip");
   if (realIp) return realIp;
