@@ -1,45 +1,47 @@
 # DevScope GitHub Integration — Design Spec
 
-**Status:** Approved for planning
+**Status:** Approved for planning (revised 2026-04-24 after critique)
 **Date:** 2026-04-24
-**Author:** Lucas + Claude (brainstorming session)
+**Author:** Lucas + Claude
 
 ## Context
 
-DevScope currently analyzes Claude Code sessions and produces AI insights, patterns, anti-patterns, and playbooks in its database (693 sessions, 619 insights, 64 playbooks as of this spec). The insights stay in the DevScope dashboard. This spec defines how DevScope becomes an active participant in the repos it observes: reading connected GitHub repositories, proposing `CLAUDE.md` updates, skills, hooks, commands, subagents, and config hygiene as draft PRs, and measuring whether those suggestions actually improve developer outcomes.
+DevScope analyzes Claude Code sessions and currently produces insights, patterns, anti-patterns, and playbooks in its database (693 sessions, 619 insights, 64 playbooks at spec time). Findings live in the dashboard and stop there. This spec defines how DevScope becomes an active participant in the repos it observes: reading connected GitHub repositories, proposing changes to `CLAUDE.md`, skills, hooks, commands, subagents, config hygiene — and removals of each — as draft PRs, then measuring whether those suggestions survive in the codebase.
 
-This is the first of three related sub-projects. The other two (AI pipeline hardening, agentic loop orchestration) will be specced separately once this integration has a concrete surface.
+This is the first of three linked sub-projects. AI pipeline hardening and agentic-loop orchestration are separate specs.
 
 ## Goals
 
-1. **Close the observe → learn → ship loop.** When a Claude Code session reveals friction, DevScope proposes a concrete repo change within the same day — while context is fresh.
-2. **Earn trust before taking action.** Every org starts in shadow mode; real PRs require admin approval or explicit opt-in per suggestion kind.
-3. **Prove suggestions work.** Every merged suggestion is measured for its impact on subsequent session metrics. No vibes.
-4. **Stay multi-tenant from day one.** GitHub App, not PAT. Clean org/installation boundaries.
+1. **Close the observe → learn → ship loop** within hours of a session ending.
+2. **Earn trust before acting.** Shadow mode by default; promotion to live requires behavioral evidence (not survey thumbs-up).
+3. **Survive adversarial verification.** Every artifact passes binary, load-bearing gates (patch applies, evidence checks out, scope honored, tests green, lint passes, conventions match) before it can be published.
+4. **Measure ground truth, not noise.** V1 outcome metric is "merged and persisted 30 days without revert." Delta-attribution is deferred until we can do it with counterfactuals.
+5. **Multi-tenant from day one** with per-task sandbox isolation.
 
 ## Non-goals
 
-- Auto-merge or direct commits to protected branches (explicitly out of scope for v1).
-- Reviewing human-authored PRs (that's a future product surface, not this spec).
-- Supporting GitLab, Bitbucket, or self-hosted SCM.
+- Auto-merge or direct commits to protected branches.
+- Reviewing human-authored PRs (future product surface).
+- GitLab, Bitbucket, or self-hosted SCM.
 - Real-time PR generation during a session (minutes-latency is fine).
+- Counterfactual impact attribution via session replay (powerful, but v1.5+ — see Deferred Directions).
 
 ## Decisions
 
 | # | Decision | Rationale |
 |---|---|---|
-| 1 | Multi-tenant GitHub App from day one | Avoids PAT juggling; clean extension to customers |
-| 2 | Allowed actions: read analysis + PR comments + draft PRs | Trust ladder; no auto-merge, no direct commits |
-| 3 | Triggers: session-ended (automatic) + dashboard manual button | Fresh-context PRs; admin-initiated on demand |
-| 4 | Suggestion kinds: `CLAUDE.md`, skills, hooks, commands, subagents, config hygiene | Full coverage of Claude Code extensibility |
-| 5 | Repo linkage: auto-detect via `git remote` + admin override via `cwd_patterns` | 95% auto, escape hatch for weird cases |
-| 6 | Quality gate: shadow mode first, then evidence threshold + admin approval | Private quality baseline before any customer-facing PR |
-| 7 | Feedback loop: track merges + attribute metric deltas 28 days pre/post | Turns DevScope into a learning system, not a blind bot |
-| 8 | LLM: Claude Sonnet 4.6 for draft, Opus 4.7 for self-critique | Agentic tool use, prompt caching, judgment separation |
+| 1 | Multi-tenant GitHub App from day one | Clean auth, extends to customers |
+| 2 | Actions: read analysis + PR comments + draft PRs | No auto-merge, no direct commits |
+| 3 | Triggers: session-ended + manual dashboard button | Fresh-context PRs + admin-initiated |
+| 4 | Suggestion kinds: `claude_md`, `skill`, `hook`, `command`, `agent`, `config`, `remove` (subtractive) | Full coverage including pruning |
+| 5 | Repo linkage: git remote auto-detect + admin `cwd_patterns` override | 95% auto, escape hatch |
+| 6 | Quality gate: binary adversarial verification + blind-preference shadow mode | Non-gameable, non-rubric |
+| 7 | V1 ground truth: persistence at 30 days post-merge, no revert, file still present | Defensible attribution without causal claim |
+| 8 | LLM: Claude Sonnet 4.6 for draft; **no** self-critique gate; Opus rubric is a ranking signal only | Adversarial checks, not theater |
+| 9 | Per-task sandboxed workers with egress allowlist | Multi-tenant safety from v1 |
+| 10 | PR authored-as the triggering user (co-author-by) with session reference in body | Flips trust dynamic; cheap; large effect |
 
 ## Architecture
-
-Three new services, each with one clear job, joining the existing backend.
 
 ```
  plugin (user machine)
@@ -48,43 +50,47 @@ Three new services, each with one clear job, joining the existing backend.
  backend/api ──► Postgres
    │             ├─ existing: sessions, events, ai_insights, session_patterns,
    │             │  anti_patterns, playbooks, workflow_profiles, ...
-   │             └─ new: repo_installations, suggestion_candidates,
-   │                suggestion_artifacts, suggestion_outcomes
+   │             └─ new: repo_installations, installation_tokens,
+   │                suggestion_candidates, suggestion_artifacts,
+   │                suggestion_outcomes, suppression_ledger,
+   │                webhook_deliveries, audit_log
    │
    ▼
- suggestion-promoter (cron q15min + nudge on session-end)
-   │   SQL + rules engine; no LLM calls
-   │   evidence threshold → suggestion_candidates(status='queued')
+ suggestion-promoter (cron q15min + session-end nudge)
+   │   SQL + rules; no LLM calls
+   │   evidence threshold + suppression check → suggestion_candidates
    ▼
- suggestion-worker (Postgres-queue consumer, claim-with-lease)
-   │   clone repo → build context → Claude Sonnet draft (tool use)
-   │   → Claude Opus self-critique → quality gate
-   │   → suggestion_artifacts(status='shadow' | 'ready')
+ suggestion-worker  (Postgres-queue consumer)
+   │   claim candidate with 10-min lease
+   │   revalidate evidence (< 72h stale)
+   │   spawn per-task sandbox container
+   │     └─ clone repo, run agent draft, run verification gates
+   │   write suggestion_artifacts(status='shadow'|'ready'|'failed')
+   │   teardown sandbox
    ▼
- github-app (webhooks + Octokit)
-   │   installation token exchange, PR create/update/close,
-   │   webhook verify, outcome capture
+ github-app (stateless Octokit shim)
+   │   installation tokens from Postgres (not memory)
+   │   PR create/update/close, webhook verify + dedupe,
+   │   rebase-on-publish, outcome capture
    ▼
  GitHub
 ```
 
+Three new services, each one clear job. A fourth boundary — the **per-task sandbox** — is implemented as short-lived Docker containers spawned by the worker, not a standing service.
+
 ### Service boundaries
 
-**`suggestion-promoter`** — pure data service. SQL against existing evidence tables, deterministic threshold rules, no LLM. Cheap, easy to test, easy to tune.
+**`suggestion-promoter`** — SQL + rules. No LLM. Cheap, deterministic, easy to test.
 
-**`suggestion-worker`** — the agentic component. Separate container, own API key pool, own resource limits, own cost ceilings. Shadow-vs-live is a runtime config, not baked in. Writes to Postgres; never touches GitHub directly.
+**`suggestion-worker`** — the agentic core. Manages sandbox lifecycle; does not itself execute untrusted code. Writes to Postgres; never touches GitHub.
 
-**`github-app`** — thin Octokit wrapper. Stateless. Only trusts `suggestion_artifacts.status='ready'` and `repo_installations.is_live=true`. Owns webhook verification and token lifecycle.
+**`github-app`** — thin Octokit wrapper. Stateless aside from Postgres-backed token cache. Only trusts artifacts with `status='ready'` AND `repo_installations.is_live=true`.
 
-The three-service split is deliberate: each has a different failure mode, scaling profile, and security boundary. Merging any two makes all three harder to reason about.
+**Per-task sandbox** — ephemeral Docker container per candidate. Separate non-root UID, tmpfs workspace, network egress allowlist (`api.anthropic.com`, `api.github.com`, `<installation-token>@github.com` for clone only). Torn down unconditionally at job end. No cross-tenant shared filesystem.
 
 ## Data Model
 
-All new tables below. One small column addition to `sessions` for repo linkage.
-
 ### `repo_installations`
-
-One row per GitHub App install × repo.
 
 ```sql
 CREATE TABLE repo_installations (
@@ -94,30 +100,34 @@ CREATE TABLE repo_installations (
   owner                text NOT NULL,
   repo                 text NOT NULL,
   default_branch       text NOT NULL,
-  cwd_patterns         text[] NOT NULL DEFAULT '{}',  -- regex list for session→repo override
-  is_live              boolean NOT NULL DEFAULT false, -- false = shadow only
-  auto_open_pr_kinds   text[] NOT NULL DEFAULT '{}',   -- kinds allowed to auto-publish
+  cwd_patterns         text[] NOT NULL DEFAULT '{}',
+  is_live              boolean NOT NULL DEFAULT false,
+  auto_open_pr_kinds   text[] NOT NULL DEFAULT '{}',
+  convention_profile   jsonb NOT NULL DEFAULT '{}'::jsonb, -- discovered from last 20 merged PRs
   installed_at         timestamptz NOT NULL DEFAULT now(),
   suspended_at         timestamptz,
   UNIQUE(github_install_id, owner, repo)
 );
-CREATE INDEX idx_repo_inst_org ON repo_installations(organization_id) WHERE suspended_at IS NULL;
 ```
 
-### `suggestion_candidates`
+`convention_profile` is populated on install and refreshed weekly: commit message style, PR title format (conventional commits / plain / ticket-prefix), DCO required, sign-off, branch naming. Consumed by the worker so generated PRs don't fail format checks.
 
-Promoter output, worker input.
+### `suggestion_candidates`
 
 ```sql
 CREATE TABLE suggestion_candidates (
   id                    text PRIMARY KEY,
   repo_installation_id  text NOT NULL REFERENCES repo_installations(id),
-  kind                  text NOT NULL CHECK (kind IN ('claude_md','skill','hook','command','agent','config')),
-  evidence_refs         jsonb NOT NULL, -- {pattern_ids, anti_pattern_ids, session_ids, insight_ids}
+  kind                  text NOT NULL CHECK (kind IN
+                          ('claude_md','skill','hook','command','agent','config','remove')),
+  evidence_refs         jsonb NOT NULL,
   evidence_score        numeric NOT NULL,
+  evidence_breakdown    jsonb NOT NULL,          -- components, see formula below
   summary               text NOT NULL,
-  status                text NOT NULL CHECK (status IN ('queued','in_progress','artifact_ready','dismissed','failed')),
+  status                text NOT NULL CHECK (status IN
+                          ('queued','in_progress','artifact_ready','dismissed','failed','stale')),
   priority              int NOT NULL DEFAULT 0,
+  suppression_key       text NOT NULL,           -- hash(repo, kind, patch-intent)
   created_at            timestamptz NOT NULL DEFAULT now(),
   claimed_at            timestamptz,
   claim_expires_at      timestamptz
@@ -126,50 +136,126 @@ CREATE INDEX idx_sc_queue ON suggestion_candidates(status, priority DESC, create
   WHERE status IN ('queued','in_progress');
 ```
 
-### `suggestion_artifacts`
+**`evidence_score` formula (v1).** Weighted sum, each component 0..1:
 
-Worker output. One per successful generation.
+```
+evidence_score =
+    0.30 * log1p(distinct_session_count) / log1p(20)       -- breadth
+  + 0.25 * log1p(distinct_user_count)    / log1p(5)        -- engineer diversity
+  + 0.25 * recency_weight(latest_event)                    -- half-life 14 days
+  + 0.10 * consistency(pattern_across_sessions)            -- 1 - variance of signals
+  + 0.10 * severity_weight(anti_pattern.severity)          -- critical > warning > info
+```
+
+`evidence_breakdown` stores each component value, so a `0.82` candidate from "hot-and-narrow" (1 user, 15 sessions) vs "broad-and-cold" (10 users, 2 sessions) is distinguishable later. Promotion rules (kind-specific) can require minimum thresholds per component — e.g., `claude_md` kind requires `distinct_user_count >= 2` to filter out idiosyncratic noise.
+
+**Suppression.** `suppression_key = sha256(repo_installation_id || kind || normalized_intent)`. Before enqueue, promoter checks `suppression_ledger` — if the same key was rejected in the last 60 days, candidate is dismissed unless evidence_score has grown by >50% since the rejection.
+
+### `suggestion_artifacts`
 
 ```sql
 CREATE TABLE suggestion_artifacts (
-  id                 text PRIMARY KEY,
-  candidate_id       text NOT NULL REFERENCES suggestion_candidates(id),
-  patch              text NOT NULL,           -- unified diff
-  files_changed      text[] NOT NULL,
-  title              text NOT NULL,
-  body               text NOT NULL,
-  model              text NOT NULL,
-  self_critique      jsonb NOT NULL,          -- {clarity, safety, evidence_fit, reversibility}
-  quality_score      numeric NOT NULL,
-  status             text NOT NULL CHECK (status IN ('shadow','ready','published','rejected_by_reviewer','failed')),
-  github_pr_number   int,
-  published_at       timestamptz,
-  created_at         timestamptz NOT NULL DEFAULT now()
+  id                     text PRIMARY KEY,
+  candidate_id           text NOT NULL REFERENCES suggestion_candidates(id),
+  patch                  text NOT NULL,
+  files_changed          text[] NOT NULL,
+  title                  text NOT NULL,
+  body                   text NOT NULL,
+  model                  text NOT NULL,
+  verification_results   jsonb NOT NULL, -- binary gates; see worker section
+  rubric_scores          jsonb,          -- supplementary; not a gate
+  quality_ranking        numeric,        -- used for ordering only
+  status                 text NOT NULL CHECK (status IN
+                           ('shadow','ready','published','rejected_by_reviewer','failed','superseded')),
+  github_pr_number       int,
+  github_branch          text,
+  published_at           timestamptz,
+  created_at             timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_sa_pending ON suggestion_artifacts(status, created_at) WHERE status IN ('shadow','ready');
 ```
 
 ### `suggestion_outcomes`
 
-Feedback loop closure.
+V1 is simple: track publish, merge, persistence. No pre/post-metric deltas.
 
 ```sql
 CREATE TABLE suggestion_outcomes (
-  id                 text PRIMARY KEY,
-  artifact_id        text NOT NULL REFERENCES suggestion_artifacts(id) UNIQUE,
-  pr_state           text CHECK (pr_state IN ('open','merged','closed_without_merge')),
-  merged_at          timestamptz,
-  reviewer_verdict   text,              -- 'approved' | 'changes_requested' | 'rejected'
-  reviewer_comment   text,              -- top negative comment, if any
-  baseline_window    tstzrange,
-  post_window        tstzrange,
-  baseline_metrics   jsonb,
-  post_metrics       jsonb,
-  delta              jsonb,
-  measured_at        timestamptz,
-  created_at         timestamptz NOT NULL DEFAULT now()
+  id                    text PRIMARY KEY,
+  artifact_id           text NOT NULL REFERENCES suggestion_artifacts(id) UNIQUE,
+  pr_state              text CHECK (pr_state IN ('open','merged','closed_without_merge')),
+  merged_at             timestamptz,
+  reviewer_verdict      text,               -- 'approved' | 'changes_requested' | 'rejected'
+  reviewer_comment      text,
+  persisted_30d         boolean,            -- ground truth: merged AND no revert AND file still present
+  reverted_at           timestamptz,
+  measured_at           timestamptz,
+  created_at            timestamptz NOT NULL DEFAULT now()
 );
 ```
+
+Counterfactual impact measurement is explicitly deferred — see Deferred Directions.
+
+### `suppression_ledger`
+
+```sql
+CREATE TABLE suppression_ledger (
+  suppression_key       text PRIMARY KEY,
+  repo_installation_id  text NOT NULL REFERENCES repo_installations(id),
+  kind                  text NOT NULL,
+  last_rejected_at      timestamptz NOT NULL,
+  rejection_reason      text,              -- reviewer comment, if any
+  rejection_count       int NOT NULL DEFAULT 1,
+  next_eligible_at      timestamptz NOT NULL
+);
+```
+
+Also serves as a negative-example bank for the worker's prompt.
+
+### `webhook_deliveries`
+
+Idempotency for GitHub webhook retries.
+
+```sql
+CREATE TABLE webhook_deliveries (
+  delivery_id    text PRIMARY KEY,  -- X-GitHub-Delivery header
+  event          text NOT NULL,
+  received_at    timestamptz NOT NULL DEFAULT now(),
+  processed_at   timestamptz
+);
+```
+
+Handler's first SQL statement is `INSERT ... ON CONFLICT DO NOTHING RETURNING`. If no row inserted, webhook is a replay — 200 OK, no processing.
+
+### `installation_tokens`
+
+```sql
+CREATE TABLE installation_tokens (
+  github_install_id  bigint PRIMARY KEY,
+  token              text NOT NULL,        -- encrypted at rest (pgcrypto, app-level key)
+  expires_at         timestamptz NOT NULL,
+  refreshed_at       timestamptz NOT NULL DEFAULT now()
+);
+```
+
+Survives restarts, shareable across workers, refreshed lazily on expiry.
+
+### `audit_log`
+
+```sql
+CREATE TABLE audit_log (
+  id                    bigserial PRIMARY KEY,
+  at                    timestamptz NOT NULL DEFAULT now(),
+  actor                 text NOT NULL,        -- 'suggestion-worker' | 'github-app' | user_id | 'system'
+  action                text NOT NULL,        -- 'artifact.publish' | 'artifact.dismiss' | 'install.suspend' | ...
+  repo_installation_id  text,
+  artifact_id           text,
+  policy_version        text,                 -- gate rules version hash
+  details               jsonb
+);
+CREATE INDEX idx_audit_install ON audit_log(repo_installation_id, at DESC);
+```
+
+First question from any customer security review. Every write to a customer repo logs actor + policy version + evidence refs.
 
 ### Additions to existing tables
 
@@ -185,160 +271,207 @@ CREATE INDEX idx_sessions_remote ON sessions(git_remote) WHERE git_remote IS NOT
 
 ### Registration (one-time)
 
-Create `devscope-bot` GitHub App under the DevScope GitHub org. Store credentials in backend `.env` at `/opt/stacks/devscope/.env`:
+Create `devscope-bot` under the DevScope GitHub org. Store in `/opt/stacks/devscope/.env`:
 
 - `GITHUB_APP_ID`
-- `GITHUB_APP_PRIVATE_KEY` (PEM, base64-encoded for single-line env)
+- `GITHUB_APP_PRIVATE_KEY` (PEM, base64 single-line)
 - `GITHUB_WEBHOOK_SECRET`
-- `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` (for OAuth callback state verification)
 
-### Requested permissions (minimal)
+### Requested permissions
 
 | Permission | Access | Why |
 |---|---|---|
 | Repository → Contents | read & write | Push branch with patch |
 | Repository → Pull requests | read & write | Open/update draft PRs |
-| Repository → Metadata | read | List branches, default branch |
-| Repository → Issues | read & write | PR comments (PRs are issues) |
+| Repository → Metadata | read | Branches, default branch, convention discovery |
+| Repository → Issues | read & write | PR comments |
 
-Webhook events: `pull_request`, `pull_request_review`, `installation`, `installation_repositories`.
+Events: `pull_request`, `pull_request_review`, `installation`, `installation_repositories`.
 
-Deliberately not requested: Actions, Secrets, Workflows, Admin, Members. Keeps blast radius tight and install prompt reassuring.
+Explicitly not requested: Actions, Secrets, Workflows, Admin, Members.
 
 ### Install flow
 
-1. Org admin clicks **Connect GitHub** in DevScope dashboard.
+1. Admin clicks Connect GitHub in dashboard.
 2. Redirect to `github.com/apps/devscope-bot/installations/new?state=<signed_org_id>`.
-3. Admin picks repos (all or selected).
-4. GitHub redirects to `/api/github/install/callback?installation_id=...&state=...`.
-5. Backend verifies state signature, lists repos for the installation, writes `repo_installations` rows with `is_live=false`.
-6. Admin sees each repo in dashboard with per-repo shadow/live toggle.
+3. GitHub callback → `/api/github/install/callback`.
+4. Backend verifies state signature, lists repos, writes `repo_installations` (`is_live=false`, `convention_profile={}`).
+5. Async job: discover conventions from last 20 merged PRs per repo, populate `convention_profile`.
 
 ### Per-request auth
 
-1. Sign JWT with app private key (10-min TTL).
-2. Exchange JWT for installation access token (1-hour TTL, cached in-memory per installation).
-3. All Octokit calls use the installation token; never the JWT directly.
-4. Tokens auto-rotate on expiry.
+JWT (10-min) → installation token (1-hour, Postgres-backed) → Octokit. Token rotation lazy, encrypted at rest.
 
 ### Webhook handling
 
-Single endpoint `POST /api/github/webhook`. First step: verify `X-Hub-Signature-256` HMAC. Reject unsigned or invalid. Then dispatch:
+`POST /api/github/webhook` — verify `X-Hub-Signature-256`. Dedupe via `webhook_deliveries`. Dispatch:
 
-- `pull_request.closed` → upsert `suggestion_outcomes` (pr_state, merged_at, reviewer_comment from most recent negative review).
-- `pull_request_review.submitted` → update `suggestion_outcomes.reviewer_verdict`.
-- `installation.deleted` → set `repo_installations.suspended_at`.
-- `installation_repositories.removed` → suspend rows for removed repos.
+- `pull_request.closed` → upsert `suggestion_outcomes` with pr_state, merged_at, reviewer_comment.
+- `pull_request_review.submitted` → `reviewer_verdict`.
+- `installation.deleted` → `repo_installations.suspended_at`.
+- `installation_repositories.removed` → suspend matching rows.
 
-Tokens never leave the `github-app` service. The worker writes to `suggestion_artifacts`; the github-app reads and publishes.
+## Suggestion Worker (agentic core)
 
-## Patch-generation Worker
+### Runtime + sandbox
 
-### Runtime
+Bun process, claims candidates via `SELECT FOR UPDATE SKIP LOCKED`. For each claim:
 
-Bun process in its own container (`devscope-suggestion-worker`) in the compose stack. Single replica at v1. Claims candidates via `UPDATE suggestion_candidates SET status='in_progress', claimed_at=now(), claim_expires_at=now()+interval '10 minutes' WHERE id = (SELECT id FROM suggestion_candidates WHERE status='queued' ORDER BY priority DESC, created_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *`. Postgres-as-queue; no Redis/SQS needed at v1 scale.
+1. **Revalidate.** Re-query the evidence. If the pattern's occurrence count in the last 72h is 0, mark candidate `stale` and release. If `suppression_ledger` now has this key, mark `dismissed`.
+2. **Spawn sandbox.** `docker run --rm --network=devscope-egress-allowlist --read-only --tmpfs /work --user 1000:1000 --cap-drop=ALL --memory=2g --pids-limit=256 devscope/worker-sandbox:<pinned-sha> ...` — one container per candidate, isolated filesystem, network allowlist at Docker network level (Anthropic API + GitHub API + nothing else). Clone target repo inside the sandbox using the installation token.
+3. **Build context.** All `CLAUDE.md`, `.claude/` tree, manifest files, top-level layout, `convention_profile`. Attach with `cache_control: {"type": "ephemeral", "ttl": "1h"}` (1-hour variant so repeat runs on same repo within a candidate batch hit cache).
+4. **Agent draft.** Claude Sonnet 4.6, tools: `read_file`, `list_dir`, `grep`, `propose_patch`. Kind-specific system prompt. Negative-example bank from `suppression_ledger` for this repo+kind injected into the prompt.
+5. **Verification gates** (each binary, all required — see below).
+6. **Rubric scoring** (supplementary, for ranking among passing artifacts — not a gate).
+7. **Write artifact.** Status `shadow` (default) or `ready` (if `is_live`) or `failed` (verification fail).
+8. **Teardown sandbox.** Unconditional.
 
-### Per-candidate loop
+### Verification gates (load-bearing, binary)
 
-1. **Clone.** Shallow clone at default-branch HEAD into `/tmp/devscope-worker/<artifact_id>/` via installation token over HTTPS.
-2. **Build context.** Read all `CLAUDE.md`, `.claude/` tree, `package.json`/`pyproject.toml`, repo layout (top-level + depth-2 dirs). Assemble into a system-prompt bundle with `cache_control: {"type": "ephemeral"}` so repeat runs on the same repo hit Anthropic prompt cache.
-3. **Draft.** Claude Sonnet 4.6, tool use enabled. Tools:
-   - `read_file(path)` — read any file in the clone
-   - `list_dir(path)` — list contents
-   - `grep(pattern, glob)` — search
-   - `propose_patch(unified_diff, title, body)` — terminal tool, emits the result
-   System prompt is kind-specific (six variants, one per `kind`). Input includes the evidence bundle (excerpted session transcripts, pattern summaries, anti-pattern occurrences).
-4. **Self-critique.** Claude Opus 4.7. Input = draft patch + evidence. Output = JSON with `{clarity, safety, evidence_fit, reversibility}` each 0–1, plus free-form critique. Compute `quality_score = weighted_sum`.
-5. **Gate.** If `quality_score < 0.7` → artifact status `failed`, log, emit metric. Otherwise write `suggestion_artifacts` with `status='shadow'` (or `'ready'` if `repo_installations.is_live=true` and kind not in `auto_open_pr_kinds`).
-6. **Cleanup.** Remove `/tmp/devscope-worker/<artifact_id>/` unconditionally.
+| Gate | Check |
+|---|---|
+| **Patch applies** | `git apply --check` against current HEAD succeeds. If HEAD advanced since clone, rebase once; if conflicts, fail. |
+| **Evidence dereferences** | Every session/pattern/insight ID in `evidence_refs` exists in DB and matches claimed strings (e.g., if the agent quoted a session tool call, the quote must be found verbatim in the session transcript). |
+| **Kind scope** | Touched files fall within the kind's allowed paths. `claude_md` kind only touches `**/CLAUDE.md`. `skill` kind only touches `.claude/skills/**`. `remove` kind only deletes, never adds. Enforced by matching `files_changed` against a per-kind allowlist. |
+| **Tests (best-effort)** | If `package.json` has a `test` script with known-fast runner (vitest, jest, bun test), run it in sandbox with patch applied. Timeout 3 min. Fail on test regression. Skip if no detectable runner. |
+| **Lint / format** | If `eslint`/`prettier`/`ruff`/`gofmt` config detected, run it. Fail on new lint errors in touched files only (don't penalize pre-existing). |
+| **Conventions** | Generated PR title matches `convention_profile.title_format`. Branch name matches `convention_profile.branch_format`. Commit signed-off if required. |
 
-### Tool discipline
+Any gate failure → artifact `failed`, results written to `verification_results`, no retry beyond the rebase-once inside gate 1.
 
-Draft step has read-only tools plus the terminal `propose_patch`. Model cannot shell out, cannot write files, cannot fetch URLs. Emits patch only via the declared tool. Keeps the agent contained.
+### Rubric (not a gate)
+
+Optional Opus call producing `{clarity, evidence_fit, reversibility}` per artifact. Used only to order artifacts in the dashboard for human review and to break ties when multiple candidates compete for the single open PR slot. Never a pass/fail gate — the critique model rubber-stamps plausible patches and can't be trusted with publishing authority.
+
+### PR framing
+
+Title: kind-appropriate, conventional-commit-formatted when required. Example: `chore(claude): add Railway env check to prevent retry loop (DevScope)`.
+
+Body template:
+```
+Your Claude Code session(s) hit this pattern:
+
+• 2026-04-21 14:32 — <pattern summary> — failed 3x
+• 2026-04-22 09:15 — same pattern
+
+DevScope's suggestion:
+<short rationale>
+
+Evidence: <links to DevScope dashboard for cited sessions>
+Verification: patch applies, tests pass, lint clean, convention match.
+
+---
+Co-authored-by: <triggering user via mapped GitHub handle>
+🤖 Opened by DevScope. [Provide feedback](...)
+```
+
+Attribution-to-user is a cheap UX win with disproportionate effect: the reader expects a generic bot and finds their own friction mirrored back. `user_developer_link` already maps DevScope user → GitHub handle where available; fall back to an anonymized session id when not.
 
 ### Cost controls
 
-- Per-candidate: 200k input tokens / 20k output tokens budget; hard-kill at 2×.
-- Per-org: daily USD ceiling in `organization_settings.daily_llm_budget_usd`, default $5.
-- Running tally in Redis (or Postgres if we skip Redis at v1); budget exhausted → candidates marked `dismissed` with reason `budget_exceeded` and surface in dashboard.
+- Per-candidate: 200k input / 20k output; hard kill 2×.
+- Per-org daily USD ceiling in `organization_settings.daily_llm_budget_usd` (default $5). Running tally in Postgres. Exceeded → candidate `dismissed`, surfaced in dashboard.
+- Policy-based budget auto-scaling is Deferred Direction #8.
 
 ## Shadow → Live Transition
 
-Three stages per org, per repo:
+V1 gate is **behavioral, not survey**.
 
-1. **Shadow mode (default).** Artifacts land as `status='shadow'`. Dashboard "Proposed Changes" tab shows full patch + evidence + "Would you have merged this?" thumbs-up/down. No GitHub access.
-2. **Review mode.** Unlocked after 20 shadow approvals with ≥80% thumbs-up. Admin flips `is_live=true`. Artifacts land as `status='ready'`; admin clicks "Open PR" per artifact.
-3. **Auto mode.** Per-kind opt-in. Admin adds a kind to `auto_open_pr_kinds`. Artifacts of that kind with `quality_score ≥ auto_threshold` (default 0.85) flow to GitHub as drafts automatically.
+1. **Shadow mode (default).** Artifacts land `shadow`. Dashboard shows the patch alongside a **blind preference** — DevScope's patch vs a hand-written alternative for the same candidate, unlabeled, admin picks which they'd merge (or "neither"). Alternative is produced from the negative-example library for the same kind, or hand-seeded during bootstrap.
+2. **Review mode.** Unlocked after ≥10 candidates where DevScope's patch was preferred AND the admin subsequently landed a commit on their own repo addressing the same friction (fuzzy match on touched files + kind). Preference alone is not enough — an actual commit is the behavioral signal. Admin flips `is_live=true` per repo.
+3. **Auto mode.** Per-kind opt-in. `auto_open_pr_kinds` array on `repo_installations`. Artifact must pass all gates and rank in top quartile of historical rubric for that kind.
 
-All DevScope PRs are **GitHub draft PRs**. Humans flip `ready_for_review` manually.
+All DevScope PRs open as **GitHub draft**. Humans flip `ready_for_review`.
 
-## Outcome Attribution Loop
+## Outcome Attribution (v1 — persistence only)
 
-**On `pull_request.closed`:**
-1. Upsert `suggestion_outcomes` with `pr_state`, `merged_at`, `reviewer_verdict`, `reviewer_comment`.
-2. If merged, schedule measurement job for `merged_at + 14 days`.
+**On `pull_request.closed` (merged):**
+1. Schedule persistence check at `merged_at + 30d`.
 
-**Daily measurement job:**
-- For each due outcome:
-  - Baseline window: `[merged_at - 28d, merged_at]`
-  - Post window: `[merged_at + 1d, merged_at + 28d]`
-  - Compute repo-scoped session metrics in each window: anti-pattern rate per 100 sessions, retry-loop count, tool diversity, avg session depth, avg quality score.
-  - Write `baseline_metrics`, `post_metrics`, `delta`.
+**Persistence check job:**
+- Merge commit still in default branch? (no revert, no force-push over it)
+- Files from `files_changed` still present?
+- If yes → `persisted_30d = true`. Ground truth positive.
+- If no → `persisted_30d = false`, `reverted_at` populated. Ground truth negative, feeds suppression.
 
-**Feedback into the pipeline:**
-- **Reject comments** → stored and injected as negative examples into the worker's draft prompt for that `kind`, via prompt caching.
-- **Positive delta** → boosts `evidence_score` weighting for source patterns in the promoter.
-- **Negative delta** → demotes source pattern weighting.
+**Feedback into pipeline:**
+- Rejected PR comments → `suppression_ledger.rejection_reason`, injected into worker prompt as negative examples for that kind.
+- `persisted_30d = false` → suppression extended, evidence-score recency weight dampened for source pattern.
+- `persisted_30d = true` → source pattern gets a small recurrence bonus in the promoter.
 
-This is the learning loop. Runs on cron, not in the hot path.
+No pre/post metric deltas. No causal attribution. That's the v1.5 project — see Deferred Directions #1.
 
 ## Error Handling
 
 | Failure | Response |
 |---|---|
-| Clone fails (auth, deleted repo, private) | Mark candidate `failed`; alert org admin after 3 consecutive failures on same install |
-| LLM returns invalid patch (apply dry-run fails) | Retry once with critique as input; if second fails, artifact `failed` |
-| Invalid webhook signature | 401, log, no processing |
-| Worker crash mid-candidate | `claim_expires_at` TTL (10m) → auto-released by promoter sweep |
-| LLM budget exceeded | Candidate `dismissed`, reason surfaced |
-| GitHub rate limit | Octokit throttling plugin; github-app backs off automatically |
+| Clone fails (auth, deleted, private) | Candidate `failed`. 3 consecutive failures on same install → admin alert. |
+| Invalid patch at generation | Single retry with critique in prompt. Second failure → artifact `failed`. |
+| Invalid patch at publish (HEAD advanced) | Rebase once server-side. Conflict → re-enqueue candidate, `superseded` old artifact. |
+| Verification gate fails | Artifact `failed`, gate result logged. No retry. |
+| Invalid webhook signature | 401, log, no state change. |
+| Duplicate webhook | Dedupe table short-circuits, 200 OK. |
+| Worker crash mid-candidate | `claim_expires_at` TTL (10m) auto-releases. |
+| Sandbox escape attempt | Impossible by construction (network allowlist, read-only FS, non-root, no caps); any anomaly alerts + quarantines install. |
+| LLM budget exhausted | Candidate `dismissed`, reason surfaced. |
 
-## Rate Limits
+## Rate Limits + Lifecycle
 
-- **1** open PR per repo at a time (next candidate queues until prior PR closes)
-- **3** PRs per repo per rolling 7 days
-- **10** artifacts generated per org per day (cost cap)
-- GitHub API: Octokit built-in throttling, respects secondary rate limits
+- **1** open DevScope PR per repo at a time; next candidate queues.
+- **3** DevScope PRs per repo per 7 days.
+- **10** artifacts generated per org per day.
+- **Max open PR age: 30 days.** After 30 days with no review activity, auto-close with a polite comment ("DevScope closed this due to inactivity; the pattern may recur — we'll re-propose if evidence reappears"). Suppression key bumped.
+- Octokit throttling plugin respects primary + secondary GitHub rate limits.
+
+## Audit + Security
+
+- Every write to a customer repo → `audit_log` row: actor, action, policy_version (hash of gate ruleset), evidence_refs, artifact_id. Retained indefinitely.
+- Installation tokens encrypted at rest (pgcrypto with an app-level key from env).
+- Sandbox network policy enforced at Docker network level — container cannot reach anything but the allowlisted hosts; no egress fallback.
+- Clone URLs use installation token in URL, never written to disk (passed to `git` via stdin/env).
+- Webhook secret rotated on GitHub App secret rotation; multiple active secrets supported during rotation windows.
 
 ## Testing Strategy
 
-- **Unit:** promoter SQL rules against fixture data; patch apply-in-sandbox validator; webhook HMAC verification; Octokit client mocked.
-- **Integration:** full candidate → artifact → publish path with `nock` or `msw` stubbing the GitHub API; real Postgres seeded from session dumps.
-- **Shadow E2E:** run worker against `devscope-cloud` itself for first two weeks post-deploy; every artifact human-rated by Lucas before any external org gets live mode.
-- **Golden set:** 20 curated session-pattern → suggestion pairs as the worker regression suite; run on every prompt change.
+- **Unit:** promoter rule SQL against fixture sessions; `evidence_score` formula against known distributions; verification gates (patch applier, evidence deref, kind-scope); webhook HMAC + dedupe; convention discovery.
+- **Integration:** candidate → sandbox → artifact → publish with mocked Octokit (`msw`), real Postgres seeded from a session dump.
+- **Sandbox smoke:** a malicious fixture repo (attempts curl to evil.example, attempts write outside `/work`, attempts fork-bomb) must be fully contained. CI gate.
+- **Shadow E2E:** worker runs against `devscope-cloud` for 2 weeks post-deploy. Every artifact rated by Lucas against a hand-written alternative (blind). This is the bootstrap for the behavioral live gate.
+- **Golden set:** 20 curated (session-pattern → suggestion) pairs as regression suite. Re-run on every prompt change. Gate any prompt change on golden-set non-regression.
 
-## Open Questions / Deferred
+## Deferred Directions (v1.5+)
 
-1. **Patch merge conflicts at publish time.** If the default branch advanced between artifact creation and publish, we rebase the branch server-side and retry. If conflicts remain, mark artifact `failed` and re-enqueue the candidate. Design is sketched; implementation detail for the plan.
-2. **Repo-level opt-out of specific kinds.** V1 is all-kinds-on per repo. Per-kind shadow/live toggles deferred to v1.1.
-3. **Coaching comments on human-authored PRs** (Q3 option B). V1 covers DevScope-authored PR comments only; commenting on human PRs is a follow-up.
-4. **Non-English repos.** Prompts assume English; non-English `CLAUDE.md`s may degrade suggestion quality. Deferred.
+These are the moves that change what kind of product DevScope is. Captured now so we don't forget.
 
-## Success Metrics
+1. **Session replay as counterfactual.** Before shipping any `claude_md` change, replay the N most-recent sessions on the repo through Claude with the proposed CLAUDE.md and measure predicted delta in pattern/anti-pattern rate. Offline evaluation per suggestion + causally-grounded deltas. This replaces the pre/post metric math that v1 explicitly drops. Highest-leverage single move after v1 ships.
+2. **Just-in-time intervention.** Plugin injects a transient skill/CLAUDE.md override at session start based on user+repo anti-pattern profile. Promotes to a permanent PR only if the session-scoped override proves valuable. Shifts the loop latency from "hours" to "zero." Natural A/B: intervened vs matched non-intervened sessions.
+3. **Cross-org pattern federation.** Hash pattern signatures, find nearest neighbors across orgs anonymously, surface "this resembles 4 patterns solved by other teams" with a generalized template. Source fixes never leave source org. Turns DevScope into the pattern-knowledge layer of Claude Code.
+4. **Skill marketplace.** Automatic extraction of generalizable skills across the fleet, stripped of org-specifics, offered as installable templates with evidence attached ("adopted by 14 orgs, median retry-loop reduction X"). Distribution infrastructure, not just suggestion bot.
+5. **Variant A/B in shadow mode.** Per-candidate 2–3 variants with different framings/scopes; blind-displayed to different reviewers; preference deltas inform prompt design. Online learning over suggestion-design itself.
+6. **Retirement loop for past suggestions.** Track DevScope's own previously-accepted suggestions; if evidence has gone cold, propose removal. Self-pruning keeps surface area small. `remove` kind is implemented in v1; the automated triggering of retirement candidates is deferred.
+7. **Policy-based budget allocation.** Budget auto-scales with measured persistence rate per org. Earning trust → more runway. Not delivering → throttled. No human tuning.
+8. **Claude Code as reviewer-side pre-digester.** When DevScope opens a PR, the customer's Claude Code session can pre-review against their full repo context and summarize for the human. Reduces reviewer cognitive cost; uses Claude Code as a trust bridge.
+9. **Multi-session pattern clustering.** Cluster related sessions across user+repo+time+semantic-similarity; emit candidates on cluster events, not single sessions. Catches cross-session friction.
+10. **Commit-style attribution.** Instead of single triggering session, attribute PRs to the cluster of sessions across the team that surfaced the pattern. Reflects the reality of distributed engineering friction.
 
-- **Shadow-mode approval rate ≥ 70%** before any org flips to live.
-- **Merge rate of live PRs ≥ 50%** at steady state.
-- **Positive `delta` in ≥ 60% of measured outcomes** by month 3 post-launch.
-- **Zero security incidents** (leaked tokens, unauthorized writes, PR on non-consented repos) — hard gate.
+## Success Metrics (v1)
 
-## Implementation Sequence (for planning phase)
+- **Blind-preference rate for DevScope patches ≥ 60%** vs hand-written alternatives in shadow mode.
+- **Merge rate of live PRs ≥ 50%.**
+- **`persisted_30d = true` rate ≥ 70%** of merged PRs.
+- **Zero security incidents.** Hard gate. Any sandbox escape, token leak, or unauthorized write triggers full live-mode suspension across all orgs pending RCA.
+- **Zero multi-tenant data leakage incidents.** Hard gate.
 
-1. Data model migrations + session git-context capture in plugin
-2. GitHub App registration + install flow + webhook scaffolding
-3. `suggestion-promoter` with fixed rules on existing evidence tables
-4. `suggestion-worker` with Claude integration, starting with `CLAUDE.md` kind only
-5. Dashboard "Proposed Changes" shadow UI
-6. Expand worker to remaining kinds (hook, skill, command, agent, config) one at a time
-7. Shadow → live flow + admin controls
-8. Outcome attribution job + learning loop feedback
-9. Auto-mode opt-in per kind
+## Implementation Sequence (input to planning phase)
+
+1. Data model migrations + plugin git-context capture + webhook dedupe table + audit log table.
+2. GitHub App registration + install flow + `installation_tokens` table + Postgres-backed token caching + webhook scaffolding.
+3. Sandbox container image + Docker egress-allowlist network + smoke tests (malicious fixture).
+4. `suggestion-promoter` with `evidence_score` formula + suppression ledger.
+5. `suggestion-worker` v1 skeleton: claim → sandbox spawn → clone → agent draft → verification gates → teardown. Start with `claude_md` kind only.
+6. Convention discovery job + `convention_profile` population.
+7. Dashboard Proposed Changes UI with blind A/B preference.
+8. Expand worker to remaining kinds one at a time (`hook`, `skill`, `command`, `agent`, `config`, `remove`).
+9. Live-mode flow (behavioral gate: preference + own-commit match).
+10. Outcome persistence job + suppression feedback.
+11. Auto-mode opt-in per kind.
