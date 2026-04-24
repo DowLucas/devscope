@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS repo_installations (
   id                   text PRIMARY KEY,
-  organization_id      text NOT NULL REFERENCES organization(id),
+  organization_id      text NOT NULL REFERENCES organization(id) ON DELETE RESTRICT,
   github_install_id    bigint NOT NULL,
   owner                text NOT NULL,
   repo                 text NOT NULL,
@@ -28,14 +28,14 @@ CREATE TABLE IF NOT EXISTS repo_installations (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS suggestion_candidates (
   id                    text PRIMARY KEY,
-  repo_installation_id  text NOT NULL REFERENCES repo_installations(id),
-  kind                  text NOT NULL CHECK (kind IN
+  repo_installation_id  text NOT NULL REFERENCES repo_installations(id) ON DELETE CASCADE,
+  kind                  text NOT NULL CONSTRAINT suggestion_candidates_kind_chk CHECK (kind IN
                           ('claude_md','skill','hook','command','agent','config','remove')),
   evidence_refs         jsonb NOT NULL,
   evidence_score        numeric NOT NULL,
   evidence_breakdown    jsonb NOT NULL,          -- components, see formula in spec
   summary               text NOT NULL,
-  status                text NOT NULL CHECK (status IN
+  status                text NOT NULL CONSTRAINT suggestion_candidates_status_chk CHECK (status IN
                           ('queued','in_progress','artifact_ready','dismissed','failed','stale')),
   priority              int NOT NULL DEFAULT 0,
   suppression_key       text NOT NULL,           -- hash(repo, kind, patch-intent)
@@ -51,7 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_sc_queue ON suggestion_candidates(status, priorit
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS suggestion_artifacts (
   id                     text PRIMARY KEY,
-  candidate_id           text NOT NULL REFERENCES suggestion_candidates(id),
+  candidate_id           text NOT NULL REFERENCES suggestion_candidates(id) ON DELETE CASCADE,
   patch                  text NOT NULL,
   files_changed          text[] NOT NULL,
   title                  text NOT NULL,
@@ -60,9 +60,9 @@ CREATE TABLE IF NOT EXISTS suggestion_artifacts (
   verification_results   jsonb NOT NULL, -- binary gates; see worker section
   rubric_scores          jsonb,          -- supplementary; not a gate
   quality_ranking        numeric,        -- used for ordering only
-  status                 text NOT NULL CHECK (status IN
+  status                 text NOT NULL CONSTRAINT suggestion_artifacts_status_chk CHECK (status IN
                            ('shadow','ready','published','rejected_by_reviewer','failed','superseded')),
-  github_pr_number       int,
+  github_pr_number       bigint,
   github_branch          text,
   published_at           timestamptz,
   created_at             timestamptz NOT NULL DEFAULT now()
@@ -73,8 +73,8 @@ CREATE TABLE IF NOT EXISTS suggestion_artifacts (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS suggestion_outcomes (
   id                    text PRIMARY KEY,
-  artifact_id           text NOT NULL REFERENCES suggestion_artifacts(id) UNIQUE,
-  pr_state              text CHECK (pr_state IN ('open','merged','closed_without_merge')),
+  artifact_id           text NOT NULL REFERENCES suggestion_artifacts(id) ON DELETE CASCADE UNIQUE,
+  pr_state              text CONSTRAINT suggestion_outcomes_pr_state_chk CHECK (pr_state IN ('open','merged','closed_without_merge')),
   merged_at             timestamptz,
   reviewer_verdict      text,               -- 'approved' | 'changes_requested' | 'rejected'
   reviewer_comment      text,
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS suggestion_outcomes (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS suppression_ledger (
   suppression_key       text PRIMARY KEY,
-  repo_installation_id  text NOT NULL REFERENCES repo_installations(id),
+  repo_installation_id  text NOT NULL REFERENCES repo_installations(id) ON DELETE CASCADE,
   kind                  text NOT NULL,
   last_rejected_at      timestamptz NOT NULL,
   rejection_reason      text,              -- reviewer comment, if any
@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS installation_tokens (
 -- ---------------------------------------------------------------------------
 -- audit_log
 -- ---------------------------------------------------------------------------
+-- intentionally no FK to preserve audit trail across install/org deletion
 CREATE TABLE IF NOT EXISTS audit_log (
   id                    bigserial PRIMARY KEY,
   at                    timestamptz NOT NULL DEFAULT now(),
@@ -156,8 +157,8 @@ ALTER TABLE organization_settings
 CREATE TABLE IF NOT EXISTS artifact_preferences (
   id                  text PRIMARY KEY,
   artifact_id         text NOT NULL REFERENCES suggestion_artifacts(id) ON DELETE CASCADE,
-  user_id             text NOT NULL REFERENCES auth_user(id),
-  preferred           text NOT NULL CHECK (preferred IN ('a','b','neither')),
+  user_id             text REFERENCES auth_user(id) ON DELETE SET NULL,
+  preferred           text NOT NULL CONSTRAINT artifact_preferences_preferred_chk CHECK (preferred IN ('a','b','neither')),
   alternative_source  text,    -- 'library' | 'hand_seeded' | etc. — audit of which alt they compared to
   submitted_at        timestamptz NOT NULL DEFAULT now(),
   UNIQUE(artifact_id, user_id)
@@ -175,3 +176,11 @@ CREATE TABLE IF NOT EXISTS scheduled_jobs (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_sj_due ON scheduled_jobs(run_at) WHERE completed_at IS NULL;
+
+-- ---------------------------------------------------------------------------
+-- Supporting indexes on FK columns used for lookups
+-- ---------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_sa_candidate ON suggestion_artifacts(candidate_id);
+CREATE INDEX IF NOT EXISTS idx_sl_install ON suppression_ledger(repo_installation_id);
+CREATE INDEX IF NOT EXISTS idx_ap_user ON artifact_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_sc_suppression_key ON suggestion_candidates(suppression_key);
