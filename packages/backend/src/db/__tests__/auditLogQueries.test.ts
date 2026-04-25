@@ -37,21 +37,17 @@ describe("insertAuditEntry", () => {
     });
 
     expect(row).toEqual(expected as any);
-    // The INSERT is one statement; the conditional `${... ? sql\`x::jsonb\` : sql\`NULL\`}`
-    // adds one nested tagged-template fragment call, so we look up by query text.
-    const insertCall = sql.calls.find((c: Call) => /INSERT INTO audit_log/.test(c.query));
-    expect(insertCall).toBeDefined();
-    expect(insertCall!.query).toMatch(/RETURNING \*/);
-    expect(insertCall!.values).toContain("suggestion-worker");
-    expect(insertCall!.values).toContain("artifact.publish");
-    expect(insertCall!.values).toContain("ri-1");
-    expect(insertCall!.values).toContain("a-1");
-    expect(insertCall!.values).toContain("v1.2.3");
-    // The serialized JSON string is bound by the inner fragment's tagged-template call.
-    const fragmentCall = sql.calls.find((c: Call) =>
-      c.values.some(v => typeof v === "string" && v === JSON.stringify({ reason: "ok" }))
-    );
-    expect(fragmentCall).toBeDefined();
+    expect(sql.calls).toHaveLength(1); // single statement, no nested fragments
+    const insertCall = sql.calls[0];
+    expect(insertCall.query).toMatch(/INSERT INTO audit_log/);
+    expect(insertCall.query).toMatch(/RETURNING \*/);
+    expect(insertCall.values).toContain("suggestion-worker");
+    expect(insertCall.values).toContain("artifact.publish");
+    expect(insertCall.values).toContain("ri-1");
+    expect(insertCall.values).toContain("a-1");
+    expect(insertCall.values).toContain("v1.2.3");
+    // details serialized to JSON string and bound directly with ::jsonb cast
+    expect(insertCall.values).toContain(JSON.stringify({ reason: "ok" }));
   });
 
   test("nullable optional fields are passed as null", async () => {
@@ -61,12 +57,13 @@ describe("insertAuditEntry", () => {
       action: "install.suspend",
       policy_version: "v1.0.0",
     });
-    const insertCall = sql.calls.find((c: Call) => /INSERT INTO audit_log/.test(c.query));
-    expect(insertCall).toBeDefined();
-    expect(insertCall!.values).toContain(null); // repo_installation_id and artifact_id
-    // details omitted — no fragment call should bind a JSON-string value
-    const jsonBinding = sql.calls.some((c: Call) =>
-      c.values.some((v: unknown) => typeof v === "string" && (v as string).startsWith("{"))
+    expect(sql.calls).toHaveLength(1);
+    const insertCall = sql.calls[0];
+    expect(insertCall.query).toMatch(/INSERT INTO audit_log/);
+    expect(insertCall.values).toContain(null); // repo_installation_id, artifact_id, and details
+    // details omitted — no value should be a JSON-encoded object string
+    const jsonBinding = insertCall.values.some(
+      (v: unknown) => typeof v === "string" && (v as string).startsWith("{")
     );
     expect(jsonBinding).toBe(false);
   });

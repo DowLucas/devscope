@@ -45,9 +45,9 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("repo_installations queries", () => {
-  test("insertRepoInstallation inserts with defaults and returns row", async () => {
+  test("insertRepoInstallation inserts with defaults and returns row from RETURNING *", async () => {
     const expected = { id: "ri-1", organization_id: "org-1" };
-    const sql = makeSql([{ match: /SELECT \* FROM repo_installations/, rows: [expected] }]);
+    const sql = makeSql([{ match: /INSERT INTO repo_installations/, rows: [expected] }]);
 
     const row = await insertRepoInstallation(sql, {
       id: "ri-1",
@@ -59,11 +59,12 @@ describe("repo_installations queries", () => {
     });
 
     expect(row).toEqual(expected as any);
-    const insertCall = sql.calls.find((c: Call) => /INSERT INTO repo_installations/.test(c.query));
-    expect(insertCall).toBeDefined();
-    expect(insertCall!.values).toContain("ri-1");
-    expect(insertCall!.values).toContain("org-1");
-    expect(insertCall!.values).toContain(42);
+    expect(sql.calls).toHaveLength(1); // single round-trip via RETURNING *
+    const insertCall = sql.calls[0];
+    expect(insertCall.query).toMatch(/RETURNING \*/);
+    expect(insertCall.values).toContain("ri-1");
+    expect(insertCall.values).toContain("org-1");
+    expect(insertCall.values).toContain(42);
   });
 
   test("getRepoInstallation returns null when no row", async () => {

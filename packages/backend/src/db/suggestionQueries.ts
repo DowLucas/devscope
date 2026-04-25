@@ -130,7 +130,7 @@ export async function insertCandidate(
   const status: SuggestionCandidateStatus = input.status ?? "queued";
   const priority = input.priority ?? 0;
 
-  await sql`
+  const [row] = await sql`
     INSERT INTO suggestion_candidates (
       id, repo_installation_id, kind, evidence_refs, evidence_score,
       evidence_breakdown, summary, status, priority, suppression_key
@@ -140,8 +140,8 @@ export async function insertCandidate(
       ${evidenceRefs}::jsonb, ${input.evidence_score},
       ${evidenceBreakdown}::jsonb, ${input.summary}, ${status},
       ${priority}, ${input.suppression_key}
-    )`;
-  const [row] = await sql`SELECT * FROM suggestion_candidates WHERE id = ${input.id}`;
+    )
+    RETURNING *`;
   return row as SuggestionCandidate;
 }
 
@@ -167,15 +167,8 @@ export async function updateCandidateStatus(
  * so concurrent workers never claim the same row.
  */
 export async function claimNextCandidate(
-  sql: SQL,
-  workerId: string
+  sql: SQL
 ): Promise<SuggestionCandidate | null> {
-  // workerId is intentionally unused in the SQL today (the table has no
-  // worker_id column) but is kept in the API so that callers wire up
-  // observability (logs/metrics) consistently. Touch it here so TS doesn't
-  // flag it as unused while we leave the column out by design.
-  void workerId;
-
   const rows = await sql`
     UPDATE suggestion_candidates sc
     SET status = 'in_progress',
@@ -205,7 +198,7 @@ export async function insertArtifact(
   const verification = JSON.stringify(input.verification_results);
   const rubric = input.rubric_scores !== undefined ? JSON.stringify(input.rubric_scores) : null;
 
-  await sql`
+  const [row] = await sql`
     INSERT INTO suggestion_artifacts (
       id, candidate_id, patch, files_changed, title, body, model,
       verification_results, rubric_scores, quality_ranking, status
@@ -214,11 +207,11 @@ export async function insertArtifact(
       ${input.id}, ${input.candidate_id}, ${input.patch},
       ${input.files_changed}, ${input.title}, ${input.body}, ${input.model},
       ${verification}::jsonb,
-      ${rubric ? sql`${rubric}::jsonb` : sql`NULL`},
+      ${rubric}::jsonb,
       ${input.quality_ranking ?? null},
       ${input.status}
-    )`;
-  const [row] = await sql`SELECT * FROM suggestion_artifacts WHERE id = ${input.id}`;
+    )
+    RETURNING *`;
   return row as SuggestionArtifact;
 }
 
@@ -236,16 +229,15 @@ export async function updateArtifactStatus(
   status: SuggestionArtifactStatus,
   opts?: { github_pr_number?: number; github_branch?: string; published_at?: string }
 ): Promise<void> {
-  await sql`UPDATE suggestion_artifacts SET status = ${status} WHERE id = ${id}`;
-  if (opts?.github_pr_number !== undefined) {
-    await sql`UPDATE suggestion_artifacts SET github_pr_number = ${opts.github_pr_number} WHERE id = ${id}`;
-  }
-  if (opts?.github_branch !== undefined) {
-    await sql`UPDATE suggestion_artifacts SET github_branch = ${opts.github_branch} WHERE id = ${id}`;
-  }
-  if (opts?.published_at !== undefined) {
-    await sql`UPDATE suggestion_artifacts SET published_at = ${opts.published_at}::timestamptz WHERE id = ${id}`;
-  }
+  // Single statement: status is always set; the optional fields are merged
+  // via COALESCE so an absent value preserves the existing column.
+  await sql`
+    UPDATE suggestion_artifacts SET
+      status           = ${status},
+      github_pr_number = COALESCE(${opts?.github_pr_number ?? null}, github_pr_number),
+      github_branch    = COALESCE(${opts?.github_branch ?? null}, github_branch),
+      published_at     = COALESCE(${opts?.published_at ?? null}::timestamptz, published_at)
+    WHERE id = ${id}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -256,16 +248,16 @@ export async function upsertOutcome(
   sql: SQL,
   input: SuggestionOutcomeUpsert
 ): Promise<SuggestionOutcome> {
-  await sql`
+  const [row] = await sql`
     INSERT INTO suggestion_outcomes (
       id, artifact_id, pr_state, merged_at, reviewer_verdict,
       reviewer_comment, persisted_30d, reverted_at, measured_at
     )
     VALUES (
       ${input.id}, ${input.artifact_id}, ${input.pr_state ?? null},
-      ${input.merged_at ?? null}, ${input.reviewer_verdict ?? null},
+      ${input.merged_at ?? null}::timestamptz, ${input.reviewer_verdict ?? null},
       ${input.reviewer_comment ?? null}, ${input.persisted_30d ?? null},
-      ${input.reverted_at ?? null}, ${input.measured_at ?? null}
+      ${input.reverted_at ?? null}::timestamptz, ${input.measured_at ?? null}::timestamptz
     )
     ON CONFLICT (artifact_id) DO UPDATE SET
       pr_state         = COALESCE(EXCLUDED.pr_state, suggestion_outcomes.pr_state),
@@ -274,8 +266,8 @@ export async function upsertOutcome(
       reviewer_comment = COALESCE(EXCLUDED.reviewer_comment, suggestion_outcomes.reviewer_comment),
       persisted_30d    = COALESCE(EXCLUDED.persisted_30d, suggestion_outcomes.persisted_30d),
       reverted_at      = COALESCE(EXCLUDED.reverted_at, suggestion_outcomes.reverted_at),
-      measured_at      = COALESCE(EXCLUDED.measured_at, suggestion_outcomes.measured_at)`;
-  const [row] = await sql`SELECT * FROM suggestion_outcomes WHERE artifact_id = ${input.artifact_id}`;
+      measured_at      = COALESCE(EXCLUDED.measured_at, suggestion_outcomes.measured_at)
+    RETURNING *`;
   return row as SuggestionOutcome;
 }
 

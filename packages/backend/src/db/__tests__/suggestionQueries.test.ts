@@ -27,9 +27,9 @@ function makeSql(rowsByMatch: Array<{ match: RegExp; rows: unknown[] }> = []) {
 // ---------------------------------------------------------------------------
 
 describe("suggestion_candidates", () => {
-  test("insertCandidate serializes JSON fields and applies defaults", async () => {
+  test("insertCandidate serializes JSON fields, applies defaults, returns row via RETURNING *", async () => {
     const expected = { id: "c-1", status: "queued" };
-    const sql = makeSql([{ match: /SELECT \* FROM suggestion_candidates/, rows: [expected] }]);
+    const sql = makeSql([{ match: /INSERT INTO suggestion_candidates/, rows: [expected] }]);
 
     const row = await insertCandidate(sql, {
       id: "c-1",
@@ -43,12 +43,14 @@ describe("suggestion_candidates", () => {
     });
 
     expect(row).toEqual(expected as any);
-    const insertCall = sql.calls.find((c: Call) => /INSERT INTO suggestion_candidates/.test(c.query));
-    expect(insertCall).toBeDefined();
-    expect(insertCall!.values).toContain(JSON.stringify({ sessions: ["s1"] }));
-    expect(insertCall!.values).toContain(JSON.stringify({ recurrence: 0.5 }));
-    expect(insertCall!.values).toContain("queued"); // default status
-    expect(insertCall!.values).toContain(0); // default priority
+    expect(sql.calls).toHaveLength(1); // single round-trip via RETURNING *
+    const insertCall = sql.calls[0];
+    expect(insertCall.query).toMatch(/INSERT INTO suggestion_candidates/);
+    expect(insertCall.query).toMatch(/RETURNING \*/);
+    expect(insertCall.values).toContain(JSON.stringify({ sessions: ["s1"] }));
+    expect(insertCall.values).toContain(JSON.stringify({ recurrence: 0.5 }));
+    expect(insertCall.values).toContain("queued"); // default status
+    expect(insertCall.values).toContain(0); // default priority
   });
 
   test("getCandidate returns null when no row", async () => {
@@ -74,7 +76,7 @@ describe("suggestion_candidates", () => {
 describe("claimNextCandidate", () => {
   test("issues a single atomic statement with FOR UPDATE SKIP LOCKED", async () => {
     const sql = makeSql();
-    await claimNextCandidate(sql, "worker-a");
+    await claimNextCandidate(sql);
     expect(sql.calls).toHaveLength(1); // genuinely atomic — one statement
     const q = sql.calls[0].query;
     expect(q).toMatch(/UPDATE suggestion_candidates/);
@@ -88,7 +90,7 @@ describe("claimNextCandidate", () => {
 
   test("returns null when queue empty (RETURNING produced no rows)", async () => {
     const sql = makeSql(); // default: every query returns []
-    const result = await claimNextCandidate(sql, "worker-a");
+    const result = await claimNextCandidate(sql);
     expect(result).toBeNull();
   });
 
@@ -99,7 +101,7 @@ describe("claimNextCandidate", () => {
       claimed_at: "2026-04-25T00:00:00Z",
     };
     const sql = makeSql([{ match: /UPDATE suggestion_candidates/, rows: [claimed] }]);
-    const result = await claimNextCandidate(sql, "worker-a");
+    const result = await claimNextCandidate(sql);
     expect(result).toEqual(claimed as any);
   });
 
@@ -107,7 +109,7 @@ describe("claimNextCandidate", () => {
     // We can't truly test DB semantics in a unit test, but we can assert the
     // query restricts to queued so it cannot pick already-in-progress rows.
     const sql = makeSql();
-    await claimNextCandidate(sql, "worker-a");
+    await claimNextCandidate(sql);
     expect(sql.calls[0].query).toMatch(/WHERE status = 'queued'/);
   });
 });
@@ -117,11 +119,11 @@ describe("claimNextCandidate", () => {
 // ---------------------------------------------------------------------------
 
 describe("suggestion_artifacts", () => {
-  test("insertArtifact serializes verification_results and respects nullable rubric", async () => {
+  test("insertArtifact serializes verification_results, respects nullable rubric, returns row via RETURNING *", async () => {
     const expected = { id: "a-1" };
-    const sql = makeSql([{ match: /SELECT \* FROM suggestion_artifacts/, rows: [expected] }]);
+    const sql = makeSql([{ match: /INSERT INTO suggestion_artifacts/, rows: [expected] }]);
 
-    await insertArtifact(sql, {
+    const row = await insertArtifact(sql, {
       id: "a-1",
       candidate_id: "c-1",
       patch: "diff --git a b",
@@ -133,11 +135,16 @@ describe("suggestion_artifacts", () => {
       status: "ready",
     });
 
-    const insertCall = sql.calls.find((c: Call) => /INSERT INTO suggestion_artifacts/.test(c.query));
-    expect(insertCall).toBeDefined();
-    expect(insertCall!.values).toContain(JSON.stringify({ lint: "pass" }));
+    expect(row).toEqual(expected as any);
+    expect(sql.calls).toHaveLength(1); // single round-trip via RETURNING *
+    const insertCall = sql.calls[0];
+    expect(insertCall.query).toMatch(/INSERT INTO suggestion_artifacts/);
+    expect(insertCall.query).toMatch(/RETURNING \*/);
+    expect(insertCall.values).toContain(JSON.stringify({ lint: "pass" }));
+    // rubric_scores omitted → bound as null with ::jsonb cast
+    expect(insertCall.values).toContain(null);
     // files_changed should be passed as a JS array (Bun.sql handles text[])
-    expect(insertCall!.values).toContainEqual(["CLAUDE.md"]);
+    expect(insertCall.values).toContainEqual(["CLAUDE.md"]);
   });
 });
 
@@ -146,9 +153,9 @@ describe("suggestion_artifacts", () => {
 // ---------------------------------------------------------------------------
 
 describe("suggestion_outcomes", () => {
-  test("upsertOutcome uses ON CONFLICT (artifact_id) to merge", async () => {
+  test("upsertOutcome uses ON CONFLICT (artifact_id) to merge and returns row via RETURNING *", async () => {
     const expected = { id: "o-1", artifact_id: "a-1" };
-    const sql = makeSql([{ match: /SELECT \* FROM suggestion_outcomes/, rows: [expected] }]);
+    const sql = makeSql([{ match: /INSERT INTO suggestion_outcomes/, rows: [expected] }]);
 
     const row = await upsertOutcome(sql, {
       id: "o-1",
@@ -158,9 +165,11 @@ describe("suggestion_outcomes", () => {
     });
 
     expect(row).toEqual(expected as any);
-    const upsertCall = sql.calls.find((c: Call) => /INSERT INTO suggestion_outcomes/.test(c.query));
-    expect(upsertCall).toBeDefined();
-    expect(upsertCall!.query).toMatch(/ON CONFLICT \(artifact_id\) DO UPDATE/);
-    expect(upsertCall!.values).toContain("merged");
+    expect(sql.calls).toHaveLength(1); // single round-trip via RETURNING *
+    const upsertCall = sql.calls[0];
+    expect(upsertCall.query).toMatch(/INSERT INTO suggestion_outcomes/);
+    expect(upsertCall.query).toMatch(/ON CONFLICT \(artifact_id\) DO UPDATE/);
+    expect(upsertCall.query).toMatch(/RETURNING \*/);
+    expect(upsertCall.values).toContain("merged");
   });
 });

@@ -38,7 +38,7 @@ export async function insertAuditEntry(
       ${input.actor}, ${input.action},
       ${input.repo_installation_id ?? null}, ${input.artifact_id ?? null},
       ${input.policy_version},
-      ${details ? sql`${details}::jsonb` : sql`NULL`}
+      ${details}::jsonb
     )
     RETURNING *`;
   return row as AuditEntry;

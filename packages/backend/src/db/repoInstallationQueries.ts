@@ -78,7 +78,7 @@ export async function insertRepoInstallation(
   const conventionProfile = JSON.stringify(input.convention_profile ?? {});
   const isLive = input.is_live ?? false;
 
-  await sql`
+  const [row] = await sql`
     INSERT INTO repo_installations (
       id, organization_id, github_install_id, owner, repo,
       default_branch, cwd_patterns, is_live, auto_open_pr_kinds, convention_profile
@@ -87,9 +87,8 @@ export async function insertRepoInstallation(
       ${input.id}, ${input.organization_id}, ${input.github_install_id},
       ${input.owner}, ${input.repo}, ${input.default_branch},
       ${cwdPatterns}, ${isLive}, ${autoKinds}, ${conventionProfile}::jsonb
-    )`;
-
-  const [row] = await sql`SELECT * FROM repo_installations WHERE id = ${input.id}`;
+    )
+    RETURNING *`;
   return row as RepoInstallation;
 }
 
@@ -137,25 +136,20 @@ export async function updateRepoInstallation(
     suspended_at: string | null;
   }>
 ): Promise<void> {
-  if (updates.default_branch !== undefined) {
-    await sql`UPDATE repo_installations SET default_branch = ${updates.default_branch} WHERE id = ${id}`;
-  }
-  if (updates.cwd_patterns !== undefined) {
-    await sql`UPDATE repo_installations SET cwd_patterns = ${updates.cwd_patterns} WHERE id = ${id}`;
-  }
-  if (updates.is_live !== undefined) {
-    await sql`UPDATE repo_installations SET is_live = ${updates.is_live} WHERE id = ${id}`;
-  }
-  if (updates.auto_open_pr_kinds !== undefined) {
-    await sql`UPDATE repo_installations SET auto_open_pr_kinds = ${updates.auto_open_pr_kinds} WHERE id = ${id}`;
-  }
-  if (updates.convention_profile !== undefined) {
-    const cp = JSON.stringify(updates.convention_profile);
-    await sql`UPDATE repo_installations SET convention_profile = ${cp}::jsonb WHERE id = ${id}`;
-  }
-  if (updates.suspended_at !== undefined) {
-    await sql`UPDATE repo_installations SET suspended_at = ${updates.suspended_at} WHERE id = ${id}`;
-  }
+  // Single statement: COALESCE keeps the existing column value when the
+  // caller didn't provide a new one. jsonb is serialized to text first; the
+  // ::jsonb cast handles a literal NULL natively.
+  const conventionProfile =
+    updates.convention_profile !== undefined ? JSON.stringify(updates.convention_profile) : null;
+  await sql`
+    UPDATE repo_installations SET
+      default_branch      = COALESCE(${updates.default_branch ?? null}, default_branch),
+      cwd_patterns        = COALESCE(${updates.cwd_patterns ?? null}, cwd_patterns),
+      is_live             = COALESCE(${updates.is_live ?? null}, is_live),
+      auto_open_pr_kinds  = COALESCE(${updates.auto_open_pr_kinds ?? null}, auto_open_pr_kinds),
+      convention_profile  = COALESCE(${conventionProfile}::jsonb, convention_profile),
+      suspended_at        = COALESCE(${updates.suspended_at ?? null}::timestamptz, suspended_at)
+    WHERE id = ${id}`;
 }
 
 export async function deleteRepoInstallation(sql: SQL, id: string): Promise<void> {
