@@ -85,6 +85,28 @@ following all hold:
 | `git clone --depth 1 https://github.com/octocat/Hello-World.git /work/repo` | succeeds | pass |
 | `curl --max-time 4 http://1.1.1.1` (no proxy) | connect refused (no NAT) | pass |
 
+## Security smoke test (Task 3.3)
+
+An automated smoke test confirms the runtime contract above is actually
+enforced — the sandbox cannot exfiltrate via non-allowlisted hosts, write
+outside `/work`, fork-bomb the host, reach the docker socket, or escalate
+capabilities. Each test runs a fresh container with the full flag set.
+
+The test is opt-in via `RUN_SANDBOX_SMOKE=1` so it does not slow down
+`bun test`. From the repo root:
+
+```bash
+docker compose up -d egress-proxy
+cd packages/backend
+RUN_SANDBOX_SMOKE=1 bun test src/services/__tests__/sandbox.smoke.test.ts
+```
+
+Without the env var, all cases are reported as skipped. The suite
+preflight-checks that `devscope/worker-sandbox:local` is built and that
+`egress-proxy` is reachable on `devscope-cloud_devscope-egress-allowlist`;
+if either is missing it fails the preflight test with a clear remedy
+message and skips the rest.
+
 ## Stub status
 
 Two files in this image are **stubs/skeletons** that later tasks will replace:
