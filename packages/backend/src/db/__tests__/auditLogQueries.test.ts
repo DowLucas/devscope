@@ -14,8 +14,8 @@ function makeSql(rows: unknown[] = []) {
 }
 
 describe("insertAuditEntry", () => {
-  test("inserts with all fields and returns the row from RETURNING *", async () => {
-    const expected = {
+  test("inserts with all fields and returns the canonical (camelCase) row from RETURNING *", async () => {
+    const dbRow = {
       id: 1,
       at: "2026-04-25T00:00:00Z",
       actor: "suggestion-worker",
@@ -25,18 +25,27 @@ describe("insertAuditEntry", () => {
       policy_version: "v1.2.3",
       details: { reason: "ok" },
     };
-    const sql = makeSql([expected]);
+    const sql = makeSql([dbRow]);
 
     const row = await insertAuditEntry(sql, {
       actor: "suggestion-worker",
       action: "artifact.publish",
-      repo_installation_id: "ri-1",
-      artifact_id: "a-1",
-      policy_version: "v1.2.3",
+      repoInstallationId: "ri-1",
+      artifactId: "a-1",
+      policyVersion: "v1.2.3",
       details: { reason: "ok" },
     });
 
-    expect(row).toEqual(expected as any);
+    expect(row).toEqual({
+      id: 1,
+      at: "2026-04-25T00:00:00Z",
+      actor: "suggestion-worker",
+      action: "artifact.publish",
+      repoInstallationId: "ri-1",
+      artifactId: "a-1",
+      policyVersion: "v1.2.3",
+      details: { reason: "ok" },
+    });
     expect(sql.calls).toHaveLength(1); // single statement, no nested fragments
     const insertCall = sql.calls[0];
     expect(insertCall.query).toMatch(/INSERT INTO audit_log/);
@@ -51,11 +60,11 @@ describe("insertAuditEntry", () => {
   });
 
   test("nullable optional fields are passed as null", async () => {
-    const sql = makeSql([{ id: 2 }]);
+    const sql = makeSql([{ id: 2, at: "2026-04-25T00:00:00Z", actor: "system", action: "install.suspend", repo_installation_id: null, artifact_id: null, policy_version: "v1.0.0", details: null }]);
     await insertAuditEntry(sql, {
       actor: "system",
       action: "install.suspend",
-      policy_version: "v1.0.0",
+      policyVersion: "v1.0.0",
     });
     expect(sql.calls).toHaveLength(1);
     const insertCall = sql.calls[0];

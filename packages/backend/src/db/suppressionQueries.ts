@@ -1,27 +1,40 @@
 import type { SQL } from "bun";
+import type { SuggestionKind, SuppressionEntry } from "@devscope/shared";
 
 // ---------------------------------------------------------------------------
-// Inline minimal type. Task 1.4 will replace with @devscope/shared import.
+// Row shape (snake_case) — what Postgres returns. Private to this module.
 // ---------------------------------------------------------------------------
 
-export type SuppressionEntry = {
+interface SuppressionRow {
   suppression_key: string;
   repo_installation_id: string;
-  kind: string;
-  last_rejected_at: string;
+  kind: SuggestionKind;
+  last_rejected_at: string | Date;
   rejection_reason: string | null;
   rejection_count: number;
-  next_eligible_at: string;
-};
+  next_eligible_at: string | Date;
+}
 
-export type SuppressionUpsertInput = {
-  suppression_key: string;
-  repo_installation_id: string;
-  kind: string;
+function rowToSuppression(row: SuppressionRow): SuppressionEntry {
+  return {
+    suppressionKey: row.suppression_key,
+    repoInstallationId: row.repo_installation_id,
+    kind: row.kind,
+    lastRejectedAt: row.last_rejected_at,
+    rejectionReason: row.rejection_reason,
+    rejectionCount: row.rejection_count,
+    nextEligibleAt: row.next_eligible_at,
+  };
+}
+
+export interface SuppressionUpsertInput {
+  suppressionKey: string;
+  repoInstallationId: string;
+  kind: SuggestionKind;
   /** ISO timestamp at which the suggestion may be reconsidered. */
-  next_eligible_at: string;
-  rejection_reason?: string;
-};
+  nextEligibleAt: string;
+  rejectionReason?: string;
+}
 
 export async function getSuppression(
   sql: SQL,
@@ -30,7 +43,7 @@ export async function getSuppression(
   const [row] = await sql`
     SELECT * FROM suppression_ledger
     WHERE suppression_key = ${suppressionKey}`;
-  return (row as SuppressionEntry) ?? null;
+  return row ? rowToSuppression(row as SuppressionRow) : null;
 }
 
 /**
@@ -49,8 +62,8 @@ export async function upsertSuppression(
       last_rejected_at, rejection_reason, rejection_count, next_eligible_at
     )
     VALUES (
-      ${input.suppression_key}, ${input.repo_installation_id}, ${input.kind},
-      NOW(), ${input.rejection_reason ?? null}, 1, ${input.next_eligible_at}::timestamptz
+      ${input.suppressionKey}, ${input.repoInstallationId}, ${input.kind},
+      NOW(), ${input.rejectionReason ?? null}, 1, ${input.nextEligibleAt}::timestamptz
     )
     ON CONFLICT (suppression_key) DO UPDATE SET
       last_rejected_at = NOW(),
@@ -59,6 +72,6 @@ export async function upsertSuppression(
       next_eligible_at = GREATEST(suppression_ledger.next_eligible_at, EXCLUDED.next_eligible_at)`;
 
   const [row] = await sql`
-    SELECT * FROM suppression_ledger WHERE suppression_key = ${input.suppression_key}`;
-  return row as SuppressionEntry;
+    SELECT * FROM suppression_ledger WHERE suppression_key = ${input.suppressionKey}`;
+  return rowToSuppression(row as SuppressionRow);
 }

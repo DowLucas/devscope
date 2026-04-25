@@ -45,20 +45,37 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("repo_installations queries", () => {
-  test("insertRepoInstallation inserts with defaults and returns row from RETURNING *", async () => {
-    const expected = { id: "ri-1", organization_id: "org-1" };
-    const sql = makeSql([{ match: /INSERT INTO repo_installations/, rows: [expected] }]);
-
-    const row = await insertRepoInstallation(sql, {
+  test("insertRepoInstallation inserts with defaults and returns canonical (camelCase) row from RETURNING *", async () => {
+    // Postgres returns snake_case; the mapper converts to canonical camelCase.
+    const dbRow = {
       id: "ri-1",
       organization_id: "org-1",
       github_install_id: 42,
       owner: "acme",
       repo: "widgets",
       default_branch: "main",
+      cwd_patterns: [],
+      is_live: false,
+      auto_open_pr_kinds: [],
+      convention_profile: {},
+      installed_at: "2026-04-25T00:00:00Z",
+      suspended_at: null,
+    };
+    const sql = makeSql([{ match: /INSERT INTO repo_installations/, rows: [dbRow] }]);
+
+    const row = await insertRepoInstallation(sql, {
+      id: "ri-1",
+      organizationId: "org-1",
+      githubInstallId: 42,
+      owner: "acme",
+      repo: "widgets",
+      defaultBranch: "main",
     });
 
-    expect(row).toEqual(expected as any);
+    expect(row.id).toBe("ri-1");
+    expect(row.organizationId).toBe("org-1");
+    expect(row.githubInstallId).toBe(42);
+    expect(row.defaultBranch).toBe("main");
     expect(sql.calls).toHaveLength(1); // single round-trip via RETURNING *
     const insertCall = sql.calls[0];
     expect(insertCall.query).toMatch(/RETURNING \*/);
@@ -73,10 +90,33 @@ describe("repo_installations queries", () => {
     expect(row).toBeNull();
   });
 
-  test("listRepoInstallationsForOrg filters by organization_id", async () => {
-    const sql = makeSql([{ match: /WHERE organization_id/, rows: [{ id: "ri-1" }, { id: "ri-2" }] }]);
+  test("listRepoInstallationsForOrg filters by organization_id and maps every row", async () => {
+    const baseRow = {
+      organization_id: "org-1",
+      github_install_id: 1,
+      owner: "a",
+      repo: "b",
+      default_branch: "main",
+      cwd_patterns: [],
+      is_live: false,
+      auto_open_pr_kinds: [],
+      convention_profile: {},
+      installed_at: "2026-04-25T00:00:00Z",
+      suspended_at: null,
+    };
+    const sql = makeSql([
+      {
+        match: /WHERE organization_id/,
+        rows: [
+          { ...baseRow, id: "ri-1" },
+          { ...baseRow, id: "ri-2" },
+        ],
+      },
+    ]);
     const rows = await listRepoInstallationsForOrg(sql, "org-1");
     expect(rows).toHaveLength(2);
+    expect(rows[0].id).toBe("ri-1");
+    expect(rows[1].id).toBe("ri-2");
     expect(sql.calls[0].values).toContain("org-1");
   });
 });
@@ -98,7 +138,7 @@ describe("installation_tokens (encryption)", () => {
     expect(insertCall.values).toContain("test-key-base64");
   });
 
-  test("getInstallationToken SQL contains pgp_sym_decrypt and dearmor", async () => {
+  test("getInstallationToken SQL contains pgp_sym_decrypt and dearmor and returns canonical shape", async () => {
     const sql = makeSql([
       {
         match: /pgp_sym_decrypt/,
@@ -114,6 +154,7 @@ describe("installation_tokens (encryption)", () => {
     ]);
     const row = await getInstallationToken(sql, 123);
     expect(row?.token).toBe("plaintext"); // caller sees plaintext
+    expect(row?.githubInstallId).toBe(123); // canonical camelCase
     const selectCall = sql.calls[0];
     expect(selectCall.query).toContain("pgp_sym_decrypt");
     expect(selectCall.query).toContain("dearmor(");

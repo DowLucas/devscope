@@ -7,3 +7,4 @@ export * from "./friction";
 export * from "./claudeMd";
 export * from "./topology";
 export * from "./workflowProfiles";
+export * from "./github";

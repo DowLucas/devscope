@@ -27,11 +27,9 @@ function makeSql(rowsByMatch: Array<{ match: RegExp; rows: unknown[] }> = []) {
 // ---------------------------------------------------------------------------
 
 describe("suggestion_candidates", () => {
-  test("insertCandidate serializes JSON fields, applies defaults, returns row via RETURNING *", async () => {
-    const expected = { id: "c-1", status: "queued" };
-    const sql = makeSql([{ match: /INSERT INTO suggestion_candidates/, rows: [expected] }]);
-
-    const row = await insertCandidate(sql, {
+  test("insertCandidate serializes JSON fields, applies defaults, returns canonical row via RETURNING *", async () => {
+    // Postgres returns snake_case; the mapper converts to canonical camelCase.
+    const dbRow = {
       id: "c-1",
       repo_installation_id: "ri-1",
       kind: "claude_md",
@@ -39,16 +37,50 @@ describe("suggestion_candidates", () => {
       evidence_score: 0.42,
       evidence_breakdown: { recurrence: 0.5 },
       summary: "tighten rule",
+      status: "queued",
+      priority: 0,
       suppression_key: "sk-1",
+      created_at: "2026-04-25T00:00:00Z",
+      claimed_at: null,
+      claim_expires_at: null,
+    };
+    const sql = makeSql([{ match: /INSERT INTO suggestion_candidates/, rows: [dbRow] }]);
+
+    const row = await insertCandidate(sql, {
+      id: "c-1",
+      repoInstallationId: "ri-1",
+      kind: "claude_md",
+      evidenceRefs: {
+        patternIds: [],
+        antiPatternIds: [],
+        sessionIds: ["s1"],
+        insightIds: [],
+      },
+      evidenceScore: 0.42,
+      evidenceBreakdown: {
+        breadth: 0.5,
+        engineerDiversity: 0.5,
+        recency: 0.5,
+        consistency: 0.5,
+        severity: 0.5,
+      },
+      summary: "tighten rule",
+      suppressionKey: "sk-1",
     });
 
-    expect(row).toEqual(expected as any);
+    expect(row.id).toBe("c-1");
+    expect(row.status).toBe("queued");
+    expect(row.repoInstallationId).toBe("ri-1");
     expect(sql.calls).toHaveLength(1); // single round-trip via RETURNING *
     const insertCall = sql.calls[0];
     expect(insertCall.query).toMatch(/INSERT INTO suggestion_candidates/);
     expect(insertCall.query).toMatch(/RETURNING \*/);
-    expect(insertCall.values).toContain(JSON.stringify({ sessions: ["s1"] }));
-    expect(insertCall.values).toContain(JSON.stringify({ recurrence: 0.5 }));
+    // evidence_refs JSON-serialized for the ::jsonb cast
+    expect(
+      (insertCall.values as unknown[]).some(
+        v => typeof v === "string" && v.startsWith("{") && v.includes('"sessionIds"')
+      )
+    ).toBe(true);
     expect(insertCall.values).toContain("queued"); // default status
     expect(insertCall.values).toContain(0); // default priority
   });
@@ -94,15 +126,27 @@ describe("claimNextCandidate", () => {
     expect(result).toBeNull();
   });
 
-  test("returns the claimed row when one was queued", async () => {
+  test("returns the claimed row (mapped to canonical) when one was queued", async () => {
     const claimed = {
       id: "c-1",
+      repo_installation_id: "ri-1",
+      kind: "claude_md",
+      evidence_refs: {},
+      evidence_score: 0,
+      evidence_breakdown: {},
+      summary: "",
       status: "in_progress",
+      priority: 0,
+      suppression_key: "sk-1",
+      created_at: "2026-04-25T00:00:00Z",
       claimed_at: "2026-04-25T00:00:00Z",
+      claim_expires_at: null,
     };
     const sql = makeSql([{ match: /UPDATE suggestion_candidates/, rows: [claimed] }]);
     const result = await claimNextCandidate(sql);
-    expect(result).toEqual(claimed as any);
+    expect(result?.id).toBe("c-1");
+    expect(result?.status).toBe("in_progress");
+    expect(result?.claimedAt).toBe("2026-04-25T00:00:00Z");
   });
 
   test("inner SELECT only considers rows with status='queued' (skips in_progress)", async () => {
@@ -119,11 +163,8 @@ describe("claimNextCandidate", () => {
 // ---------------------------------------------------------------------------
 
 describe("suggestion_artifacts", () => {
-  test("insertArtifact serializes verification_results, respects nullable rubric, returns row via RETURNING *", async () => {
-    const expected = { id: "a-1" };
-    const sql = makeSql([{ match: /INSERT INTO suggestion_artifacts/, rows: [expected] }]);
-
-    const row = await insertArtifact(sql, {
+  test("insertArtifact serializes verification_results, respects nullable rubric, returns canonical row via RETURNING *", async () => {
+    const dbRow = {
       id: "a-1",
       candidate_id: "c-1",
       patch: "diff --git a b",
@@ -131,16 +172,44 @@ describe("suggestion_artifacts", () => {
       title: "t",
       body: "b",
       model: "claude",
-      verification_results: { lint: "pass" },
+      verification_results: [],
+      rubric_scores: null,
+      quality_ranking: null,
+      status: "ready",
+      github_pr_number: null,
+      github_branch: null,
+      published_at: null,
+      created_at: "2026-04-25T00:00:00Z",
+    };
+    const sql = makeSql([{ match: /INSERT INTO suggestion_artifacts/, rows: [dbRow] }]);
+
+    const row = await insertArtifact(sql, {
+      id: "a-1",
+      candidateId: "c-1",
+      patch: "diff --git a b",
+      filesChanged: ["CLAUDE.md"],
+      title: "t",
+      body: "b",
+      model: "claude",
+      verificationResults: [
+        { gate: "lint", pass: true, reason: "ok" },
+      ],
       status: "ready",
     });
 
-    expect(row).toEqual(expected as any);
+    expect(row.id).toBe("a-1");
+    expect(row.candidateId).toBe("c-1");
+    expect(row.filesChanged).toEqual(["CLAUDE.md"]);
     expect(sql.calls).toHaveLength(1); // single round-trip via RETURNING *
     const insertCall = sql.calls[0];
     expect(insertCall.query).toMatch(/INSERT INTO suggestion_artifacts/);
     expect(insertCall.query).toMatch(/RETURNING \*/);
-    expect(insertCall.values).toContain(JSON.stringify({ lint: "pass" }));
+    // verification_results JSON-serialized
+    expect(
+      (insertCall.values as unknown[]).some(
+        v => typeof v === "string" && v.includes('"gate"') && v.includes('"lint"')
+      )
+    ).toBe(true);
     // rubric_scores omitted → bound as null with ::jsonb cast
     expect(insertCall.values).toContain(null);
     // files_changed should be passed as a JS array (Bun.sql handles text[])
@@ -153,18 +222,31 @@ describe("suggestion_artifacts", () => {
 // ---------------------------------------------------------------------------
 
 describe("suggestion_outcomes", () => {
-  test("upsertOutcome uses ON CONFLICT (artifact_id) to merge and returns row via RETURNING *", async () => {
-    const expected = { id: "o-1", artifact_id: "a-1" };
-    const sql = makeSql([{ match: /INSERT INTO suggestion_outcomes/, rows: [expected] }]);
-
-    const row = await upsertOutcome(sql, {
+  test("upsertOutcome uses ON CONFLICT (artifact_id) to merge and returns canonical row via RETURNING *", async () => {
+    const dbRow = {
       id: "o-1",
       artifact_id: "a-1",
       pr_state: "merged",
       merged_at: "2026-04-20T00:00:00Z",
+      reviewer_verdict: null,
+      reviewer_comment: null,
+      persisted_30d: null,
+      reverted_at: null,
+      measured_at: null,
+      created_at: "2026-04-25T00:00:00Z",
+    };
+    const sql = makeSql([{ match: /INSERT INTO suggestion_outcomes/, rows: [dbRow] }]);
+
+    const row = await upsertOutcome(sql, {
+      id: "o-1",
+      artifactId: "a-1",
+      prState: "merged",
+      mergedAt: "2026-04-20T00:00:00Z",
     });
 
-    expect(row).toEqual(expected as any);
+    expect(row.id).toBe("o-1");
+    expect(row.artifactId).toBe("a-1");
+    expect(row.prState).toBe("merged");
     expect(sql.calls).toHaveLength(1); // single round-trip via RETURNING *
     const upsertCall = sql.calls[0];
     expect(upsertCall.query).toMatch(/INSERT INTO suggestion_outcomes/);

@@ -1,66 +1,40 @@
 import type { SQL } from "bun";
+import type {
+  EvidenceBreakdown,
+  EvidenceRefs,
+  PrState,
+  ReviewerVerdict,
+  RubricScores,
+  SuggestionArtifact,
+  SuggestionArtifactStatus,
+  SuggestionCandidate,
+  SuggestionCandidateStatus,
+  SuggestionKind,
+  SuggestionOutcome,
+  VerificationResult,
+} from "@devscope/shared";
 
 // ---------------------------------------------------------------------------
-// Inline minimal types. Task 1.4 will replace these with @devscope/shared imports.
+// Row shapes (snake_case) — what Postgres returns. Private to this module.
 // ---------------------------------------------------------------------------
 
-export type SuggestionKind =
-  | "claude_md"
-  | "skill"
-  | "hook"
-  | "command"
-  | "agent"
-  | "config"
-  | "remove";
-
-export type SuggestionCandidateStatus =
-  | "queued"
-  | "in_progress"
-  | "artifact_ready"
-  | "dismissed"
-  | "failed"
-  | "stale";
-
-export type SuggestionArtifactStatus =
-  | "shadow"
-  | "ready"
-  | "published"
-  | "rejected_by_reviewer"
-  | "failed"
-  | "superseded";
-
-export type PrState = "open" | "merged" | "closed_without_merge";
-
-export type SuggestionCandidate = {
+interface SuggestionCandidateRow {
   id: string;
   repo_installation_id: string;
   kind: SuggestionKind;
-  evidence_refs: unknown;
+  evidence_refs: EvidenceRefs;
   evidence_score: number;
-  evidence_breakdown: unknown;
+  evidence_breakdown: EvidenceBreakdown;
   summary: string;
   status: SuggestionCandidateStatus;
   priority: number;
   suppression_key: string;
-  created_at: string;
-  claimed_at: string | null;
-  claim_expires_at: string | null;
-};
+  created_at: string | Date;
+  claimed_at: string | Date | null;
+  claim_expires_at: string | Date | null;
+}
 
-export type SuggestionCandidateInsert = {
-  id: string;
-  repo_installation_id: string;
-  kind: SuggestionKind;
-  evidence_refs: unknown;
-  evidence_score: number;
-  evidence_breakdown: unknown;
-  summary: string;
-  suppression_key: string;
-  priority?: number;
-  status?: SuggestionCandidateStatus;
-};
-
-export type SuggestionArtifact = {
+interface SuggestionArtifactRow {
   id: string;
   candidate_id: string;
   patch: string;
@@ -68,54 +42,124 @@ export type SuggestionArtifact = {
   title: string;
   body: string;
   model: string;
-  verification_results: unknown;
-  rubric_scores: unknown | null;
+  verification_results: VerificationResult[];
+  rubric_scores: RubricScores | null;
   quality_ranking: number | null;
   status: SuggestionArtifactStatus;
   github_pr_number: number | null;
   github_branch: string | null;
-  published_at: string | null;
-  created_at: string;
-};
+  published_at: string | Date | null;
+  created_at: string | Date;
+}
 
-export type SuggestionArtifactInsert = {
-  id: string;
-  candidate_id: string;
-  patch: string;
-  files_changed: string[];
-  title: string;
-  body: string;
-  model: string;
-  verification_results: unknown;
-  status: SuggestionArtifactStatus;
-  rubric_scores?: unknown;
-  quality_ranking?: number;
-};
-
-export type SuggestionOutcome = {
+interface SuggestionOutcomeRow {
   id: string;
   artifact_id: string;
   pr_state: PrState | null;
-  merged_at: string | null;
-  reviewer_verdict: string | null;
+  merged_at: string | Date | null;
+  reviewer_verdict: ReviewerVerdict | null;
   reviewer_comment: string | null;
   persisted_30d: boolean | null;
-  reverted_at: string | null;
-  measured_at: string | null;
-  created_at: string;
-};
+  reverted_at: string | Date | null;
+  measured_at: string | Date | null;
+  created_at: string | Date;
+}
 
-export type SuggestionOutcomeUpsert = {
+function rowToCandidate(row: SuggestionCandidateRow): SuggestionCandidate {
+  return {
+    id: row.id,
+    repoInstallationId: row.repo_installation_id,
+    kind: row.kind,
+    evidenceRefs: row.evidence_refs,
+    evidenceScore: row.evidence_score,
+    evidenceBreakdown: row.evidence_breakdown,
+    summary: row.summary,
+    status: row.status,
+    priority: row.priority,
+    suppressionKey: row.suppression_key,
+    createdAt: row.created_at,
+    claimedAt: row.claimed_at,
+    claimExpiresAt: row.claim_expires_at,
+  };
+}
+
+function rowToArtifact(row: SuggestionArtifactRow): SuggestionArtifact {
+  return {
+    id: row.id,
+    candidateId: row.candidate_id,
+    patch: row.patch,
+    filesChanged: row.files_changed,
+    title: row.title,
+    body: row.body,
+    model: row.model,
+    verificationResults: row.verification_results,
+    rubricScores: row.rubric_scores,
+    qualityRanking: row.quality_ranking,
+    status: row.status,
+    githubPrNumber: row.github_pr_number,
+    githubBranch: row.github_branch,
+    publishedAt: row.published_at,
+    createdAt: row.created_at,
+  };
+}
+
+function rowToOutcome(row: SuggestionOutcomeRow): SuggestionOutcome {
+  return {
+    id: row.id,
+    artifactId: row.artifact_id,
+    prState: row.pr_state,
+    mergedAt: row.merged_at,
+    reviewerVerdict: row.reviewer_verdict,
+    reviewerComment: row.reviewer_comment,
+    persisted30d: row.persisted_30d,
+    revertedAt: row.reverted_at,
+    measuredAt: row.measured_at,
+    createdAt: row.created_at,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Insert/upsert inputs (camelCase)
+// ---------------------------------------------------------------------------
+
+export interface SuggestionCandidateInsert {
   id: string;
-  artifact_id: string;
-  pr_state?: PrState;
-  merged_at?: string;
-  reviewer_verdict?: string;
-  reviewer_comment?: string;
-  persisted_30d?: boolean;
-  reverted_at?: string;
-  measured_at?: string;
-};
+  repoInstallationId: string;
+  kind: SuggestionKind;
+  evidenceRefs: EvidenceRefs;
+  evidenceScore: number;
+  evidenceBreakdown: EvidenceBreakdown;
+  summary: string;
+  suppressionKey: string;
+  priority?: number;
+  status?: SuggestionCandidateStatus;
+}
+
+export interface SuggestionArtifactInsert {
+  id: string;
+  candidateId: string;
+  patch: string;
+  filesChanged: string[];
+  title: string;
+  body: string;
+  model: string;
+  verificationResults: VerificationResult[];
+  status: SuggestionArtifactStatus;
+  rubricScores?: RubricScores;
+  qualityRanking?: number;
+}
+
+export interface SuggestionOutcomeUpsert {
+  id: string;
+  artifactId: string;
+  prState?: PrState;
+  mergedAt?: string;
+  reviewerVerdict?: ReviewerVerdict;
+  reviewerComment?: string;
+  persisted30d?: boolean;
+  revertedAt?: string;
+  measuredAt?: string;
+}
 
 // ---------------------------------------------------------------------------
 // suggestion_candidates
@@ -125,8 +169,8 @@ export async function insertCandidate(
   sql: SQL,
   input: SuggestionCandidateInsert
 ): Promise<SuggestionCandidate> {
-  const evidenceRefs = JSON.stringify(input.evidence_refs);
-  const evidenceBreakdown = JSON.stringify(input.evidence_breakdown);
+  const evidenceRefs = JSON.stringify(input.evidenceRefs);
+  const evidenceBreakdown = JSON.stringify(input.evidenceBreakdown);
   const status: SuggestionCandidateStatus = input.status ?? "queued";
   const priority = input.priority ?? 0;
 
@@ -136,13 +180,13 @@ export async function insertCandidate(
       evidence_breakdown, summary, status, priority, suppression_key
     )
     VALUES (
-      ${input.id}, ${input.repo_installation_id}, ${input.kind},
-      ${evidenceRefs}::jsonb, ${input.evidence_score},
+      ${input.id}, ${input.repoInstallationId}, ${input.kind},
+      ${evidenceRefs}::jsonb, ${input.evidenceScore},
       ${evidenceBreakdown}::jsonb, ${input.summary}, ${status},
-      ${priority}, ${input.suppression_key}
+      ${priority}, ${input.suppressionKey}
     )
     RETURNING *`;
-  return row as SuggestionCandidate;
+  return rowToCandidate(row as SuggestionCandidateRow);
 }
 
 export async function getCandidate(
@@ -150,7 +194,7 @@ export async function getCandidate(
   id: string
 ): Promise<SuggestionCandidate | null> {
   const [row] = await sql`SELECT * FROM suggestion_candidates WHERE id = ${id}`;
-  return (row as SuggestionCandidate) ?? null;
+  return row ? rowToCandidate(row as SuggestionCandidateRow) : null;
 }
 
 export async function updateCandidateStatus(
@@ -169,7 +213,7 @@ export async function updateCandidateStatus(
 export async function claimNextCandidate(
   sql: SQL
 ): Promise<SuggestionCandidate | null> {
-  const rows = await sql`
+  const rows = (await sql`
     UPDATE suggestion_candidates sc
     SET status = 'in_progress',
         claimed_at = NOW(),
@@ -182,9 +226,8 @@ export async function claimNextCandidate(
       LIMIT 1
     ) picked
     WHERE sc.id = picked.id
-    RETURNING sc.*`;
-  const list = rows as SuggestionCandidate[];
-  return list[0] ?? null;
+    RETURNING sc.*`) as SuggestionCandidateRow[];
+  return rows[0] ? rowToCandidate(rows[0]) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -195,8 +238,8 @@ export async function insertArtifact(
   sql: SQL,
   input: SuggestionArtifactInsert
 ): Promise<SuggestionArtifact> {
-  const verification = JSON.stringify(input.verification_results);
-  const rubric = input.rubric_scores !== undefined ? JSON.stringify(input.rubric_scores) : null;
+  const verification = JSON.stringify(input.verificationResults);
+  const rubric = input.rubricScores !== undefined ? JSON.stringify(input.rubricScores) : null;
 
   const [row] = await sql`
     INSERT INTO suggestion_artifacts (
@@ -204,15 +247,15 @@ export async function insertArtifact(
       verification_results, rubric_scores, quality_ranking, status
     )
     VALUES (
-      ${input.id}, ${input.candidate_id}, ${input.patch},
-      ${input.files_changed}, ${input.title}, ${input.body}, ${input.model},
+      ${input.id}, ${input.candidateId}, ${input.patch},
+      ${input.filesChanged}, ${input.title}, ${input.body}, ${input.model},
       ${verification}::jsonb,
       ${rubric}::jsonb,
-      ${input.quality_ranking ?? null},
+      ${input.qualityRanking ?? null},
       ${input.status}
     )
     RETURNING *`;
-  return row as SuggestionArtifact;
+  return rowToArtifact(row as SuggestionArtifactRow);
 }
 
 export async function getArtifact(
@@ -220,23 +263,23 @@ export async function getArtifact(
   id: string
 ): Promise<SuggestionArtifact | null> {
   const [row] = await sql`SELECT * FROM suggestion_artifacts WHERE id = ${id}`;
-  return (row as SuggestionArtifact) ?? null;
+  return row ? rowToArtifact(row as SuggestionArtifactRow) : null;
 }
 
 export async function updateArtifactStatus(
   sql: SQL,
   id: string,
   status: SuggestionArtifactStatus,
-  opts?: { github_pr_number?: number; github_branch?: string; published_at?: string }
+  opts?: { githubPrNumber?: number; githubBranch?: string; publishedAt?: string }
 ): Promise<void> {
   // Single statement: status is always set; the optional fields are merged
   // via COALESCE so an absent value preserves the existing column.
   await sql`
     UPDATE suggestion_artifacts SET
       status           = ${status},
-      github_pr_number = COALESCE(${opts?.github_pr_number ?? null}, github_pr_number),
-      github_branch    = COALESCE(${opts?.github_branch ?? null}, github_branch),
-      published_at     = COALESCE(${opts?.published_at ?? null}::timestamptz, published_at)
+      github_pr_number = COALESCE(${opts?.githubPrNumber ?? null}, github_pr_number),
+      github_branch    = COALESCE(${opts?.githubBranch ?? null}, github_branch),
+      published_at     = COALESCE(${opts?.publishedAt ?? null}::timestamptz, published_at)
     WHERE id = ${id}`;
 }
 
@@ -254,10 +297,10 @@ export async function upsertOutcome(
       reviewer_comment, persisted_30d, reverted_at, measured_at
     )
     VALUES (
-      ${input.id}, ${input.artifact_id}, ${input.pr_state ?? null},
-      ${input.merged_at ?? null}::timestamptz, ${input.reviewer_verdict ?? null},
-      ${input.reviewer_comment ?? null}, ${input.persisted_30d ?? null},
-      ${input.reverted_at ?? null}::timestamptz, ${input.measured_at ?? null}::timestamptz
+      ${input.id}, ${input.artifactId}, ${input.prState ?? null},
+      ${input.mergedAt ?? null}::timestamptz, ${input.reviewerVerdict ?? null},
+      ${input.reviewerComment ?? null}, ${input.persisted30d ?? null},
+      ${input.revertedAt ?? null}::timestamptz, ${input.measuredAt ?? null}::timestamptz
     )
     ON CONFLICT (artifact_id) DO UPDATE SET
       pr_state         = COALESCE(EXCLUDED.pr_state, suggestion_outcomes.pr_state),
@@ -268,7 +311,7 @@ export async function upsertOutcome(
       reverted_at      = COALESCE(EXCLUDED.reverted_at, suggestion_outcomes.reverted_at),
       measured_at      = COALESCE(EXCLUDED.measured_at, suggestion_outcomes.measured_at)
     RETURNING *`;
-  return row as SuggestionOutcome;
+  return rowToOutcome(row as SuggestionOutcomeRow);
 }
 
 export async function getOutcome(
@@ -276,5 +319,5 @@ export async function getOutcome(
   artifactId: string
 ): Promise<SuggestionOutcome | null> {
   const [row] = await sql`SELECT * FROM suggestion_outcomes WHERE artifact_id = ${artifactId}`;
-  return (row as SuggestionOutcome) ?? null;
+  return row ? rowToOutcome(row as SuggestionOutcomeRow) : null;
 }

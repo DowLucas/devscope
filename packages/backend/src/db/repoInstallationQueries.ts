@@ -1,11 +1,17 @@
 import type { SQL } from "bun";
+import type {
+  ConventionProfile,
+  InstallationToken,
+  RepoInstallation,
+  SuggestionKind,
+} from "@devscope/shared";
 
 // ---------------------------------------------------------------------------
-// Inline minimal types. Task 1.4 will add canonical versions to @devscope/shared
-// at which point these can be replaced by imports without changing call sites.
+// Row shape (snake_case) — what Postgres returns. Private to this module.
+// Maps to the canonical `RepoInstallation` from @devscope/shared.
 // ---------------------------------------------------------------------------
 
-export type RepoInstallation = {
+interface RepoInstallationRow {
   id: string;
   organization_id: string;
   github_install_id: number;
@@ -16,30 +22,69 @@ export type RepoInstallation = {
   is_live: boolean;
   auto_open_pr_kinds: string[];
   convention_profile: Record<string, unknown>;
-  installed_at: string;
-  suspended_at: string | null;
-};
+  installed_at: string | Date;
+  suspended_at: string | Date | null;
+}
 
-export type RepoInstallationInsert = {
-  id: string;
-  organization_id: string;
-  github_install_id: number;
-  owner: string;
-  repo: string;
-  default_branch: string;
-  cwd_patterns?: string[];
-  is_live?: boolean;
-  auto_open_pr_kinds?: string[];
-  convention_profile?: Record<string, unknown>;
-};
-
-export type InstallationToken = {
+interface InstallationTokenRow {
   github_install_id: number;
   /** Plaintext — decrypted at the SQL boundary. */
   token: string;
-  expires_at: string;
-  refreshed_at: string;
-};
+  expires_at: string | Date;
+  refreshed_at: string | Date;
+}
+
+function rowToRepoInstallation(row: RepoInstallationRow): RepoInstallation {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    githubInstallId: row.github_install_id,
+    owner: row.owner,
+    repo: row.repo,
+    defaultBranch: row.default_branch,
+    cwdPatterns: row.cwd_patterns,
+    isLive: row.is_live,
+    autoOpenPrKinds: row.auto_open_pr_kinds as SuggestionKind[],
+    conventionProfile: row.convention_profile as ConventionProfile,
+    installedAt: row.installed_at,
+    suspendedAt: row.suspended_at,
+  };
+}
+
+function rowToInstallationToken(row: InstallationTokenRow): InstallationToken {
+  return {
+    githubInstallId: row.github_install_id,
+    token: row.token,
+    expiresAt: row.expires_at,
+    refreshedAt: row.refreshed_at,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Insert/update inputs (camelCase, canonical-aligned)
+// ---------------------------------------------------------------------------
+
+export interface RepoInstallationInsert {
+  id: string;
+  organizationId: string;
+  githubInstallId: number;
+  owner: string;
+  repo: string;
+  defaultBranch: string;
+  cwdPatterns?: string[];
+  isLive?: boolean;
+  autoOpenPrKinds?: SuggestionKind[];
+  conventionProfile?: ConventionProfile;
+}
+
+export interface RepoInstallationUpdate {
+  defaultBranch?: string;
+  cwdPatterns?: string[];
+  isLive?: boolean;
+  autoOpenPrKinds?: SuggestionKind[];
+  conventionProfile?: ConventionProfile;
+  suspendedAt?: string | null;
+}
 
 // ---------------------------------------------------------------------------
 // pgcrypto key handling
@@ -73,10 +118,10 @@ export async function insertRepoInstallation(
   sql: SQL,
   input: RepoInstallationInsert
 ): Promise<RepoInstallation> {
-  const cwdPatterns = input.cwd_patterns ?? [];
-  const autoKinds = input.auto_open_pr_kinds ?? [];
-  const conventionProfile = JSON.stringify(input.convention_profile ?? {});
-  const isLive = input.is_live ?? false;
+  const cwdPatterns = input.cwdPatterns ?? [];
+  const autoKinds = input.autoOpenPrKinds ?? [];
+  const conventionProfile = JSON.stringify(input.conventionProfile ?? {});
+  const isLive = input.isLive ?? false;
 
   const [row] = await sql`
     INSERT INTO repo_installations (
@@ -84,12 +129,12 @@ export async function insertRepoInstallation(
       default_branch, cwd_patterns, is_live, auto_open_pr_kinds, convention_profile
     )
     VALUES (
-      ${input.id}, ${input.organization_id}, ${input.github_install_id},
-      ${input.owner}, ${input.repo}, ${input.default_branch},
+      ${input.id}, ${input.organizationId}, ${input.githubInstallId},
+      ${input.owner}, ${input.repo}, ${input.defaultBranch},
       ${cwdPatterns}, ${isLive}, ${autoKinds}, ${conventionProfile}::jsonb
     )
     RETURNING *`;
-  return row as RepoInstallation;
+  return rowToRepoInstallation(row as RepoInstallationRow);
 }
 
 export async function getRepoInstallation(
@@ -97,7 +142,7 @@ export async function getRepoInstallation(
   id: string
 ): Promise<RepoInstallation | null> {
   const [row] = await sql`SELECT * FROM repo_installations WHERE id = ${id}`;
-  return (row as RepoInstallation) ?? null;
+  return row ? rowToRepoInstallation(row as RepoInstallationRow) : null;
 }
 
 export async function getRepoInstallationByGithubId(
@@ -111,44 +156,38 @@ export async function getRepoInstallationByGithubId(
     WHERE github_install_id = ${githubInstallId}
       AND owner = ${owner}
       AND repo = ${repo}`;
-  return (row as RepoInstallation) ?? null;
+  return row ? rowToRepoInstallation(row as RepoInstallationRow) : null;
 }
 
 export async function listRepoInstallationsForOrg(
   sql: SQL,
   organizationId: string
 ): Promise<RepoInstallation[]> {
-  return (await sql`
+  const rows = (await sql`
     SELECT * FROM repo_installations
     WHERE organization_id = ${organizationId}
-    ORDER BY installed_at DESC`) as RepoInstallation[];
+    ORDER BY installed_at DESC`) as RepoInstallationRow[];
+  return rows.map(rowToRepoInstallation);
 }
 
 export async function updateRepoInstallation(
   sql: SQL,
   id: string,
-  updates: Partial<{
-    default_branch: string;
-    cwd_patterns: string[];
-    is_live: boolean;
-    auto_open_pr_kinds: string[];
-    convention_profile: Record<string, unknown>;
-    suspended_at: string | null;
-  }>
+  updates: RepoInstallationUpdate
 ): Promise<void> {
   // Single statement: COALESCE keeps the existing column value when the
   // caller didn't provide a new one. jsonb is serialized to text first; the
   // ::jsonb cast handles a literal NULL natively.
   const conventionProfile =
-    updates.convention_profile !== undefined ? JSON.stringify(updates.convention_profile) : null;
+    updates.conventionProfile !== undefined ? JSON.stringify(updates.conventionProfile) : null;
   await sql`
     UPDATE repo_installations SET
-      default_branch      = COALESCE(${updates.default_branch ?? null}, default_branch),
-      cwd_patterns        = COALESCE(${updates.cwd_patterns ?? null}, cwd_patterns),
-      is_live             = COALESCE(${updates.is_live ?? null}, is_live),
-      auto_open_pr_kinds  = COALESCE(${updates.auto_open_pr_kinds ?? null}, auto_open_pr_kinds),
+      default_branch      = COALESCE(${updates.defaultBranch ?? null}, default_branch),
+      cwd_patterns        = COALESCE(${updates.cwdPatterns ?? null}, cwd_patterns),
+      is_live             = COALESCE(${updates.isLive ?? null}, is_live),
+      auto_open_pr_kinds  = COALESCE(${updates.autoOpenPrKinds ?? null}, auto_open_pr_kinds),
       convention_profile  = COALESCE(${conventionProfile}::jsonb, convention_profile),
-      suspended_at        = COALESCE(${updates.suspended_at ?? null}::timestamptz, suspended_at)
+      suspended_at        = COALESCE(${updates.suspendedAt ?? null}::timestamptz, suspended_at)
     WHERE id = ${id}`;
 }
 
@@ -202,7 +241,7 @@ export async function getInstallationToken(
       refreshed_at
     FROM installation_tokens
     WHERE github_install_id = ${githubInstallId}`;
-  return (row as InstallationToken) ?? null;
+  return row ? rowToInstallationToken(row as InstallationTokenRow) : null;
 }
 
 export async function deleteInstallationToken(
