@@ -288,6 +288,9 @@ describe("POST /events", () => {
       "my-project",
       null, // permissionMode not set in default payload
       null, // privacyMode not set in default payload
+      null, // gitRemote not set in default payload
+      null, // gitBranch not set in default payload
+      null, // gitSha not set in default payload
     );
   });
 
@@ -311,7 +314,88 @@ describe("POST /events", () => {
       "my-project",
       "plan",
       "private",
+      null,
+      null,
+      null,
     );
+  });
+
+  test("passes git context from session.start payload to createSession", async () => {
+    const sql = makeMockSql([], []);
+    const app = buildApp(sql);
+
+    await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        validEvent({
+          payload: {
+            gitRemoteUrl: "git@github.com:owner/repo.git",
+            gitBranch: "feat/x",
+            gitCommit: "abc1234",
+          },
+        }),
+      ),
+    });
+
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      sql,
+      "sess-1",
+      "abc123def456",
+      "/home/user/project",
+      "my-project",
+      null,
+      null,
+      "git@github.com:owner/repo.git",
+      "feat/x",
+      "abc1234",
+    );
+  });
+
+  test("passes null git fields when payload omits them (non-git project)", async () => {
+    const sql = makeMockSql([], []);
+    const app = buildApp(sql);
+
+    await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ payload: { permissionMode: "default" } })),
+    });
+
+    const call = mockCreateSession.mock.calls[0] as any[];
+    // Last three positional args are gitRemote, gitBranch, gitSha
+    expect(call[7]).toBeNull();
+    expect(call[8]).toBeNull();
+    expect(call[9]).toBeNull();
+  });
+
+  test("does NOT pass git fields for non session.start events", async () => {
+    const sql = makeMockSql([{ status: "ended" }], []);
+    const app = buildApp(sql);
+
+    // Reactivation via prompt.submit should not pull git fields from a non-start payload
+    await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        validEvent({
+          eventType: "prompt.submit",
+          payload: {
+            promptLength: 3,
+            isContinuation: false,
+            // These should be ignored — only session.start payloads carry git context
+            gitRemoteUrl: "git@github.com:owner/repo.git",
+            gitBranch: "feat/x",
+            gitCommit: "abc1234",
+          },
+        }),
+      ),
+    });
+
+    const call = mockCreateSession.mock.calls[0] as any[];
+    expect(call[7]).toBeNull();
+    expect(call[8]).toBeNull();
+    expect(call[9]).toBeNull();
   });
 
   test("calls insertEvent with the event", async () => {

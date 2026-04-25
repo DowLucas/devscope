@@ -56,14 +56,20 @@ export async function createSession(
   projectPath: string,
   projectName: string,
   permissionMode: string | null,
-  privacyMode: string | null = null
+  privacyMode: string | null = null,
+  gitRemote: string | null = null,
+  gitBranch: string | null = null,
+  gitSha: string | null = null
 ) {
   await sql`
-    INSERT INTO sessions (id, developer_id, project_path, project_name, permission_mode, privacy_mode)
-    VALUES (${id}, ${developerId}, ${projectPath}, ${projectName}, ${permissionMode}, ${privacyMode})
+    INSERT INTO sessions (id, developer_id, project_path, project_name, permission_mode, privacy_mode, git_remote, git_branch, git_sha)
+    VALUES (${id}, ${developerId}, ${projectPath}, ${projectName}, ${permissionMode}, ${privacyMode}, ${gitRemote}, ${gitBranch}, ${gitSha})
     ON CONFLICT(id) DO UPDATE SET
       permission_mode = COALESCE(EXCLUDED.permission_mode, sessions.permission_mode),
       privacy_mode = COALESCE(EXCLUDED.privacy_mode, sessions.privacy_mode),
+      git_remote = COALESCE(EXCLUDED.git_remote, sessions.git_remote),
+      git_branch = COALESCE(EXCLUDED.git_branch, sessions.git_branch),
+      git_sha = COALESCE(EXCLUDED.git_sha, sessions.git_sha),
       status = 'active',
       ended_at = NULL`;
 }

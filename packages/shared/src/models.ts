@@ -24,6 +24,9 @@ export interface Session {
   totalCacheCreationTokens?: number;
   totalCacheReadTokens?: number;
   estimatedCostUsd?: number;
+  gitRemote: string | null;
+  gitBranch: string | null;
+  gitSha: string | null;
 }
 
 export type WsMessageType =

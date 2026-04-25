@@ -239,9 +239,17 @@ export function eventsRoutes(sql: SQL) {
     const privacyMode = event.eventType === "session.start"
       ? (event.payload as { privacyMode?: string }).privacyMode ?? null
       : null;
+    // Git context — only carried on session.start payload (camelCase → snake_case columns).
+    // Plugin omits these fields when the project isn't a git repo; pass null in that case.
+    const gitPayload = event.eventType === "session.start"
+      ? (event.payload as { gitRemoteUrl?: string; gitBranch?: string; gitCommit?: string })
+      : {};
+    const gitRemote = gitPayload.gitRemoteUrl ?? null;
+    const gitBranch = gitPayload.gitBranch ?? null;
+    const gitSha = gitPayload.gitCommit ?? null;
     const shouldCreateOrReactivate = !existingSession || wasEnded || event.eventType === "session.start";
     if (shouldCreateOrReactivate) {
-      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode);
+      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode, gitRemote, gitBranch, gitSha);
     }
 
     // Log ethics event when privacy mode is activated
