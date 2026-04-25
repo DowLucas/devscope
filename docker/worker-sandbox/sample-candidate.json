@@ -1,0 +1,13 @@
+{
+  "id": "cand_test_001",
+  "kind": "claude_md",
+  "repo_clone_url": "https://github.com/octocat/Hello-World.git",
+  "repo_default_branch": "master",
+  "evidence_refs": {
+    "sessionIds": ["sess_abc"],
+    "patternIds": [],
+    "antiPatternIds": [],
+    "insightIds": []
+  },
+  "summary": "test candidate"
+}
