@@ -50,6 +50,30 @@ services:
       - default
     restart: unless-stopped
 
+  # Suggestion worker (Task 5.1 scaffold). Always running, but gated by
+  # SUGGESTION_WORKER_ENABLED — defaults to `false`, so the loop sleeps and
+  # never claims a candidate until the flag is flipped. Crash recovery is via
+  # the 10-minute `claim_expires_at` lease set by claimNextCandidate.
+  suggestion-worker:
+    build:
+      context: .
+      dockerfile: packages/worker/Dockerfile
+    environment:
+      DATABASE_URL: postgres://devscope:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/devscope
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SUGGESTION_WORKER_ENABLED: ${SUGGESTION_WORKER_ENABLED:-false}
+      DEVSCOPE_TOKEN_ENCRYPTION_KEY: ${DEVSCOPE_TOKEN_ENCRYPTION_KEY:-}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-devscope/worker-sandbox:local}
+      SANDBOX_NETWORK: ${SANDBOX_NETWORK:-devscope-cloud_devscope-egress-allowlist}
+      EGRESS_PROXY_URL: ${EGRESS_PROXY_URL:-http://egress-proxy:8888}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Worker spawns sandbox containers via the host Docker daemon (Task 5.2).
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+    restart: unless-stopped
+
   caddy:
     build:
       context: .

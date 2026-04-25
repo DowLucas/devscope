@@ -1,0 +1,20 @@
+{
+  "name": "@devscope/worker",
+  "version": "0.0.0",
+  "description": "Suggestion-worker: claims candidates, runs sandboxed verification, persists artifacts.",
+  "private": true,
+  "type": "module",
+  "license": "PolyForm-Shield-1.0.0",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "dependencies": {
+    "@devscope/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

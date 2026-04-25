@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    // Worker imports query modules from packages/backend/src/db via relative
+    // paths to avoid duplicating logic; rootDir must include the workspace
+    // root so those files are valid TS program inputs.
+    "rootDir": "../..",
+    "types": ["@types/bun"],
+    "noEmit": true
+  },
+  "include": ["src", "__tests__"]
+}
