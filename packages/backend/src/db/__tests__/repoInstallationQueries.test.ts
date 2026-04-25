@@ -119,6 +119,70 @@ describe("repo_installations queries", () => {
     expect(result).toBeNull();
   });
 
+  test("suspendInstallationByGithubId updates all matching rows and returns canonical mapping", async () => {
+    const { suspendInstallationByGithubId } = await import("../repoInstallationQueries");
+    const sql = makeSql([
+      {
+        match: /UPDATE repo_installations\s+SET suspended_at/,
+        rows: [
+          { id: "ri-1", organization_id: "org-1", suspended_at: "2026-04-25T10:00:00Z" },
+          { id: "ri-2", organization_id: "org-1", suspended_at: "2026-04-25T10:00:00Z" },
+        ],
+      },
+    ]);
+    const rows = await suspendInstallationByGithubId(sql, 123);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual({
+      id: "ri-1",
+      organizationId: "org-1",
+      suspendedAt: "2026-04-25T10:00:00Z",
+    });
+    const call = sql.calls[0];
+    expect(call.query).toContain("WHERE github_install_id");
+    expect(call.query).toContain("COALESCE(suspended_at, NOW())");
+    expect(call.values).toContain(123);
+  });
+
+  test("suspendInstallationByGithubId returns [] when nothing matched", async () => {
+    const { suspendInstallationByGithubId } = await import("../repoInstallationQueries");
+    const sql = makeSql();
+    const rows = await suspendInstallationByGithubId(sql, 999);
+    expect(rows).toEqual([]);
+  });
+
+  test("suspendRepoInstallationsByGithubIdAndRepos short-circuits on empty repo list", async () => {
+    const { suspendRepoInstallationsByGithubIdAndRepos } = await import(
+      "../repoInstallationQueries"
+    );
+    const sql = makeSql();
+    const rows = await suspendRepoInstallationsByGithubIdAndRepos(sql, 42, []);
+    expect(rows).toEqual([]);
+    expect(sql.calls).toHaveLength(0);
+  });
+
+  test("suspendRepoInstallationsByGithubIdAndRepos passes parallel owner/repo arrays via UNNEST", async () => {
+    const { suspendRepoInstallationsByGithubIdAndRepos } = await import(
+      "../repoInstallationQueries"
+    );
+    const sql = makeSql([
+      {
+        match: /UNNEST/,
+        rows: [{ id: "ri-1", organization_id: "org-1", suspended_at: "2026-04-25T10:00:00Z" }],
+      },
+    ]);
+    const rows = await suspendRepoInstallationsByGithubIdAndRepos(sql, 42, [
+      { owner: "acme", repo: "widgets" },
+      { owner: "acme", repo: "gadgets" },
+    ]);
+    expect(rows).toHaveLength(1);
+    const call = sql.calls[0];
+    expect(call.query).toContain("UNNEST");
+    expect(call.values).toContain(42);
+    // owners + names arrays bound as parameters
+    expect(call.values.some((v: unknown) => Array.isArray(v) && v.includes("acme"))).toBe(true);
+    expect(call.values.some((v: unknown) => Array.isArray(v) && v.includes("widgets"))).toBe(true);
+  });
+
   test("listRepoInstallationsForOrg filters by organization_id and maps every row", async () => {
     const baseRow = {
       organization_id: "org-1",

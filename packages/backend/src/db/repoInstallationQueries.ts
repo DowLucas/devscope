@@ -252,6 +252,75 @@ export async function suspendRepoInstallation(
   return { id: r.id, organizationId: r.organization_id, suspendedAt: r.suspended_at };
 }
 
+/**
+ * Suspend ALL repo_installations rows matching a given github_install_id.
+ * Used by the GitHub webhook when an `installation.deleted` event fires —
+ * the App was uninstalled at the GitHub side, so every repo we tracked under
+ * that install must be marked suspended.
+ *
+ * Returns the suspended rows (id + organization_id + suspended_at) so the
+ * caller can write per-install audit entries. Idempotent via
+ * COALESCE(suspended_at, NOW()) — re-running won't overwrite earlier
+ * timestamps.
+ */
+export async function suspendInstallationByGithubId(
+  sql: SQL,
+  githubInstallId: number
+): Promise<Array<{ id: string; organizationId: string; suspendedAt: string | Date }>> {
+  const rows = (await sql`
+    UPDATE repo_installations
+       SET suspended_at = COALESCE(suspended_at, NOW())
+     WHERE github_install_id = ${githubInstallId}
+    RETURNING id, organization_id, suspended_at`) as Array<{
+    id: string;
+    organization_id: string;
+    suspended_at: string | Date;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    organizationId: r.organization_id,
+    suspendedAt: r.suspended_at,
+  }));
+}
+
+/**
+ * Suspend repo_installations rows matching a given github_install_id and any
+ * of the supplied (owner, repo) pairs. Used by the webhook when an
+ * `installation_repositories.removed` event fires — the user revoked access
+ * to specific repos but kept the installation alive.
+ *
+ * Returns the suspended rows so the caller can audit-log each one.
+ */
+export async function suspendRepoInstallationsByGithubIdAndRepos(
+  sql: SQL,
+  githubInstallId: number,
+  repos: Array<{ owner: string; repo: string }>
+): Promise<Array<{ id: string; organizationId: string; suspendedAt: string | Date }>> {
+  if (repos.length === 0) return [];
+  // Bun.sql arrays do not work in IN (...). Build parallel arrays of owners
+  // and repos and join on row position via UNNEST — keeps a single
+  // parameterized statement.
+  const owners = repos.map((r) => r.owner);
+  const names = repos.map((r) => r.repo);
+  const rows = (await sql`
+    UPDATE repo_installations AS ri
+       SET suspended_at = COALESCE(ri.suspended_at, NOW())
+      FROM UNNEST(${owners}::text[], ${names}::text[]) AS t(owner, repo)
+     WHERE ri.github_install_id = ${githubInstallId}
+       AND ri.owner = t.owner
+       AND ri.repo  = t.repo
+    RETURNING ri.id, ri.organization_id, ri.suspended_at`) as Array<{
+    id: string;
+    organization_id: string;
+    suspended_at: string | Date;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    organizationId: r.organization_id,
+    suspendedAt: r.suspended_at,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // installation_tokens (encrypted at SQL boundary)
 // ---------------------------------------------------------------------------

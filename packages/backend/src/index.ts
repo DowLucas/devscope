@@ -39,6 +39,7 @@ import { privacyRoutes } from "./routes/privacy";
 import { accountRoutes } from "./routes/account";
 import { waitlistRoutes } from "./routes/waitlist";
 import { githubInstallRoutes } from "./routes/githubInstall";
+import { githubWebhookRoutes } from "./routes/githubWebhook";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware, getClientIp } from "./middleware/rateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
@@ -211,7 +212,7 @@ for (const prefix of pluginAccessiblePrefixes) {
 // All other API routes require a session (skip health, auth, events, public, and plugin-accessible routes)
 app.use("/api/*", async (c, next) => {
   const path = c.req.path;
-  if (path === "/api/health" || path === "/api/verify-connection" || path.startsWith("/api/auth/") || path.startsWith("/api/events") || path.startsWith("/api/public/")) {
+  if (path === "/api/health" || path === "/api/verify-connection" || path.startsWith("/api/auth/") || path.startsWith("/api/events") || path.startsWith("/api/public/") || path === "/api/github/webhook") {
     return next();
   }
   // Skip routes already covered by requireApiKeyOrSession above
@@ -231,7 +232,8 @@ app.use("/api/*", async (c, next) => {
     path === "/api/verify-connection" ||
     path.startsWith("/api/auth/") ||
     path.startsWith("/api/events") ||
-    path.startsWith("/api/public/")
+    path.startsWith("/api/public/") ||
+    path === "/api/github/webhook"
   ) {
     return next();
   }
@@ -311,6 +313,7 @@ app.route("/api/claude-md", claudeMdRoutes(sql));
 app.route("/api/topology", topologyRoutes(sql));
 app.route("/api/workflow-profiles", workflowProfileRoutes(sql));
 app.route("/api/github/install", githubInstallRoutes(sql));
+app.route("/api/github/webhook", githubWebhookRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })

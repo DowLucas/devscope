@@ -14,7 +14,11 @@ export function csrfMiddleware() {
 
     const path = c.req.path;
     // Skip for auth routes (Better Auth handles CSRF) and exact event ingestion endpoint (API key auth)
-    if (path.startsWith("/api/auth/") || path === "/api/events") {
+    if (
+      path.startsWith("/api/auth/") ||
+      path === "/api/events" ||
+      path === "/api/github/webhook"
+    ) {
       return next();
     }
 
