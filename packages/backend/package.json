@@ -20,14 +20,18 @@
     "@hono/zod-validator": "^0.4",
     "@langchain/core": "^0.3",
     "@langchain/langgraph": "^0.2",
+    "@octokit/plugin-throttling": "^11.0.3",
+    "@octokit/rest": "^22.0.1",
     "better-auth": "^1.5.0",
     "hono": "^4",
-    "resend": "^4",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.19.0",
+    "resend": "^4",
     "zod": "^3"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/pg": "^8.18.0"
   }
 }
