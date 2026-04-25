@@ -1,10 +1,12 @@
 import type { SQL } from "bun";
 import type { SuggestionCandidate } from "@devscope/shared";
 import { updateCandidateStatus } from "../../backend/src/db/suggestionQueries";
+import { getRepoInstallation } from "../../backend/src/db/repoInstallationQueries";
+import { getInstallationToken } from "../../backend/src/services/githubApp";
 import { makePostgresClient } from "./db";
 import { claimNextCandidate } from "./claim";
 import { revalidate } from "./revalidate";
-import { runSandbox } from "./sandboxRunner";
+import { runSandbox, type SandboxArtifact } from "./sandboxRunner";
 import { persistArtifact } from "./persistArtifact";
 
 /**
@@ -66,7 +68,42 @@ export async function processOne(sql: SQL): Promise<boolean> {
       return true;
     }
 
-    const artifact = await runSandbox(candidate);
+    // Resolve repo installation + mint a fresh access token so the sandbox
+    // can clone. If either step fails, persist a failed artifact rather than
+    // leaving the candidate stuck in_progress until the lease expires.
+    let artifact: SandboxArtifact;
+    const installation = await getRepoInstallation(sql, candidate.repoInstallationId);
+    if (!installation) {
+      artifact = {
+        status: "failed",
+        reason: "repo installation missing",
+        verificationResults: [],
+      };
+    } else {
+      try {
+        const cloneToken = await getInstallationToken(
+          sql,
+          installation.githubInstallId
+        );
+        artifact = await runSandbox({
+          candidate,
+          cloneToken,
+          cloneUrl: `https://github.com/${installation.owner}/${installation.repo}.git`,
+          defaultBranch: installation.defaultBranch,
+          // TODO Task 5.x — wire the suppression-ledger negative-example bank.
+          negativeExamples: [],
+          conventionProfile: installation.conventionProfile,
+        });
+      } catch (err) {
+        artifact = {
+          status: "failed",
+          reason: `installation token mint failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+          verificationResults: [],
+        };
+      }
+    }
     const persisted = await persistArtifact(sql, candidate.id, artifact);
     // Once an artifact exists the candidate transitions to artifact_ready,
     // regardless of whether the artifact passed or failed verification.

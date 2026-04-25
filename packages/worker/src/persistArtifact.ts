@@ -17,7 +17,7 @@ export async function persistArtifact(
   sandbox: SandboxArtifact
 ): Promise<SuggestionArtifact> {
   const status: SuggestionArtifactStatus =
-    sandbox.status === "passed" ? "shadow" : "failed";
+    sandbox.status === "completed" ? "shadow" : "failed";
 
   // Failed sandbox runs may not have a meaningful title/body; ensure a
   // non-empty marker so the DB row is still useful for debugging.
@@ -27,11 +27,11 @@ export async function persistArtifact(
   return insertArtifact(sql, {
     id: crypto.randomUUID(),
     candidateId,
-    patch: sandbox.patch,
-    filesChanged: sandbox.filesChanged,
+    patch: sandbox.patch ?? "",
+    filesChanged: sandbox.filesChanged ?? [],
     title,
     body,
-    model: sandbox.model,
+    model: sandbox.model ?? "",
     verificationResults: sandbox.verificationResults,
     status,
   });

@@ -85,7 +85,7 @@ describe("persistArtifact", () => {
       body: "Because reasons.",
       model: "claude-opus-4-7",
       verificationResults: verification,
-      status: "passed",
+      status: "completed",
     };
     const sql = makeSql(
       dbRow("shadow", {
