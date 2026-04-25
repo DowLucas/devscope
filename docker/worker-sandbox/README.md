@@ -109,10 +109,12 @@ message and skips the rest.
 
 ## Stub status
 
-Two files in this image are **stubs/skeletons** that later tasks will replace:
+One file in this image is still a **skeleton** that a later task will replace:
 
-- `agent/runAgent.ts` — STUB. Returns a hardcoded empty draft. Task 5.3 will
-  implement the real Claude tool-use loop.
+- `agent/runAgent.ts` — IMPLEMENTED (Task 5.3). Claude Sonnet 4.6 tool-use
+  loop with read-only `read_file` / `list_dir` / `grep` tools and a terminal
+  `propose_patch` tool. Requires `ANTHROPIC_API_KEY` at runtime; without it
+  the agent returns an empty draft + diagnostic rather than crashing.
 - `verify/verifyPatch.ts` — SKELETON. Implements `patch_applies` and
   `kind_scope` (claude_md only) for real; the other four gates
   (`evidence_dereferences`, `tests`, `lint`, `conventions`) return

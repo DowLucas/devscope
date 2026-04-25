@@ -53,7 +53,9 @@ if ! GIT_OUT=$(git clone --depth 1 --quiet --branch "$DEFAULT_BRANCH" \
 fi
 unset CLONE_URL
 
-# 4. Agent driver (STUB — Task 5.3 will replace with real Claude tool-use loop).
+# 4. Agent driver — Claude tool-use loop emits a draft JSON to stdout.
+#    Stderr is discarded; the agent itself writes failure diagnostics into
+#    the draft JSON via the `error` field rather than crashing.
 if ! bun run /app/agent/runAgent.ts < "$CANDIDATE_PATH" > "$DRAFT_PATH" 2>/dev/null; then
     fail "agent driver failed"
 fi

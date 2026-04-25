@@ -1,0 +1,8 @@
+{
+  "name": "devscope-sandbox-agent",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.91.1"
+  }
+}

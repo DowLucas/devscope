@@ -7,7 +7,7 @@
 # ==========================================================
 # Bun version pinned explicitly. Bump deliberately when the
 # rest of the monorepo upgrades.
-FROM oven/bun:1.1.45-alpine
+FROM oven/bun:1.3.5-alpine
 
 # Install runtime deps:
 #   git              — clone target repo
@@ -35,6 +35,16 @@ RUN deluser --remove-home bun 2>/dev/null || true \
 COPY --chown=1000:1000 --chmod=0555 entrypoint.sh /app/entrypoint.sh
 COPY --chown=1000:1000 --chmod=0555 agent/ /app/agent/
 COPY --chown=1000:1000 --chmod=0555 verify/ /app/verify/
+
+# Install agent npm deps (@anthropic-ai/sdk). Done in the image so the
+# sandbox is fully offline-installable at runtime — the agent itself
+# only needs network egress to api.anthropic.com (via the proxy).
+# `bun install` writes into agent/node_modules; chown so the sandbox
+# user can read it under the read-only filesystem at runtime.
+WORKDIR /app/agent
+RUN bun install --production --no-save \
+    && chown -R 1000:1000 /app/agent
+WORKDIR /work
 
 # /work is the writable workspace. Task 5.2 will tmpfs-mount this
 # at runtime; we create it here so the path exists in the image.
