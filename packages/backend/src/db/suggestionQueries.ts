@@ -189,6 +189,44 @@ export async function insertCandidate(
   return rowToCandidate(row as SuggestionCandidateRow);
 }
 
+/**
+ * Returns true if a candidate with the given suppression_key currently exists
+ * in an "active" status (queued / in_progress / artifact_ready). The promoter
+ * uses this to avoid re-queueing duplicates while leaving room for retries
+ * after a prior candidate was dismissed or failed.
+ */
+export async function findActiveCandidate(
+  sql: SQL,
+  suppressionKey: string
+): Promise<SuggestionCandidate | null> {
+  const [row] = await sql`
+    SELECT * FROM suggestion_candidates
+    WHERE suppression_key = ${suppressionKey}
+      AND status IN ('queued', 'in_progress', 'artifact_ready')
+    ORDER BY created_at DESC
+    LIMIT 1`;
+  return row ? rowToCandidate(row as SuggestionCandidateRow) : null;
+}
+
+/**
+ * Return the most recent candidate for a suppression_key in a "settled"
+ * status (dismissed / failed). The promoter compares the new evidence_score
+ * to this one to decide whether the >50% growth override should bypass an
+ * active suppression cooldown.
+ */
+export async function findLastSettledCandidate(
+  sql: SQL,
+  suppressionKey: string
+): Promise<SuggestionCandidate | null> {
+  const [row] = await sql`
+    SELECT * FROM suggestion_candidates
+    WHERE suppression_key = ${suppressionKey}
+      AND status IN ('dismissed', 'failed', 'stale')
+    ORDER BY created_at DESC
+    LIMIT 1`;
+  return row ? rowToCandidate(row as SuggestionCandidateRow) : null;
+}
+
 export async function getCandidate(
   sql: SQL,
   id: string

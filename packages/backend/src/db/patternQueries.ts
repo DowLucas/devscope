@@ -473,6 +473,73 @@ export async function getSessionPatterns(
     ORDER BY spm.match_confidence DESC`) as (SessionPattern & { match_confidence: number })[];
 }
 
+// --- Evidence aggregation for suggestion promoter ---
+
+/**
+ * One anti-pattern hit on a session within the time window, scoped to a single
+ * repo (matched via `sessions.git_remote`). One row per
+ * (session_id, anti_pattern_id) match.
+ *
+ * The promoter groups these into evidence clusters keyed by anti-pattern.
+ */
+export interface RepoAntiPatternEvidence {
+  session_id: string;
+  developer_id: string;
+  session_ended_at: string | Date;
+  anti_pattern_id: string;
+  anti_pattern_name: string;
+  anti_pattern_severity: string;
+  matched_at: string | Date;
+  /** Common command/tool involved (best-effort, may be empty). */
+  top_tool: string | null;
+}
+
+/**
+ * Fetch every anti-pattern match recorded for sessions whose `git_remote`
+ * resolves to one of the supplied normalized `owner/repo` strings, within the
+ * trailing `days` window.
+ *
+ * `gitRemotePatterns` should be the LIKE-pattern variants the promoter wants
+ * to match (e.g. `%owner/repo` and `%owner/repo.git`) — the caller builds them
+ * from the install's `owner` + `repo` so that both HTTPS and SSH-style remotes
+ * are covered without normalizing in SQL.
+ */
+export async function getRepoAntiPatternEvidence(
+  sql: SQL,
+  gitRemotePatterns: string[],
+  days: number = 28
+): Promise<RepoAntiPatternEvidence[]> {
+  if (gitRemotePatterns.length === 0) return [];
+  // ILIKE ANY (text[]) matches if any pattern matches. Bun.sql passes `text[]`
+  // params natively when typed via `::text[]` cast.
+  return (await sql`
+    SELECT
+      s.id                 AS session_id,
+      s.developer_id       AS developer_id,
+      s.ended_at           AS session_ended_at,
+      ap.id                AS anti_pattern_id,
+      ap.name              AS anti_pattern_name,
+      ap.severity          AS anti_pattern_severity,
+      sapm.created_at      AS matched_at,
+      (
+        SELECT COALESCE(e.payload->>'toolSubcommand', e.payload->>'toolName')
+          FROM events e
+         WHERE e.session_id = s.id
+           AND e.event_type IN ('tool.complete', 'tool.fail')
+           AND e.payload->>'toolName' IS NOT NULL
+         GROUP BY 1
+         ORDER BY COUNT(*) DESC
+         LIMIT 1
+      )                    AS top_tool
+    FROM session_anti_pattern_matches sapm
+    JOIN anti_patterns ap ON ap.id = sapm.anti_pattern_id
+    JOIN sessions      s  ON s.id  = sapm.session_id
+    WHERE s.git_remote IS NOT NULL
+      AND s.git_remote ILIKE ANY (${gitRemotePatterns}::text[])
+      AND sapm.created_at >= NOW() - make_interval(days => ${days})
+    ORDER BY sapm.created_at DESC`) as RepoAntiPatternEvidence[];
+}
+
 // --- Developer Skill Queries (Phase 4) ---
 
 export async function getDeveloperToolMastery(

@@ -25,6 +25,7 @@ import { startToolingHealthCheck } from "./jobs/toolingHealth";
 import { startClaudeMdCorrelation } from "./jobs/claudeMdCorrelation";
 import { startTopologyComputation } from "./jobs/topologyComputation";
 import { startWorkflowProfileComputation } from "./jobs/workflowProfileComputation";
+import { startSuggestionPromoter } from "./jobs/suggestionPromoter";
 import { aiRoutes } from "./routes/ai";
 import { frictionRoutes } from "./routes/friction";
 import { claudeMdRoutes } from "./routes/claudeMd";
@@ -77,6 +78,7 @@ startToolingHealthCheck(sql);
 startClaudeMdCorrelation(sql);
 startTopologyComputation(sql);
 startWorkflowProfileComputation(sql);
+startSuggestionPromoter(sql);
 
 // Seed default friction rules
 await seedDefaultFrictionRules(sql);

@@ -194,6 +194,18 @@ export async function getRepoInstallationByGithubId(
   return row ? rowToRepoInstallation(row as RepoInstallationRow) : null;
 }
 
+/**
+ * List all repo_installations rows that are NOT suspended. Used by background
+ * jobs (e.g. the suggestion promoter) that should ignore suspended installs.
+ */
+export async function listActiveInstallations(sql: SQL): Promise<RepoInstallation[]> {
+  const rows = (await sql`
+    SELECT * FROM repo_installations
+    WHERE suspended_at IS NULL
+    ORDER BY installed_at DESC`) as RepoInstallationRow[];
+  return rows.map(rowToRepoInstallation);
+}
+
 export async function listRepoInstallationsForOrg(
   sql: SQL,
   organizationId: string
