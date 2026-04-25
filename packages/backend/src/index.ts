@@ -38,6 +38,7 @@ import { ethicsRoutes } from "./routes/ethics";
 import { privacyRoutes } from "./routes/privacy";
 import { accountRoutes } from "./routes/account";
 import { waitlistRoutes } from "./routes/waitlist";
+import { githubInstallRoutes } from "./routes/githubInstall";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware, getClientIp } from "./middleware/rateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
@@ -309,6 +310,7 @@ app.route("/api/friction", frictionRoutes(sql));
 app.route("/api/claude-md", claudeMdRoutes(sql));
 app.route("/api/topology", topologyRoutes(sql));
 app.route("/api/workflow-profiles", workflowProfileRoutes(sql));
+app.route("/api/github/install", githubInstallRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })

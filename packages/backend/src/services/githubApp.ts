@@ -23,6 +23,14 @@ import {
   upsertInstallationToken,
 } from "../db/repoInstallationQueries";
 
+/**
+ * Stable identifier for the active GitHub-integration policy. Bump this
+ * string intentionally whenever policy semantics change (suggestion gating,
+ * audit-log shape, repo onboarding flow). Audit-log entries record whichever
+ * value was current at write-time so historical decisions remain attributable.
+ */
+export const POLICY_VERSION = "v1-2026-04-25";
+
 // ---------------------------------------------------------------------------
 // Config / env
 // ---------------------------------------------------------------------------

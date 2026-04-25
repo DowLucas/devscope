@@ -90,6 +90,35 @@ describe("repo_installations queries", () => {
     expect(row).toBeNull();
   });
 
+  test("suspendRepoInstallation issues UPDATE with COALESCE(suspended_at, NOW()) and returns canonical row", async () => {
+    const dbRow = {
+      id: "ri-9",
+      organization_id: "org-1",
+      suspended_at: "2026-04-25T10:00:00Z",
+    };
+    const { suspendRepoInstallation } = await import("../repoInstallationQueries");
+    const sql = makeSql([{ match: /UPDATE repo_installations/, rows: [dbRow] }]);
+
+    const result = await suspendRepoInstallation(sql, "ri-9");
+    expect(result).toEqual({
+      id: "ri-9",
+      organizationId: "org-1",
+      suspendedAt: "2026-04-25T10:00:00Z",
+    });
+    const call = sql.calls[0];
+    expect(call.query).toMatch(/UPDATE repo_installations/);
+    expect(call.query).toContain("COALESCE(suspended_at, NOW())");
+    expect(call.query).toMatch(/RETURNING id, organization_id, suspended_at/);
+    expect(call.values).toContain("ri-9");
+  });
+
+  test("suspendRepoInstallation returns null when no row matched", async () => {
+    const { suspendRepoInstallation } = await import("../repoInstallationQueries");
+    const sql = makeSql();
+    const result = await suspendRepoInstallation(sql, "missing");
+    expect(result).toBeNull();
+  });
+
   test("listRepoInstallationsForOrg filters by organization_id and maps every row", async () => {
     const baseRow = {
       organization_id: "org-1",

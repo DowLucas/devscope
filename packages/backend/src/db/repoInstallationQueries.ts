@@ -137,6 +137,41 @@ export async function insertRepoInstallation(
   return rowToRepoInstallation(row as RepoInstallationRow);
 }
 
+/**
+ * Insert-or-update a repo installation keyed on the unique
+ * `(github_install_id, owner, repo)` constraint. On conflict the row is
+ * refreshed (default branch + onboarding defaults if explicitly provided)
+ * and its `suspended_at` cleared so reinstalls re-activate the row.
+ *
+ * The supplied `id` is only used when inserting a fresh row; conflicts keep
+ * the existing primary key so foreign-key references remain stable.
+ */
+export async function upsertRepoInstallation(
+  sql: SQL,
+  input: RepoInstallationInsert
+): Promise<RepoInstallation> {
+  const cwdPatterns = input.cwdPatterns ?? [];
+  const autoKinds = input.autoOpenPrKinds ?? [];
+  const conventionProfile = JSON.stringify(input.conventionProfile ?? {});
+  const isLive = input.isLive ?? false;
+
+  const [row] = await sql`
+    INSERT INTO repo_installations (
+      id, organization_id, github_install_id, owner, repo,
+      default_branch, cwd_patterns, is_live, auto_open_pr_kinds, convention_profile
+    )
+    VALUES (
+      ${input.id}, ${input.organizationId}, ${input.githubInstallId},
+      ${input.owner}, ${input.repo}, ${input.defaultBranch},
+      ${cwdPatterns}, ${isLive}, ${autoKinds}, ${conventionProfile}::jsonb
+    )
+    ON CONFLICT (github_install_id, owner, repo) DO UPDATE SET
+      default_branch = EXCLUDED.default_branch,
+      suspended_at   = NULL
+    RETURNING *`;
+  return rowToRepoInstallation(row as RepoInstallationRow);
+}
+
 export async function getRepoInstallation(
   sql: SQL,
   id: string
@@ -193,6 +228,28 @@ export async function updateRepoInstallation(
 
 export async function deleteRepoInstallation(sql: SQL, id: string): Promise<void> {
   await sql`DELETE FROM repo_installations WHERE id = ${id}`;
+}
+
+/**
+ * Soft-suspend a repo installation. Sets `suspended_at = NOW()` (idempotent —
+ * does not overwrite an existing timestamp). Returns the new suspended_at and
+ * the install's organization_id, or null if no row matched.
+ *
+ * We never hard-delete: audit log entries reference repo_installation_id and
+ * we want history preserved across reinstalls/uninstalls.
+ */
+export async function suspendRepoInstallation(
+  sql: SQL,
+  id: string
+): Promise<{ id: string; organizationId: string; suspendedAt: string | Date } | null> {
+  const [row] = await sql`
+    UPDATE repo_installations
+       SET suspended_at = COALESCE(suspended_at, NOW())
+     WHERE id = ${id}
+    RETURNING id, organization_id, suspended_at`;
+  if (!row) return null;
+  const r = row as { id: string; organization_id: string; suspended_at: string | Date };
+  return { id: r.id, organizationId: r.organization_id, suspendedAt: r.suspended_at };
 }
 
 // ---------------------------------------------------------------------------
