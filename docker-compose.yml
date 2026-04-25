@@ -41,6 +41,15 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  egress-proxy:
+    build:
+      context: ./docker/egress-proxy
+    image: devscope/egress-proxy:local
+    networks:
+      - devscope-egress-allowlist
+      - default
+    restart: unless-stopped
+
   caddy:
     build:
       context: .
@@ -58,6 +67,15 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+networks:
+  # Locked-down network for sandbox containers (Task 3.2). `internal: true`
+  # means no host or external connectivity by default. The `egress-proxy`
+  # service is the only other member and bridges to `default` for upstream
+  # HTTPS to the allowlisted hosts (api.anthropic.com, api.github.com,
+  # *.githubusercontent.com).
+  devscope-egress-allowlist:
+    internal: true
 
 volumes:
   gc-pgdata:

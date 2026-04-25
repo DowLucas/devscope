@@ -1,4 +1,13 @@
 services:
+  egress-proxy:
+    build:
+      context: ./docker/egress-proxy
+    image: devscope/egress-proxy:local
+    networks:
+      - devscope-egress-allowlist
+      - default
+    restart: unless-stopped
+
   postgres:
     ports:
       - "127.0.0.1:5432:5432"
@@ -58,3 +67,7 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+networks:
+  devscope-egress-allowlist:
+    internal: true

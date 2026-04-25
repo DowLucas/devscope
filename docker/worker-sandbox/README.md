@@ -29,29 +29,61 @@ expected to read structured failure rather than infer from exit codes.
 
 ## Runtime constraints (applied by the worker, Task 5.2)
 
-The worker (Task 5.2) will spawn this image with:
+The worker (Task 5.2) MUST spawn this image with the exact flags below.
+This is the runtime contract — change it only by updating this README
+and the egress-proxy filter together.
 
 ```
 docker run --rm -i \
+  --network devscope-cloud_devscope-egress-allowlist \
   --read-only \
-  --tmpfs /work \
+  --tmpfs /work:rw,size=512m,uid=1000 \
+  --tmpfs /tmp:rw,size=64m,uid=1000 \
   --user 1000:1000 \
   --cap-drop=ALL \
   --memory=2g \
   --pids-limit=256 \
-  --network devscope-egress-allowlist \
+  --env HTTPS_PROXY=http://egress-proxy:8888 \
+  --env HTTP_PROXY=http://egress-proxy:8888 \
+  --env NO_PROXY=localhost,127.0.0.1 \
   devscope/worker-sandbox:<sha>
 ```
 
-- `--read-only` — image filesystem is immutable; only `/work` (tmpfs) and `/tmp`
-  are writable.
-- `--tmpfs /work` — workspace lives in RAM, evaporates on container exit.
+- `--read-only` — image filesystem is immutable; only the explicitly
+  declared tmpfs mounts are writable.
+- `--tmpfs /work:rw,size=512m,uid=1000` — workspace lives in RAM,
+  evaporates on container exit, owned by the sandbox user.
+- `--tmpfs /tmp:rw,size=64m,uid=1000` — git, npm, etc. need a writable
+  `/tmp`; small ephemeral mount keeps it bounded.
 - `--user 1000:1000` — matches the `sandbox` user baked into the image.
 - `--cap-drop=ALL` — no Linux capabilities.
 - `--memory=2g`, `--pids-limit=256` — resource caps.
-- `--network devscope-egress-allowlist` — bespoke network whose egress is
-  filtered to api.github.com / github.com / api.anthropic.com (configured by
-  the host, not this image).
+- `--network devscope-cloud_devscope-egress-allowlist` — internal docker
+  network (`internal: true`) with no host route. The `egress-proxy`
+  service (Task 3.2, `docker/egress-proxy/`) is the only other member
+  and bridges to the default network; it filters destinations to:
+  - `api.anthropic.com`
+  - `api.github.com`
+  - `github.com`
+  - `*.githubusercontent.com`
+- `HTTPS_PROXY` / `HTTP_PROXY` — `git`, `curl`, and the Anthropic SDK
+  honour these. The compose project name (`devscope-cloud`) prefixes
+  the network and `egress-proxy` resolves via the embedded docker
+  resolver. Verified: `git clone https://github.com/...` works through
+  the proxy via libcurl's HTTPS_PROXY support — no entrypoint changes
+  required.
+
+### Smoke checks (Task 3.2 verification)
+
+With `egress-proxy` running (`docker compose up -d egress-proxy`), the
+following all hold:
+
+| Check | Expected | Actual |
+|---|---|---|
+| `curl https://api.github.com/zen` (with proxy env) | 200 + zen text | pass |
+| `curl https://example.com` (with proxy env) | 403 from proxy | pass |
+| `git clone --depth 1 https://github.com/octocat/Hello-World.git /work/repo` | succeeds | pass |
+| `curl --max-time 4 http://1.1.1.1` (no proxy) | connect refused (no NAT) | pass |
 
 ## Stub status
 
