@@ -60,9 +60,27 @@ if ! bun run /app/agent/runAgent.ts < "$CANDIDATE_PATH" > "$DRAFT_PATH" 2>/dev/n
     fail "agent driver failed"
 fi
 
-# 5. Verifier (SKELETON — Task 5.4 fills in remaining gates).
+# 5a. Best-effort dependency install for the cloned repo. Required by the
+#     `tests` and `lint` gates if they want to shell out to runners that
+#     live in the project's own node_modules. Time-capped at 60s; failure
+#     is non-fatal — gates check $DEVSCOPE_DEPS_INSTALLED and skip cleanly.
+export DEVSCOPE_DEPS_INSTALLED="0"
+if [ -f "$CLONE_PATH/package.json" ]; then
+    if [ -f "$CLONE_PATH/bun.lock" ] || [ -f "$CLONE_PATH/bun.lockb" ]; then
+        if (cd "$CLONE_PATH" && timeout 60 bun install --frozen-lockfile >/dev/null 2>&1); then
+            export DEVSCOPE_DEPS_INSTALLED="1"
+        fi
+    elif [ -f "$CLONE_PATH/package-lock.json" ]; then
+        if (cd "$CLONE_PATH" && timeout 60 npm ci >/dev/null 2>&1); then
+            export DEVSCOPE_DEPS_INSTALLED="1"
+        fi
+    fi
+fi
+
+# 5b. Verifier.
 export DEVSCOPE_KIND="$KIND"
 export DEVSCOPE_CLONE_PATH="$CLONE_PATH"
+export DEVSCOPE_CANDIDATE_PATH="$CANDIDATE_PATH"
 if ! bun run /app/verify/verifyPatch.ts < "$DRAFT_PATH" > "$VERIFY_PATH" 2>/dev/null; then
     fail "verifier failed"
 fi
