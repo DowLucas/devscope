@@ -75,3 +75,40 @@ export async function upsertSuppression(
     SELECT * FROM suppression_ledger WHERE suppression_key = ${input.suppressionKey}`;
   return rowToSuppression(row as SuppressionRow);
 }
+
+/**
+ * Return prior rejection reasons recorded in the suppression ledger for a
+ * given (repo_installation_id, kind) pair, scoped to rows whose
+ * `last_rejected_at` is within the given window. Used by the worker to
+ * populate the negative-example bank fed into the agent prompt.
+ *
+ * Rows with a NULL rejection_reason are skipped — the agent only benefits
+ * from concrete rejection text.
+ */
+export async function listSuppressedRejectionReasonsForRepo(
+  sql: SQL,
+  repoInstallationId: string,
+  kind: SuggestionKind,
+  sinceDate: Date
+): Promise<Array<{ rejectionReason: string; rejectedAt: string }>> {
+  const sinceIso = sinceDate.toISOString();
+  const rows = (await sql`
+    SELECT rejection_reason, last_rejected_at
+    FROM suppression_ledger
+    WHERE repo_installation_id = ${repoInstallationId}
+      AND kind = ${kind}
+      AND rejection_reason IS NOT NULL
+      AND last_rejected_at >= ${sinceIso}::timestamptz
+    ORDER BY last_rejected_at DESC
+    LIMIT 20`) as Array<{
+    rejection_reason: string;
+    last_rejected_at: string | Date;
+  }>;
+  return rows.map((r) => ({
+    rejectionReason: r.rejection_reason,
+    rejectedAt:
+      r.last_rejected_at instanceof Date
+        ? r.last_rejected_at.toISOString()
+        : String(r.last_rejected_at),
+  }));
+}

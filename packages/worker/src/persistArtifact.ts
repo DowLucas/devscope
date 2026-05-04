@@ -34,5 +34,10 @@ export async function persistArtifact(
     model: sandbox.model ?? "",
     verificationResults: sandbox.verificationResults,
     status,
+    // Task 5.5 — supplementary rubric. `undefined` causes the insert to bind
+    // SQL NULL; only a well-formed RubricScores object is forwarded.
+    rubricScores: sandbox.rubricScores ?? undefined,
+    qualityRanking:
+      typeof sandbox.qualityRanking === "number" ? sandbox.qualityRanking : undefined,
   });
 }

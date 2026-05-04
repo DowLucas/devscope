@@ -2,12 +2,16 @@ import type { SQL } from "bun";
 import type { SuggestionCandidate } from "@devscope/shared";
 import { updateCandidateStatus } from "../../backend/src/db/suggestionQueries";
 import { getRepoInstallation } from "../../backend/src/db/repoInstallationQueries";
+import { listSuppressedRejectionReasonsForRepo } from "../../backend/src/db/suppressionQueries";
 import { getInstallationToken } from "../../backend/src/services/githubApp";
 import { makePostgresClient } from "./db";
 import { claimNextCandidate } from "./claim";
 import { revalidate } from "./revalidate";
 import { runSandbox, type SandboxArtifact } from "./sandboxRunner";
 import { persistArtifact } from "./persistArtifact";
+import { buildEvidenceDetail } from "./buildEvidenceDetail";
+
+const NEGATIVE_EXAMPLE_WINDOW_DAYS = 60;
 
 /**
  * Suggestion-worker main loop. Polls `suggestion_candidates`, claims one at a
@@ -85,14 +89,30 @@ export async function processOne(sql: SQL): Promise<boolean> {
           sql,
           installation.githubInstallId
         );
+
+        // Resolve evidence detail + negative examples in parallel before
+        // launching the sandbox so the agent prompt is fully populated.
+        const sinceDate = new Date(
+          Date.now() - NEGATIVE_EXAMPLE_WINDOW_DAYS * 24 * 60 * 60 * 1000
+        );
+        const [evidenceDetail, negativeExamples] = await Promise.all([
+          buildEvidenceDetail(sql, candidate.evidenceRefs, { log }),
+          listSuppressedRejectionReasonsForRepo(
+            sql,
+            candidate.repoInstallationId,
+            candidate.kind,
+            sinceDate
+          ),
+        ]);
+
         artifact = await runSandbox({
           candidate,
           cloneToken,
           cloneUrl: `https://github.com/${installation.owner}/${installation.repo}.git`,
           defaultBranch: installation.defaultBranch,
-          // TODO Task 5.x — wire the suppression-ledger negative-example bank.
-          negativeExamples: [],
+          negativeExamples,
           conventionProfile: installation.conventionProfile,
+          evidenceDetail,
         });
       } catch (err) {
         artifact = {

@@ -8,6 +8,31 @@ import type {
 } from "@devscope/shared";
 
 /**
+ * Structured evidence detail forwarded to the sandbox so the agent's prompt
+ * can cite anti-pattern names, sample errors, and session excerpts. Built
+ * by `buildEvidenceDetail` from the candidate's `evidenceRefs`.
+ */
+export interface EvidenceDetail {
+  antiPatterns: Array<{
+    name: string;
+    severity: string;
+    suggestion: string;
+    sampleErrors: string[];
+  }>;
+  patterns: Array<{
+    name: string;
+    description: string;
+    effectiveness: string;
+  }>;
+  sessionExcerpts: Array<{
+    sessionId: string;
+    toolCall: string;
+    error: string;
+    timestamp: string;
+  }>;
+}
+
+/**
  * Inputs to `runSandbox` — everything the entrypoint needs to clone the
  * repo and run the agent + verifier pipeline. The caller (worker main loop)
  * is responsible for assembling these from `repo_installations`,
@@ -24,6 +49,12 @@ export interface SandboxRunInput {
   negativeExamples: Array<{ rejectionReason: string; rejectedAt: string }>;
   /** Repo conventions; will be `{}` until Task 6.1 populates `convention_profile`. */
   conventionProfile: ConventionProfile;
+  /**
+   * Resolved evidence detail (anti-pattern names, sample errors, session
+   * excerpts). Built by the worker from the candidate's `evidenceRefs`.
+   * Optional for backwards compatibility; sandbox prompt degrades gracefully.
+   */
+  evidenceDetail?: EvidenceDetail;
 }
 
 /**
@@ -43,8 +74,13 @@ export interface SandboxArtifact {
   body?: string;
   model?: string;
   verificationResults: VerificationResult[];
-  /** `null` until Task 5.5 lands the rubric scorer. */
+  /** Supplementary rubric (Task 5.5). `null` when scoring was skipped or failed. */
   rubricScores?: RubricScores | null;
+  /**
+   * Weighted rank derived from `rubricScores` by the worker (Task 5.5).
+   * `null` when no rubric was produced. NOT a gate — used only for ordering.
+   */
+  qualityRanking?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +131,33 @@ export function buildCandidatePayload(input: SandboxRunInput): Record<string, un
     summary: input.candidate.summary,
     negative_examples: input.negativeExamples,
     convention_profile: input.conventionProfile,
+    // The agent reads either snake_case or camelCase. Pass under the
+    // camelCase key the agent's `buildUserMessage` looks up directly.
+    evidenceDetail: input.evidenceDetail ?? {
+      antiPatterns: [],
+      patterns: [],
+      sessionExcerpts: [],
+    },
   };
+}
+
+/**
+ * Compute the worker-side `qualityRanking` from a rubric. Returns `null`
+ * if any score is missing — clarity is weighted heaviest because vague
+ * suggestions are the worst failure mode. Kept here (not in the agent) so
+ * the formula can be tuned without re-running the sandbox.
+ */
+export function computeQualityRanking(
+  rubric: RubricScores | null | undefined
+): number | null {
+  if (!rubric) return null;
+  const c = rubric.clarity;
+  const e = rubric.evidenceFit;
+  const r = rubric.reversibility;
+  if (typeof c !== "number" || typeof e !== "number" || typeof r !== "number") {
+    return null;
+  }
+  return 0.5 * c + 0.3 * e + 0.2 * r;
 }
 
 /**
@@ -154,6 +216,12 @@ function parseSandboxOutput(raw: string): SandboxArtifact {
     ? (vResults as VerificationResult[])
     : [];
 
+  // Pull rubric scores from the draft if the agent emitted them. Tolerate
+  // missing/null/malformed shapes; downstream a `null` ranking is fine.
+  const rawRubric = draft.rubric_scores as unknown;
+  const rubricScores = parseRubricFromDraft(rawRubric);
+  const qualityRanking = computeQualityRanking(rubricScores);
+
   return {
     status: "completed",
     patch: typeof draft.patch === "string" ? draft.patch : "",
@@ -164,8 +232,20 @@ function parseSandboxOutput(raw: string): SandboxArtifact {
     body: typeof draft.body === "string" ? draft.body : "",
     model: typeof draft.model === "string" ? draft.model : "",
     verificationResults,
-    rubricScores: null,
+    rubricScores,
+    qualityRanking,
   };
+}
+
+/** Coerce the agent's rubric_scores field into a `RubricScores` or null. */
+function parseRubricFromDraft(raw: unknown): RubricScores | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const c = typeof r.clarity === "number" ? r.clarity : null;
+  const e = typeof r.evidenceFit === "number" ? r.evidenceFit : null;
+  const v = typeof r.reversibility === "number" ? r.reversibility : null;
+  if (c === null || e === null || v === null) return null;
+  return { clarity: c, evidenceFit: e, reversibility: v };
 }
 
 // ---------------------------------------------------------------------------

@@ -144,9 +144,15 @@ describe("runAgent — loop", () => {
             ),
         ];
         const { client, calls } = makeMockClient(responses);
+        const stubRubric = async () => ({
+            clarity: 0.8,
+            evidenceFit: 0.6,
+            reversibility: 1.0,
+        });
         const out = await runAgent({
             client,
             readStdin: async () => candidateJson(),
+            scoreRubric: stubRubric,
         });
         expect(out.patch).toContain("diff --git a/CLAUDE.md");
         expect(out.files_changed).toEqual(["CLAUDE.md"]);
@@ -156,6 +162,12 @@ describe("runAgent — loop", () => {
         expect(out.input_tokens).toBe(1234 + 100);
         expect(out.output_tokens).toBe(567);
         expect(out.error).toBeUndefined();
+        // Rubric ran on the non-empty patch.
+        expect(out.rubric_scores).toEqual({
+            clarity: 0.8,
+            evidenceFit: 0.6,
+            reversibility: 1.0,
+        });
 
         // Validate model id, system cache_control, tool set.
         expect(calls[0].model).toBe("claude-sonnet-4-6");
@@ -199,11 +211,19 @@ describe("runAgent — loop", () => {
             ]),
         ];
         const { client, calls } = makeMockClient(responses);
+        let rubricCalls = 0;
         const out = await runAgent({
             client,
             readStdin: async () => candidateJson(),
+            scoreRubric: async () => {
+                rubricCalls++;
+                return null;
+            },
         });
         expect(out.patch).toBe("");
+        expect(out.rubric_scores).toBeNull();
+        // Rubric MUST be skipped on empty patch.
+        expect(rubricCalls).toBe(0);
         expect(out.tool_call_count).toBe(3);
         // Second API call must include the prior assistant turn + a user turn
         // of tool_result blocks for both list_dir and read_file.

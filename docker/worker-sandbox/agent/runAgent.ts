@@ -13,6 +13,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { toolReadFile, toolListDir, toolGrep } from "./tools";
+import { scoreRubric, type RubricScores } from "./rubric";
 
 // Sonnet 4.6 alias per project standards. The SDK accepts the short alias
 // and resolves it to the latest dated snapshot. If a future SDK rejects the
@@ -90,6 +91,12 @@ interface DraftOutput {
     tool_call_count: number;
     input_tokens: number;
     output_tokens: number;
+    /**
+     * Supplementary rubric (Task 5.5). `null` when scoring was skipped
+     * (empty patch / agent gave up) or failed (parse error / API error).
+     * The worker computes `qualityRanking` from these scores.
+     */
+    rubric_scores: RubricScores | null;
     error?: string;
 }
 
@@ -347,6 +354,7 @@ function emptyDraft(
         tool_call_count: 0,
         input_tokens: 0,
         output_tokens: 0,
+        rubric_scores: null,
         error,
         ...extras,
     };
@@ -376,6 +384,12 @@ export interface RunAgentDeps {
     client?: Anthropic;
     /** Override stdin reader (tests). */
     readStdin?: () => Promise<string>;
+    /**
+     * Override the rubric scorer. Tests inject a deterministic stub here
+     * to avoid the second Anthropic call. Defaults to the real `scoreRubric`
+     * which uses the same Anthropic client.
+     */
+    scoreRubric?: typeof scoreRubric;
 }
 
 export async function runAgent(deps: RunAgentDeps = {}): Promise<DraftOutput> {
@@ -492,6 +506,25 @@ export async function runAgent(deps: RunAgentDeps = {}): Promise<DraftOutput> {
                 typeof inp.unified_diff === "string" ? inp.unified_diff : "";
             const title = typeof inp.title === "string" ? inp.title : "";
             const body = typeof inp.body === "string" ? inp.body : "";
+
+            // Run the supplementary rubric only when the agent actually
+            // proposed a non-empty patch. Empty patches (agent gave up)
+            // skip scoring — there is nothing to rate. Failures inside
+            // scoreRubric come back as `null` and never throw.
+            const rubricFn = deps.scoreRubric ?? scoreRubric;
+            let rubric: RubricScores | null = null;
+            if (patch.trim().length > 0) {
+                rubric = await rubricFn(
+                    {
+                        patch,
+                        title,
+                        body,
+                        evidenceBlock: userMessage,
+                    },
+                    { client: deps.client }
+                );
+            }
+
             return {
                 patch,
                 files_changed: filesTouchedByPatch(patch),
@@ -501,6 +534,7 @@ export async function runAgent(deps: RunAgentDeps = {}): Promise<DraftOutput> {
                 tool_call_count: toolCallCount,
                 input_tokens: totalInput,
                 output_tokens: totalOutput,
+                rubric_scores: rubric,
             };
         }
 

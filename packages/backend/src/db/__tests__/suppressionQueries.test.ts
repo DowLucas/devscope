@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { getSuppression, upsertSuppression } from "../suppressionQueries";
+import {
+  getSuppression,
+  listSuppressedRejectionReasonsForRepo,
+  upsertSuppression,
+} from "../suppressionQueries";
 
 type Call = { query: string; values: unknown[] };
 
@@ -98,5 +102,65 @@ describe("upsertSuppression", () => {
     });
     const writes = sql.calls.filter((c: Call) => /INSERT|UPDATE/.test(c.query));
     expect(writes).toHaveLength(1); // single atomic write
+  });
+});
+
+describe("listSuppressedRejectionReasonsForRepo", () => {
+  test("returns mapped rejection reasons within the window", async () => {
+    const rows = [
+      { rejection_reason: "too noisy", last_rejected_at: "2026-04-15T00:00:00Z" },
+      { rejection_reason: "duplicate", last_rejected_at: "2026-04-10T00:00:00Z" },
+    ];
+    const sql = makeSql([
+      { match: /SELECT rejection_reason, last_rejected_at/, rows },
+    ]);
+    const out = await listSuppressedRejectionReasonsForRepo(
+      sql,
+      "ri-1",
+      "claude_md",
+      new Date("2026-04-01T00:00:00Z")
+    );
+    expect(out).toEqual([
+      { rejectionReason: "too noisy", rejectedAt: "2026-04-15T00:00:00Z" },
+      { rejectionReason: "duplicate", rejectedAt: "2026-04-10T00:00:00Z" },
+    ]);
+    // Filters by repo_installation_id, kind, and IS NOT NULL
+    const call = sql.calls[0]!;
+    expect(call.query).toMatch(/repo_installation_id\s*=\s*\?/);
+    expect(call.query).toMatch(/kind\s*=\s*\?/);
+    expect(call.query).toMatch(/rejection_reason IS NOT NULL/);
+    expect(call.query).toMatch(/last_rejected_at\s*>=/);
+  });
+
+  test("returns [] when no rows match", async () => {
+    const sql = makeSql();
+    const out = await listSuppressedRejectionReasonsForRepo(
+      sql,
+      "ri-1",
+      "claude_md",
+      new Date()
+    );
+    expect(out).toEqual([]);
+  });
+
+  test("converts Date last_rejected_at to ISO string", async () => {
+    const sql = makeSql([
+      {
+        match: /SELECT rejection_reason/,
+        rows: [
+          {
+            rejection_reason: "x",
+            last_rejected_at: new Date("2026-04-15T00:00:00Z"),
+          },
+        ],
+      },
+    ]);
+    const out = await listSuppressedRejectionReasonsForRepo(
+      sql,
+      "ri-1",
+      "claude_md",
+      new Date("2026-01-01")
+    );
+    expect(out[0].rejectedAt).toBe("2026-04-15T00:00:00.000Z");
   });
 });
