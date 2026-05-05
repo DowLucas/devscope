@@ -172,13 +172,15 @@ Backend Dockerfile uses: `HEALTHCHECK --interval=30s --timeout=5s --start-period
 
 ### Production Deployment
 
-Production runs on a self-hosted Docker host, exposed via Cloudflare Tunnel (no inbound ports).
+Production runs on a self-hosted Docker host, exposed via Cloudflare Tunnel (no inbound ports). A staging compose stack runs alongside on the same host and gates promotions to prod — see `docs/deploy.md` for the full design and rollback runbook.
 
 **Deploy pipeline:**
-1. Push to `main` → `.github/workflows/ci.yml` runs tests/lint/typecheck, then builds `docker/production.Dockerfile` and pushes `ghcr.io/dowlucas/devscope-backend:latest` + `:<sha>` to GHCR.
-2. Watchtower polls GHCR every 5 minutes on the production host and restarts the `devscope-backend` container in-place when a new `:latest` digest appears. The container is labeled `com.centurylinklabs.watchtower.enable=true` to opt in.
-3. Postgres runs alongside the backend in the same compose stack; it is **not** managed by Watchtower and is upgraded manually.
+1. Push to `main` → `.github/workflows/ci.yml` runs tests/lint/typecheck, then builds `docker/production.Dockerfile` (with `--build-arg COMMIT_SHA=$GITHUB_SHA`) and pushes `ghcr.io/dowlucas/devscope-backend:latest` + `:<sha>` to GHCR.
+2. **Staging Watchtower** (label-scope `staging`) tracks `:latest` and restarts the staging backend on every push.
+3. CI's `promote-staging` job force-triggers the staging Watchtower (via `STAGING_WATCHTOWER_URL`/`STAGING_WATCHTOWER_TOKEN` secrets), then polls `STAGING_HEALTH_URL` until `/api/health` reports `commit == github.sha`, runs a smoke check, and only then retags `:<sha>` → `:stable` and pushes.
+4. **Prod Watchtower** (label-scope `production`) tracks `:stable` and restarts the prod backend within ~5 min of promotion. Prod NEVER pulls `:latest` directly.
+5. Postgres runs alongside each backend in its own compose stack; it is **not** managed by Watchtower and is upgraded manually.
 
-**Rolling back:** pin the compose `image:` to a specific `:<sha>` tag (all images are immutable by SHA on GHCR) and `docker compose up -d backend`. Watchtower will leave the pinned tag alone.
+**Rolling back:** pin prod's compose `image:` to a specific `:<sha>` tag (all images are immutable by SHA on GHCR) and `docker compose up -d backend`. Watchtower respects the pin. Full runbook in `docs/deploy.md`.
 
-Operational specifics (host address, SSH, file paths, secrets) live in `DEPLOY.local.md` (gitignored).
+Operational specifics (host address, SSH, file paths, secrets, Watchtower bearer tokens, staging admin creds) live in `DEPLOY.local.md` (gitignored).

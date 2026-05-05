@@ -310,8 +310,16 @@ app.route("/api/claude-md", claudeMdRoutes(sql));
 app.route("/api/topology", topologyRoutes(sql));
 app.route("/api/workflow-profiles", workflowProfileRoutes(sql));
 
+// Process start time, captured once at module load for /api/health.
+const PROCESS_STARTED_AT = new Date().toISOString();
+
 app.get("/api/health", (c) =>
-  c.json({ status: "ok", clients: getClientCount() })
+  c.json({
+    status: "ok",
+    clients: getClientCount(),
+    commit: process.env.COMMIT_SHA ?? "unknown",
+    started_at: PROCESS_STARTED_AT,
+  })
 );
 
 app.use("/api/verify-connection", rateLimitMiddleware({ maxRequests: 10, windowMs: 60_000, prefix: "verify" }));

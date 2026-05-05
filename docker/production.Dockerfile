@@ -49,6 +49,11 @@ COPY --from=build /app/packages/dashboard/dist ./packages/backend/dist
 ENV PORT=6767
 ENV SERVE_STATIC=true
 
+# Build-time commit SHA, baked in so /api/health can report which image is running.
+# Set by CI via --build-arg COMMIT_SHA=$GITHUB_SHA. Unset in local builds → "unknown".
+ARG COMMIT_SHA=unknown
+ENV COMMIT_SHA=${COMMIT_SHA}
+
 EXPOSE 6767
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

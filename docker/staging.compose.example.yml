@@ -1,0 +1,81 @@
+# Starter compose stack for staging.
+#
+# Drop into /opt/devscope-staging/docker-compose.yml on the prod host, fill in
+# the .env values, then `docker compose up -d`. Keep the customised file OUT of
+# this repo — staging carries its own admin password and Watchtower bearer
+# token.
+#
+# Run with an explicit project name so it can never collide with the prod stack:
+#   cd /opt/devscope-staging
+#   docker compose -p devscope-staging up -d
+#
+# This stack tracks ghcr.io/dowlucas/devscope-backend:latest. Prod tracks
+# :stable. The CI promote-staging job retags :<sha> → :stable only after this
+# stack reports the new commit on /api/health and smoke passes.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: devscope
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: devscope
+    volumes:
+      - staging-pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devscope"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    image: ghcr.io/dowlucas/devscope-backend:latest
+    environment:
+      PORT: "6767"
+      NODE_ENV: production
+      DATABASE_URL: postgres://devscope:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/devscope
+      STALE_SESSION_TIMEOUT_MINUTES: "${STALE_SESSION_TIMEOUT_MINUTES:-5}"
+      GC_CORS_ORIGIN: ${GC_CORS_ORIGIN:-}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://backend:6767}
+      DEVSCOPE_ADMIN_EMAIL: ${DEVSCOPE_ADMIN_EMAIL:?staging admin email}
+      DEVSCOPE_ADMIN_PASSWORD: ${DEVSCOPE_ADMIN_PASSWORD:?staging admin password}
+      DEVSCOPE_ADMIN_NAME: ${DEVSCOPE_ADMIN_NAME:-Staging Admin}
+      AI_DAILY_TOKEN_BUDGET: ${AI_DAILY_TOKEN_BUDGET:-100000}
+      # No real OAuth or Gemini keys on staging — we don't want staging
+      # exchanging tokens against prod identity providers.
+    ports:
+      - "127.0.0.1:6868:6767"
+    labels:
+      # Scope this stack to the staging Watchtower instance only.
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "com.centurylinklabs.watchtower.scope=staging"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    command:
+      - --interval=300
+      - --cleanup
+      - --label-enable
+      - --scope=staging
+      - --http-api-update
+    environment:
+      WATCHTOWER_HTTP_API_TOKEN: ${WATCHTOWER_HTTP_API_TOKEN:?token required}
+    ports:
+      # Bind to loopback only — Cloudflare tunnel exposes /v1/update on a
+      # protected hostname.
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+volumes:
+  staging-pgdata:
+    driver: local
