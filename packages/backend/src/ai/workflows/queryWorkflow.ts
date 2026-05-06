@@ -9,6 +9,7 @@ import {
 import { TEMPERATURE, DEFAULT_MODEL, isAiAvailable } from "../gemini";
 import { getToolDeclarations, findTool } from "../tools";
 import { recordTokenUsage } from "../../db";
+import { validateAndRedactTeamOutput } from "../grounding/validator";
 
 /**
  * Internal Gemini caller that supports systemInstruction via the SDK's
@@ -316,8 +317,14 @@ export async function runQueryWorkflow(
 
   await recordTokenUsage(sql, "chat", "gemini-2.0-flash", result.inputTokens, result.outputTokens);
 
+  // DEV-30 / M2: runtime grounding check — refuse per-developer leaks even if
+  // the model ignored the team-only system prompt.
+  const grounded = await validateAndRedactTeamOutput(sql, result.answer ?? "", {
+    surface: "chat",
+  });
+
   return {
-    answer: result.answer,
+    answer: grounded.text,
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
   };
@@ -354,10 +361,16 @@ export async function runQueryWorkflowStreaming(
           outputTokens: 0,
         });
 
+        // DEV-30 / M2: validate against developer roster before streaming bytes
+        // back to the client — once a chunk is on the wire we can't unsay it.
+        const grounded = await validateAndRedactTeamOutput(sql, result.answer ?? "", {
+          surface: "chat",
+        });
+
         // If we already got an answer from the workflow (general/clarification or synthesized)
         // Stream it out character-by-character in chunks
-        if (result.answer) {
-          const answer = result.answer;
+        if (grounded.text) {
+          const answer = grounded.text;
           // Send in chunks of ~50 chars for smooth streaming feel
           const chunkSize = 50;
           for (let i = 0; i < answer.length; i += chunkSize) {

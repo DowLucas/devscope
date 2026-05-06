@@ -1,6 +1,7 @@
 import type { SQL } from "bun";
 import { StateGraph, Annotation, END, START } from "@langchain/langgraph";
 import { callGemini, TEMPERATURE } from "../gemini";
+import { validateAndRedactTeamOutput } from "../grounding/validator";
 import {
   getPeriodComparison,
   getTeamHealth,
@@ -207,15 +208,30 @@ Requirements:
     { temperature: TEMPERATURE.report, maxOutputTokens: 4096 }
   );
 
+  // DEV-30 / M2: validate the full report before persisting. Reports are the
+  // most likely place for the model to drift into per-dev language because the
+  // outline + write step can re-introduce names from data even if the prompt
+  // forbids it. Use a report-shaped fallback so a rejected report still has
+  // some useful framing instead of a one-line refusal.
+  const grounded = await validateAndRedactTeamOutput(sql, response.text, {
+    surface: "reports",
+    fallback:
+      "## Report suppressed\n\n" +
+      "This report was suppressed because its draft content referenced individual " +
+      "developers. DevScope only surfaces team-level metrics. Please re-run the " +
+      "report — if this keeps happening, the underlying prompt may need to be " +
+      "tightened (file an issue).",
+  });
+
   // Update the report in DB
   await updateReport(sql, state.reportId, {
-    content_markdown: response.text,
+    content_markdown: grounded.text,
     data_context: state.data,
     status: "completed",
   });
 
   return {
-    content: response.text,
+    content: grounded.text,
     inputTokens: state.inputTokens + response.inputTokens,
     outputTokens: state.outputTokens + response.outputTokens,
   };

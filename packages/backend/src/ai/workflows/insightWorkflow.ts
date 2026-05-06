@@ -1,6 +1,7 @@
 import type { SQL } from "bun";
 import { StateGraph, Annotation, END, START } from "@langchain/langgraph";
 import { callGemini, TEMPERATURE } from "../gemini";
+import { validateAndRedactTeamOutput } from "../grounding/validator";
 import {
   getPeriodComparison,
   getTeamHealth,
@@ -96,7 +97,8 @@ Only return meaningful insights — do not force insights where data is unremark
 Respond with ONLY valid JSON — no markdown, no code fences, no other text.`;
 
 async function detectAnomalies(
-  state: InsightStateType
+  state: InsightStateType,
+  sql: SQL
 ): Promise<Partial<InsightStateType>> {
   const dataStr = JSON.stringify(state.data, null, 2).slice(0, 30_000);
 
@@ -126,8 +128,33 @@ async function detectAnomalies(
     console.error("[ai-insights] Failed to parse Gemini response:", response.text.slice(0, 200));
   }
 
+  // DEV-30 / M2: runtime grounding check on each insight. Validate title +
+  // narrative; on `reject` drop the insight entirely (the prompt explicitly
+  // forbids per-dev framing — a rejected insight means the model drifted).
+  const validated: DetectedInsight[] = [];
+  for (const insight of insights) {
+    const titleCheck = await validateAndRedactTeamOutput(sql, insight.title, {
+      surface: "insights",
+    });
+    const narrativeCheck = await validateAndRedactTeamOutput(
+      sql,
+      insight.narrative,
+      { surface: "insights" }
+    );
+    if (titleCheck.action === "reject" || narrativeCheck.action === "reject") {
+      // Drop the insight outright — better to surface fewer items than to
+      // return individualised content with a warning sticker on it.
+      continue;
+    }
+    validated.push({
+      ...insight,
+      title: titleCheck.text,
+      narrative: narrativeCheck.text,
+    });
+  }
+
   return {
-    insights,
+    insights: validated,
     inputTokens: state.inputTokens + response.inputTokens,
     outputTokens: state.outputTokens + response.outputTokens,
   };
@@ -136,7 +163,7 @@ async function detectAnomalies(
 export function createInsightWorkflow(sql: SQL) {
   const workflow = new StateGraph(InsightState)
     .addNode("gatherData", (state) => gatherData(state, sql))
-    .addNode("detectAnomalies", detectAnomalies)
+    .addNode("detectAnomalies", (state) => detectAnomalies(state, sql))
     .addEdge(START, "gatherData")
     .addEdge("gatherData", "detectAnomalies")
     .addEdge("detectAnomalies", END);
