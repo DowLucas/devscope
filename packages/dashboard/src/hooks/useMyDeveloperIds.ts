@@ -13,6 +13,13 @@ interface State {
   loading: boolean;
 }
 
+interface FetchedData {
+  orgId: string;
+  ids: Set<string>;
+}
+
+const EMPTY_IDS: Set<string> = new Set();
+
 /**
  * Returns the set of developer hashes linked to the currently signed-in user
  * within the active organization. Used to gate "self-only" surfaces such as
@@ -27,17 +34,14 @@ export function useMyDeveloperIds(): State {
   const { data: activeOrg } = authClient.useActiveOrganization();
   const activeOrgId = activeOrg?.id ?? null;
 
-  const [ids, setIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
+  // Cache the most recent successful fetch keyed by orgId. Loading and empty
+  // states are derived from (activeOrgId, data) rather than synced via
+  // setState in the effect body — this avoids react-hooks/set-state-in-effect.
+  const [data, setData] = useState<FetchedData | null>(null);
 
   useEffect(() => {
-    if (!activeOrgId) {
-      setIds(new Set());
-      setLoading(false);
-      return;
-    }
+    if (!activeOrgId) return;
     let cancelled = false;
-    setLoading(true);
     apiFetch("/api/teams/my-linked-developers")
       .then(async (res) => {
         if (!res.ok) return [] as LinkedDeveloper[];
@@ -45,18 +49,23 @@ export function useMyDeveloperIds(): State {
       })
       .then((rows) => {
         if (cancelled) return;
-        setIds(new Set(rows.map((r) => r.developer_id)));
-        setLoading(false);
+        setData({
+          orgId: activeOrgId,
+          ids: new Set(rows.map((r) => r.developer_id)),
+        });
       })
       .catch(() => {
         if (cancelled) return;
-        setIds(new Set());
-        setLoading(false);
+        setData({ orgId: activeOrgId, ids: new Set() });
       });
     return () => {
       cancelled = true;
     };
   }, [activeOrgId]);
 
-  return { ids, loading };
+  if (!activeOrgId) return { ids: EMPTY_IDS, loading: false };
+  if (!data || data.orgId !== activeOrgId) {
+    return { ids: EMPTY_IDS, loading: true };
+  }
+  return { ids: data.ids, loading: false };
 }
