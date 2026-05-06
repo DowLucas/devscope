@@ -9,7 +9,7 @@ import { dbStubs, wsHandlerStubs, developerLinkStubs, stripSensitiveFieldsStubs 
 const mockUpsertDeveloper = mock(() => Promise.resolve());
 const mockCreateSession = mock(() => Promise.resolve());
 const mockEndSession = mock(() => Promise.resolve());
-const mockInsertEvent = mock(() => Promise.resolve());
+const mockInsertEvent = mock(() => Promise.resolve({ stored: true }));
 const mockGetRecentEvents = mock(() => Promise.resolve([] as any[]));
 const mockCheckAlertThresholds = mock(() => Promise.resolve(null as any));
 
@@ -157,7 +157,7 @@ describe("POST /events", () => {
     mockEndSession.mockReset();
     mockEndSession.mockImplementation(() => Promise.resolve());
     mockInsertEvent.mockReset();
-    mockInsertEvent.mockImplementation(() => Promise.resolve());
+    mockInsertEvent.mockImplementation(() => Promise.resolve({ stored: true }));
     mockCheckAlertThresholds.mockReset();
     mockCheckAlertThresholds.mockImplementation(() => Promise.resolve(null));
     mockBroadcastToOrg.mockReset();
@@ -334,6 +334,38 @@ describe("POST /events", () => {
       sessionId: "sess-1",
       eventType: "session.start",
     });
+  });
+
+  // -----------------------------------------------------------------------
+  // Idempotency (DEV-11 Bet A workstream 1)
+  // -----------------------------------------------------------------------
+
+  test("re-sending the same event id is a no-op (duplicate response, no broadcast)", async () => {
+    // Simulate ON CONFLICT DO NOTHING returning zero rows: the row already
+    // existed, so insertEvent reports stored: false. The handler must skip
+    // post-insert side-effects (broadcasts, snapshots) and signal duplicate
+    // back to the caller so the plugin can clear its retry buffer.
+    mockInsertEvent.mockImplementation(() => Promise.resolve({ stored: false }));
+
+    const sql = makeMockSql([], [{ organization_id: "org-1" }]);
+    const app = buildApp(sql);
+    const event = validEvent();
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(event),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ ok: true, duplicate: true });
+
+    // The DB write was attempted (idempotency happens at the DB layer)
+    expect(mockInsertEvent).toHaveBeenCalledTimes(1);
+
+    // ...but no broadcast happened because the event was already stored.
+    expect(mockBroadcastToOrg).not.toHaveBeenCalled();
   });
 
   // -----------------------------------------------------------------------

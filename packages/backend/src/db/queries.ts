@@ -72,11 +72,25 @@ export async function endSession(sql: SQL, id: string) {
   await sql`UPDATE sessions SET status = 'ended', ended_at = NOW() WHERE id = ${id}`;
 }
 
-export async function insertEvent(sql: SQL, event: DevscopeEvent) {
+/**
+ * Insert an event idempotently.
+ *
+ * Re-sending an event with an id that already exists in `events` is a no-op
+ * at the DB layer: the row is left untouched and `{ stored: false }` is
+ * returned so callers can skip post-insert side-effects (broadcasts,
+ * snapshots) and the plugin can clear its retry buffer for that id.
+ *
+ * Idempotency is guaranteed by `events.id PRIMARY KEY` + `ON CONFLICT DO
+ * NOTHING`. `RETURNING id` produces zero rows on conflict.
+ */
+export async function insertEvent(sql: SQL, event: DevscopeEvent): Promise<{ stored: boolean }> {
   const payload = event.payload ?? {};
-  await sql`
+  const rows = await sql`
     INSERT INTO events (id, session_id, event_type, payload, created_at)
-    VALUES (${event.id}, ${event.sessionId}, ${event.eventType}, ${payload}::jsonb, ${event.timestamp}::timestamptz)`;
+    VALUES (${event.id}, ${event.sessionId}, ${event.eventType}, ${payload}::jsonb, ${event.timestamp}::timestamptz)
+    ON CONFLICT (id) DO NOTHING
+    RETURNING id`;
+  return { stored: (rows as unknown[]).length > 0 };
 }
 
 export async function getActiveAgents(sql: SQL) {
