@@ -38,6 +38,7 @@ import { ethicsRoutes } from "./routes/ethics";
 import { privacyRoutes } from "./routes/privacy";
 import { accountRoutes } from "./routes/account";
 import { waitlistRoutes } from "./routes/waitlist";
+import { adminRoutes } from "./routes/admin";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware, getClientIp } from "./middleware/rateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
@@ -290,6 +291,15 @@ app.use("/api/topology", orgScopeMiddleware(sql));
 app.use("/api/workflow-profiles/*", orgScopeMiddleware(sql));
 app.use("/api/workflow-profiles", orgScopeMiddleware(sql));
 
+// Admin export: tight per-user rate limit, no orgScopeMiddleware (orgId comes from URL).
+// Auth is the global session middleware above; the route itself enforces system-admin.
+app.use("/api/admin/*", rateLimitMiddleware({
+  maxRequests: 5,
+  windowMs: 60_000,
+  prefix: "admin",
+  keyFn: (c) => (c.get("user" as never) as any)?.id ?? getClientIp(c),
+}));
+
 app.route("/api/events", eventsRoutes(sql));
 app.route("/api/sessions", sessionsRoutes(sql));
 app.route("/api/developers", developersRoutes(sql));
@@ -309,6 +319,7 @@ app.route("/api/friction", frictionRoutes(sql));
 app.route("/api/claude-md", claudeMdRoutes(sql));
 app.route("/api/topology", topologyRoutes(sql));
 app.route("/api/workflow-profiles", workflowProfileRoutes(sql));
+app.route("/api/admin", adminRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })

@@ -30,7 +30,8 @@ export type EthicsEventType =
   | "ai_individual_reference_blocked"
   | "privacy_mode_activated"
   | "data_request_processed"
-  | "retention_purge_executed";
+  | "retention_purge_executed"
+  | "admin_org_export_executed";
 
 export interface EthicsAuditEntry {
   id: string;
