@@ -272,7 +272,16 @@ export function eventsRoutes(sql: SQL) {
       }
     }
 
-    await insertEvent(sql, event);
+    const { stored } = await insertEvent(sql, event);
+
+    // Idempotency: if a previous request already stored this event id, treat
+    // this call as a no-op. Skip broadcasts, snapshots, and ethics-stripped
+    // logging so a retried event does not double-fire side effects.
+    // Pre-insert side effects above (createSession, upsertDeveloper, ethics
+    // privacy_mode_activated) are already idempotent in their own right.
+    if (!stored) {
+      return c.json({ ok: true, duplicate: true });
+    }
 
     // Run shared post-insert handlers (broadcasts, compaction, snapshots, friction)
     const { devOrgs } = await runPostInsertHandlers(event, {
@@ -493,8 +502,12 @@ export function eventsRoutes(sql: SQL) {
       await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, null, null);
     }
 
-    // Insert the event
-    await insertEvent(sql, event);
+    // Insert the event (idempotent: re-sending the same id is a no-op)
+    const { stored } = await insertEvent(sql, event);
+
+    if (!stored) {
+      return c.json({ ok: true, duplicate: true });
+    }
 
     // Run shared post-insert handlers (broadcasts, compaction, snapshots, friction)
     await runPostInsertHandlers(event, {

@@ -15,13 +15,17 @@ import { mock } from "bun:test";
 export function dbStubs(overrides: Record<string, unknown> = {}) {
   const noop = mock(() => Promise.resolve(null));
   const noopArr = mock(() => Promise.resolve([]));
+  // insertEvent now returns { stored: boolean } so callers can branch on
+  // duplicate-id no-ops. Default the stub to "stored: true" so existing
+  // tests behave as before.
+  const insertEventStub = mock(() => Promise.resolve({ stored: true }));
   return {
     // queries.ts
     initializeDatabase: noop,
     upsertDeveloper: noop,
     createSession: noop,
     endSession: noop,
-    insertEvent: noop,
+    insertEvent: insertEventStub,
     getActiveAgents: noopArr,
     getActiveSessions: noopArr,
     getAllDevelopers: noopArr,
