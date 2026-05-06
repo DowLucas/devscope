@@ -41,6 +41,7 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     getProjectActivity: noopArr,
     getTeamActivitySummary: noop,
     getHourlyDistribution: noopArr,
+    getSkillUsageBreakdown: noopArr,
     getActivityPerMinute: noopArr,
     getPeriodComparison: noop,
     getToolFailureRates: noopArr,

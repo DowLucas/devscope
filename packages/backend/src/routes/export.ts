@@ -3,6 +3,7 @@ import type { SQL } from "bun";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { getExportData, getDigests, generateDigest } from "../db";
+import { gateSelfDeveloperId } from "../middleware/selfDeveloperGate";
 
 const digestGenerateSchema = z.object({
   period_start: z.string().min(1).max(50),
@@ -43,13 +44,11 @@ export function exportRoutes(sql: SQL) {
     if (!VALID_EXPORT_TYPES.includes(dataType)) {
       return c.json({ error: `Invalid data type. Must be one of: ${VALID_EXPORT_TYPES.join(", ")}` }, 400);
     }
+    const gate = await gateSelfDeveloperId(c, sql);
+    if (!gate.allow) return gate.response;
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    let developerId = c.req.query("developerId") || undefined;
-    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
-      developerId = undefined;
-    }
-    const data = await getExportData(sql, dataType, days, developerId, devIds);
+    const data = await getExportData(sql, dataType, days, gate.developerId, devIds);
     const csv = toCsv(data as Record<string, unknown>[]);
     c.header("Content-Type", "text/csv");
     c.header("Content-Disposition", `attachment; filename="${dataType}-export.csv"`);
@@ -61,13 +60,11 @@ export function exportRoutes(sql: SQL) {
     if (!VALID_EXPORT_TYPES.includes(dataType)) {
       return c.json({ error: `Invalid data type. Must be one of: ${VALID_EXPORT_TYPES.join(", ")}` }, 400);
     }
+    const gate = await gateSelfDeveloperId(c, sql);
+    if (!gate.allow) return gate.response;
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    let developerId = c.req.query("developerId") || undefined;
-    if (developerId && devIds && devIds.length > 0 && !devIds.includes(developerId)) {
-      developerId = undefined;
-    }
-    const data = await getExportData(sql, dataType, days, developerId, devIds);
+    const data = await getExportData(sql, dataType, days, gate.developerId, devIds);
     c.header("Content-Disposition", `attachment; filename="${dataType}-export.json"`);
     return c.json(data);
   });
