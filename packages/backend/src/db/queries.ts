@@ -1455,64 +1455,120 @@ export async function getProjectsOverview(
   days: number = 30,
   developerIds?: string[]
 ): Promise<ProjectDetail[]> {
+  // Aggregate session-level fields (status, duration, contributors) and
+  // event-level fields (counts, failure rate, last activity) in separate CTEs
+  // so the events JOIN does not multiply session rows. Without this, a project
+  // with many events per session reports a wildly inflated total_minutes (see
+  // DEV-25: perfectemp returned 8.37M minutes from ~140k events/session).
   if (developerIds && developerIds.length > 0) {
     return (await sql`
+      WITH session_agg AS (
+        SELECT
+          s.project_name,
+          s.project_path,
+          SUM(CASE WHEN s.status = 'active' THEN 1 ELSE 0 END)::INT AS active_sessions,
+          COUNT(*)::INT AS total_sessions,
+          SUM(
+            CASE WHEN s.ended_at IS NOT NULL
+              THEN EXTRACT(EPOCH FROM (s.ended_at - s.started_at)) / 60
+              ELSE 0
+            END
+          ) AS total_minutes_raw,
+          COUNT(DISTINCT s.developer_id)::INT AS contributor_count
+        FROM sessions s
+        WHERE s.started_at >= NOW() - make_interval(days => ${days})
+          AND s.developer_id IN (${inList(developerIds)})
+        GROUP BY s.project_name, s.project_path
+      ),
+      event_agg AS (
+        SELECT
+          s.project_name,
+          s.project_path,
+          COUNT(e.id)::INT AS total_events,
+          SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC AS fail_count,
+          SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END)::NUMERIC AS attempt_count,
+          MAX(e.created_at) AS last_activity
+        FROM sessions s
+        LEFT JOIN events e ON e.session_id = s.id
+        WHERE s.started_at >= NOW() - make_interval(days => ${days})
+          AND s.developer_id IN (${inList(developerIds)})
+        GROUP BY s.project_name, s.project_path
+      )
       SELECT
-        s.project_name as name,
-        s.project_path as path,
-        SUM(CASE WHEN s.status = 'active' THEN 1 ELSE 0 END)::INT as active_sessions,
-        COUNT(DISTINCT s.id)::INT as total_sessions,
-        COUNT(e.id)::INT as total_events,
-        ROUND((SUM(
+        sa.project_name AS name,
+        sa.project_path AS path,
+        sa.active_sessions,
+        sa.total_sessions,
+        COALESCE(ea.total_events, 0)::INT AS total_events,
+        ROUND(sa.total_minutes_raw::NUMERIC, 1)::FLOAT AS total_minutes,
+        sa.contributor_count,
+        ROUND(
+          (COALESCE(ea.fail_count, 0) / GREATEST(COALESCE(ea.attempt_count, 0), 1)),
+          3
+        )::FLOAT AS failure_rate,
+        ea.last_activity,
+        ROUND(
+          ((1 - COALESCE(ea.fail_count, 0) / GREATEST(COALESCE(ea.attempt_count, 0), 1)) * 100),
+          0
+        )::FLOAT AS health_score
+      FROM session_agg sa
+      LEFT JOIN event_agg ea
+        ON ea.project_name IS NOT DISTINCT FROM sa.project_name
+       AND ea.project_path IS NOT DISTINCT FROM sa.project_path
+      ORDER BY total_events DESC`) as ProjectDetail[];
+  }
+  return (await sql`
+    WITH session_agg AS (
+      SELECT
+        s.project_name,
+        s.project_path,
+        SUM(CASE WHEN s.status = 'active' THEN 1 ELSE 0 END)::INT AS active_sessions,
+        COUNT(*)::INT AS total_sessions,
+        SUM(
           CASE WHEN s.ended_at IS NOT NULL
             THEN EXTRACT(EPOCH FROM (s.ended_at - s.started_at)) / 60
             ELSE 0
           END
-        ) / GREATEST(COUNT(DISTINCT s.id), 1))::NUMERIC, 1)::FLOAT as total_minutes,
-        COUNT(DISTINCT s.developer_id)::INT as contributor_count,
-        ROUND(
-          (SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC /
-          GREATEST(SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END), 1)), 3
-        )::FLOAT as failure_rate,
-        MAX(e.created_at) as last_activity,
-        ROUND(
-          ((1 - SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC /
-          GREATEST(SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END), 1)) * 100)
-        , 0)::FLOAT as health_score
+        ) AS total_minutes_raw,
+        COUNT(DISTINCT s.developer_id)::INT AS contributor_count
+      FROM sessions s
+      WHERE s.started_at >= NOW() - make_interval(days => ${days})
+      GROUP BY s.project_name, s.project_path
+    ),
+    event_agg AS (
+      SELECT
+        s.project_name,
+        s.project_path,
+        COUNT(e.id)::INT AS total_events,
+        SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC AS fail_count,
+        SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END)::NUMERIC AS attempt_count,
+        MAX(e.created_at) AS last_activity
       FROM sessions s
       LEFT JOIN events e ON e.session_id = s.id
       WHERE s.started_at >= NOW() - make_interval(days => ${days})
-        AND s.developer_id IN (${inList(developerIds)})
       GROUP BY s.project_name, s.project_path
-      ORDER BY total_events DESC`) as ProjectDetail[];
-  }
-  return (await sql`
+    )
     SELECT
-      s.project_name as name,
-      s.project_path as path,
-      SUM(CASE WHEN s.status = 'active' THEN 1 ELSE 0 END)::INT as active_sessions,
-      COUNT(DISTINCT s.id)::INT as total_sessions,
-      COUNT(e.id)::INT as total_events,
-      ROUND((SUM(
-        CASE WHEN s.ended_at IS NOT NULL
-          THEN EXTRACT(EPOCH FROM (s.ended_at - s.started_at)) / 60
-          ELSE 0
-        END
-      ) / GREATEST(COUNT(DISTINCT s.id), 1))::NUMERIC, 1)::FLOAT as total_minutes,
-      COUNT(DISTINCT s.developer_id)::INT as contributor_count,
+      sa.project_name AS name,
+      sa.project_path AS path,
+      sa.active_sessions,
+      sa.total_sessions,
+      COALESCE(ea.total_events, 0)::INT AS total_events,
+      ROUND(sa.total_minutes_raw::NUMERIC, 1)::FLOAT AS total_minutes,
+      sa.contributor_count,
       ROUND(
-        (SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC /
-        GREATEST(SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END), 1)), 3
-      )::FLOAT as failure_rate,
-      MAX(e.created_at) as last_activity,
+        (COALESCE(ea.fail_count, 0) / GREATEST(COALESCE(ea.attempt_count, 0), 1)),
+        3
+      )::FLOAT AS failure_rate,
+      ea.last_activity,
       ROUND(
-        ((1 - SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC /
-        GREATEST(SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END), 1)) * 100)
-      , 0)::FLOAT as health_score
-    FROM sessions s
-    LEFT JOIN events e ON e.session_id = s.id
-    WHERE s.started_at >= NOW() - make_interval(days => ${days})
-    GROUP BY s.project_name, s.project_path
+        ((1 - COALESCE(ea.fail_count, 0) / GREATEST(COALESCE(ea.attempt_count, 0), 1)) * 100),
+        0
+      )::FLOAT AS health_score
+    FROM session_agg sa
+    LEFT JOIN event_agg ea
+      ON ea.project_name IS NOT DISTINCT FROM sa.project_name
+     AND ea.project_path IS NOT DISTINCT FROM sa.project_path
     ORDER BY total_events DESC`) as ProjectDetail[];
 }
 
