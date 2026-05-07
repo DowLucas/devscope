@@ -32,11 +32,11 @@ BEGIN
 
   SELECT COUNT(*) INTO apikey_count FROM _dev24_pending;
   IF apikey_count = 0 THEN
-    RAISE NOTICE '[028] no apikey-* developer rows — nothing to do';
+    RAISE NOTICE '[033] no apikey-* developer rows — nothing to do';
     RETURN;
   END IF;
 
-  RAISE NOTICE '[028] merging % apikey-* developer rows into SHA256(email) canonical rows', apikey_count;
+  RAISE NOTICE '[033] merging % apikey-* developer rows into SHA256(email) canonical rows', apikey_count;
 
   FOR rec IN SELECT * FROM _dev24_pending LOOP
     SELECT email, name INTO canonical_email, canonical_name
