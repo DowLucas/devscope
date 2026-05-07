@@ -14,6 +14,7 @@ const FeedbackState = Annotation.Root({
   privacyMode: Annotation<string | null>,
   isSelfView: Annotation<boolean>,
   includeContent: Annotation<boolean>,
+  orgId: Annotation<string>,
   data: Annotation<Record<string, unknown>>,
   content: Annotation<string>,
   reportId: Annotation<string>,
@@ -44,12 +45,14 @@ async function generateFeedback(
   state: FeedbackStateType,
   sql: SQL
 ): Promise<Partial<FeedbackStateType>> {
-  // Create the report record first
+  // Create the report record first. orgId is required at the DB layer (DEV-43);
+  // routes resolve it from the active org session before invoking this workflow.
   const report = await createReport(sql, {
     report_type: "session",
     title: `Session Debrief — ${new Date().toLocaleDateString()}`,
     period_start: undefined,
     period_end: undefined,
+    orgId: state.orgId,
   });
 
   if (!state.data || Object.keys(state.data).length === 0) {
@@ -200,7 +203,8 @@ export async function runSessionFeedbackWorkflow(
   sql: SQL,
   sessionId: string,
   privacyMode: string | null,
-  isSelfView: boolean
+  isSelfView: boolean,
+  orgId: string
 ): Promise<AiReport> {
   const app = createSessionFeedbackWorkflow(sql);
 
@@ -209,6 +213,7 @@ export async function runSessionFeedbackWorkflow(
     privacyMode,
     isSelfView,
     includeContent: false,
+    orgId,
     data: {},
     content: "",
     reportId: "",

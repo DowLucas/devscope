@@ -237,14 +237,13 @@ export async function createReport(
     title: string;
     period_start?: string;
     period_end?: string;
-    orgId?: string;
+    orgId: string;
     userId?: string;
   }
 ): Promise<AiReport> {
   const id = crypto.randomUUID();
   const periodStart = report.period_start ?? null;
   const periodEnd = report.period_end ?? null;
-  const orgId = report.orgId ?? null;
   const userId = report.userId ?? null;
 
   await sql`
@@ -252,10 +251,43 @@ export async function createReport(
     VALUES (${id}, ${report.report_type}, ${report.title}, 'generating',
       ${periodStart ? sql`${periodStart}::TIMESTAMPTZ` : sql`NULL`},
       ${periodEnd ? sql`${periodEnd}::TIMESTAMPTZ` : sql`NULL`},
-      ${orgId}, ${userId})`;
+      ${report.orgId}, ${userId})`;
 
   const [row] = await sql`SELECT * FROM ai_reports WHERE id = ${id}`;
   return row as AiReport;
+}
+
+/**
+ * Insert a report row only if no row with the same (organization_id, report_type,
+ * period_start) already exists. Returns the inserted row, or `null` if the
+ * weekly-dedup unique index trips. Foundation for the #14 weekly cron (DEV-46) —
+ * lets the cron run idempotently without surrounding transactions.
+ */
+export async function createReportIfAbsent(
+  sql: SQL,
+  report: {
+    report_type: ReportType;
+    title: string;
+    period_start: string;
+    period_end?: string;
+    orgId: string;
+    userId?: string;
+  }
+): Promise<AiReport | null> {
+  const id = crypto.randomUUID();
+  const periodEnd = report.period_end ?? null;
+  const userId = report.userId ?? null;
+
+  const inserted = (await sql`
+    INSERT INTO ai_reports (id, report_type, title, status, period_start, period_end, organization_id, user_id)
+    VALUES (${id}, ${report.report_type}, ${report.title}, 'generating',
+      ${report.period_start}::TIMESTAMPTZ,
+      ${periodEnd ? sql`${periodEnd}::TIMESTAMPTZ` : sql`NULL`},
+      ${report.orgId}, ${userId})
+    ON CONFLICT DO NOTHING
+    RETURNING *`) as AiReport[];
+
+  return inserted[0] ?? null;
 }
 
 export async function updateReport(
@@ -295,6 +327,28 @@ export async function getReports(
     SELECT * FROM ai_reports
     ORDER BY created_at DESC
     LIMIT ${limit}`) as AiReport[];
+}
+
+/**
+ * Org-scoped lookup keyed on the weekly-dedup tuple. Returns at most one row
+ * thanks to the partial unique index on (organization_id, report_type, period_start)
+ * for `report_type = 'weekly'`. For non-weekly types this returns the most
+ * recent matching row, since other types can have multiple rows per period.
+ */
+export async function getReportsForOrg(
+  sql: SQL,
+  orgId: string,
+  reportType: ReportType,
+  periodStart: string
+): Promise<AiReport | null> {
+  const [row] = await sql`
+    SELECT * FROM ai_reports
+    WHERE organization_id = ${orgId}
+      AND report_type = ${reportType}
+      AND period_start = ${periodStart}::TIMESTAMPTZ
+    ORDER BY created_at DESC
+    LIMIT 1`;
+  return (row as AiReport) ?? null;
 }
 
 export async function getReport(

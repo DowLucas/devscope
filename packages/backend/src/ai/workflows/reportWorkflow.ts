@@ -26,6 +26,7 @@ const ReportState = Annotation.Root({
   periodEnd: Annotation<string | null>,
   persona: Annotation<string | null>,
   developerIds: Annotation<string[] | undefined>,
+  orgId: Annotation<string>,
   data: Annotation<Record<string, unknown>>,
   outline: Annotation<string>,
   content: Annotation<string>,
@@ -79,12 +80,15 @@ async function gatherReportData(
     getAntiPatternStats(sql, days),
   ]);
 
-  // Create the report record
+  // Create the report record. orgId is required (DEV-43): every report row
+  // must be tenant-scoped at the DB layer to support the weekly-cron dedup
+  // index and to prevent cross-org reads.
   const report = await createReport(sql, {
     report_type: state.reportType,
     title: state.title,
     period_start: state.periodStart ?? undefined,
     period_end: state.periodEnd ?? undefined,
+    orgId: state.orgId,
   });
 
   return {
@@ -253,6 +257,7 @@ export function createReportWorkflow(sql: SQL) {
 export async function runReportWorkflow(
   sql: SQL,
   reportType: ReportType,
+  orgId: string,
   title?: string,
   periodStart?: string,
   periodEnd?: string,
@@ -272,6 +277,7 @@ export async function runReportWorkflow(
     periodEnd: periodEnd ?? null,
     persona: persona ?? null,
     developerIds,
+    orgId,
     data: {},
     outline: "",
     content: "",
