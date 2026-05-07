@@ -17,7 +17,7 @@ import {
   finalizeTokenSegment,
 } from "../db";
 import { broadcastToOrg } from "../ws/handler";
-import { autoLinkDeveloperToOrg, autoLinkUserToDeveloper } from "../services/developerLink";
+import { autoLinkDeveloperToOrg, autoLinkUserToDeveloper, computeDeveloperId } from "../services/developerLink";
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 import { logEthicsEvent } from "../utils/ethicsAudit";
 import { evaluateFriction, cleanupFrictionSession } from "../services/frictionDetector";
@@ -458,7 +458,8 @@ export function eventsRoutes(sql: SQL) {
 
     // Derive developer identity from API key owner
     const apiKeyUserId = c.get("apiKeyUserId" as never) as string | undefined;
-    if (!apiKeyUserId) {
+    const authUser = c.get("user" as never) as { id?: string; name?: string; email?: string } | undefined;
+    if (!apiKeyUserId || !authUser?.email) {
       return c.json({ error: "HTTP hooks require API key authentication" }, 401);
     }
 
@@ -472,9 +473,11 @@ export function eventsRoutes(sql: SQL) {
     const cwd = String(body.cwd ?? "");
     const projectName = cwd ? cwd.split("/").pop() ?? "unknown" : "unknown";
 
-    // Use API key user ID directly as developer identity
-    const developerId = `apikey-${apiKeyUserId}`;
-    const developerName = "API Key User";
+    // Single developer-id namespace (DEV-24): synthesize SHA256(email) from
+    // the API-key owner's account email. Same derivation as the plugin.
+    const developerEmail = authUser.email;
+    const developerId = computeDeveloperId(developerEmail);
+    const developerName = authUser.name && authUser.name.length > 0 ? authUser.name : "Developer";
 
     // Build the normalized event
     const event: DevscopeEvent = {
@@ -483,7 +486,7 @@ export function eventsRoutes(sql: SQL) {
       sessionId,
       developerId,
       developerName,
-      developerEmail: "",
+      developerEmail,
       projectPath: cwd,
       projectName,
       eventType: eventType as any,
@@ -491,9 +494,11 @@ export function eventsRoutes(sql: SQL) {
     };
 
     // Upsert developer
-    await upsertDeveloper(sql, event.developerId, event.developerName, "");
+    await upsertDeveloper(sql, event.developerId, event.developerName, event.developerEmail ?? "");
     autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId)
       .catch((err) => console.error("[events/hook] autoLinkDeveloperToOrg failed:", err));
+    autoLinkUserToDeveloper(sql, apiKeyUserId, event.developerId)
+      .catch((err) => console.error("[events/hook] autoLinkUserToDeveloper failed:", err));
 
     // Ensure session exists and is active (mirrors main POST / handler behavior)
     const [existingSession] = await sql`SELECT status FROM sessions WHERE id = ${event.sessionId}`;

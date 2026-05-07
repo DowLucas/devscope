@@ -126,7 +126,11 @@ function validEvent(overrides: Record<string, unknown> = {}) {
  */
 function buildApp(
   sql: any,
-  opts: { apiKeyUserId?: string; orgDeveloperIds?: string[] } = {},
+  opts: {
+    apiKeyUserId?: string;
+    orgDeveloperIds?: string[];
+    user?: { id?: string; name?: string; email?: string };
+  } = {},
 ) {
   const app = new Hono();
 
@@ -136,6 +140,9 @@ function buildApp(
     }
     if (opts.orgDeveloperIds !== undefined) {
       c.set("orgDeveloperIds" as never, opts.orgDeveloperIds as never);
+    }
+    if (opts.user !== undefined) {
+      c.set("user" as never, opts.user as never);
     }
     await next();
   });
@@ -740,6 +747,95 @@ describe("POST /events", () => {
     const orgIds = mockBroadcastToOrg.mock.calls.map((c: any) => c[0]);
     expect(orgIds).toContain("org-1");
     expect(orgIds).toContain("org-2");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /hook -- Claude Code HTTP hook ingestion (DEV-24: SHA256(email) namespace)
+// ---------------------------------------------------------------------------
+
+describe("POST /events/hook", () => {
+  // sha256("alice@example.com") — must match computeDeveloperId behavior.
+  const ALICE_DEV_ID =
+    "ff8d9819fc0e12bf0d24892e45987e249a28dce836a85cad60e28eaaa8c6d976";
+
+  beforeEach(() => {
+    mockUpsertDeveloper.mockReset();
+    mockUpsertDeveloper.mockImplementation(() => Promise.resolve());
+    mockInsertEvent.mockReset();
+    mockInsertEvent.mockImplementation(() => Promise.resolve({ stored: true }));
+    mockCreateSession.mockReset();
+    mockCreateSession.mockImplementation(() => Promise.resolve());
+    mockAutoLinkDeveloperToOrg.mockReset();
+    mockAutoLinkDeveloperToOrg.mockImplementation(() => Promise.resolve());
+  });
+
+  test("derives developerId from SHA256(authUser.email), not apikey-<userId>", async () => {
+    const sql = makeMockSql();
+    const app = buildApp(sql, {
+      apiKeyUserId: "user-owner-1",
+      user: { id: "user-owner-1", name: "Alice", email: "alice@example.com" },
+    });
+
+    const res = await app.request("/hook?event=notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: "sess-hook-1",
+        cwd: "/home/alice/proj",
+        tool_name: "Bash",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockUpsertDeveloper).toHaveBeenCalledTimes(1);
+    expect(mockUpsertDeveloper).toHaveBeenCalledWith(
+      sql,
+      ALICE_DEV_ID,
+      "Alice",
+      "alice@example.com",
+    );
+    expect(mockAutoLinkDeveloperToOrg).toHaveBeenCalledWith(
+      sql,
+      "user-owner-1",
+      ALICE_DEV_ID,
+    );
+    // The inserted event must carry the canonical developerId.
+    const insertedEvent = (mockInsertEvent.mock.calls[0] as any[])[1];
+    expect(insertedEvent.developerId).toBe(ALICE_DEV_ID);
+    expect(insertedEvent.developerEmail).toBe("alice@example.com");
+    expect(insertedEvent.developerId.startsWith("apikey-")).toBe(false);
+  });
+
+  test("rejects when API key auth is missing", async () => {
+    const sql = makeMockSql();
+    const app = buildApp(sql); // no apiKeyUserId, no user
+
+    const res = await app.request("/hook?event=notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: "s", cwd: "/x" }),
+    });
+
+    expect(res.status).toBe(401);
+    expect(mockInsertEvent).not.toHaveBeenCalled();
+  });
+
+  test("rejects when apiKeyUserId is set but auth user has no email", async () => {
+    const sql = makeMockSql();
+    const app = buildApp(sql, {
+      apiKeyUserId: "user-owner-1",
+      user: { id: "user-owner-1", name: "Alice" }, // missing email
+    });
+
+    const res = await app.request("/hook?event=notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: "s", cwd: "/x" }),
+    });
+
+    expect(res.status).toBe(401);
+    expect(mockInsertEvent).not.toHaveBeenCalled();
   });
 });
 
