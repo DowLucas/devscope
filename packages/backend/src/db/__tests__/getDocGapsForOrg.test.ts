@@ -114,9 +114,12 @@ function createMockSql() {
       },
       {
         term: "telemetry-shim.ts",
-        count: 9, // covered transitively via "telemetry" but the corpus
-        // doesn't contain "telemetry-shim" — should NOT drop, because the
-        // helper checks the full term against the corpus, not a substring.
+        count: 9,
+        // Falls through as a gap: neither the full term "telemetry-shim.ts"
+        // nor its extension-stripped stem "telemetry-shim" appears as a
+        // substring of CLAUDE_MD_CORPUS. Confirms the stem-strip heuristic
+        // is tight (covers "stripe" → "stripe.ts") and does not over-cover
+        // (a doc mentioning only "shim" must NOT cover "telemetry-shim.ts").
         sample_session_ids: ["88888888-8888-4888-8888-888888888888"],
       },
     ],

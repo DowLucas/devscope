@@ -187,6 +187,12 @@ export async function gatherReportData(
   // If the helper has nothing to report (no CLAUDE.md snapshots, no period
   // bounds, or no candidate terms), the field is omitted and the prompt's
   // "Doc gap data unavailable" branch handles the absence gracefully.
+  //
+  // Failure mode: `createReport` above has already inserted a pending report
+  // row, so a thrown error from the helper would orphan that record AND
+  // abort the report. The doc-gap subsection is a wedge enhancement, not a
+  // load-bearing field — degrade by logging and omitting `docGaps` so the
+  // rest of the report still ships.
   let docGaps: Awaited<ReturnType<typeof getDocGapsForOrg>> | undefined;
   if (
     state.persona === WEEKLY_BUYER_PERSONA &&
@@ -194,10 +200,19 @@ export async function gatherReportData(
     state.periodEnd &&
     state.orgId
   ) {
-    docGaps = await getDocGapsForOrg(sql, state.orgId, {
-      start: state.periodStart,
-      end: state.periodEnd,
-    });
+    try {
+      docGaps = await getDocGapsForOrg(sql, state.orgId, {
+        start: state.periodStart,
+        end: state.periodEnd,
+      });
+    } catch (err) {
+      console.warn(
+        `[gatherReportData] getDocGapsForOrg failed for org=${state.orgId} ` +
+          `period=${state.periodStart}..${state.periodEnd} — ` +
+          `omitting docGaps from this report.`,
+        err
+      );
+    }
   }
 
   return {
