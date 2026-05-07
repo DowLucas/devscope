@@ -220,9 +220,16 @@ export function eventsRoutes(sql: SQL) {
     // Auto-link plugin developer to the API key owner's org
     const apiKeyUserId = c.get("apiKeyUserId" as never) as string | undefined;
     if (apiKeyUserId) {
-      // Best-effort linking — must not block or abort event ingestion
-      autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId)
+      // DEV-68: await the org link before any code that queries
+      // organization_developer (privacy_mode_activated logging below and the
+      // broadcast fan-out in runPostInsertHandlers). Otherwise the very first
+      // event from a brand-new developerId is persisted but not broadcast
+      // because the link insert hasn't landed when the lookup runs.
+      // Errors are still caught so a failed link does not abort ingestion.
+      await autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId)
         .catch((err) => console.error("[events] autoLinkDeveloperToOrg failed:", err));
+      // autoLinkUserToDeveloper is not on the broadcast critical path; keep
+      // it fire-and-forget so we don't add an extra round-trip per event.
       autoLinkUserToDeveloper(sql, apiKeyUserId, event.developerId)
         .catch((err) => console.error("[events] autoLinkUserToDeveloper failed:", err));
     }
@@ -495,7 +502,11 @@ export function eventsRoutes(sql: SQL) {
 
     // Upsert developer
     await upsertDeveloper(sql, event.developerId, event.developerName, event.developerEmail ?? "");
-    autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId)
+    // DEV-68: await the org link before runPostInsertHandlers so the very first
+    // event from a brand-new developerId actually broadcasts (the WS fan-out
+    // queries organization_developer, which would otherwise be empty on race).
+    // Errors are still caught so a failed link does not abort ingestion.
+    await autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId)
       .catch((err) => console.error("[events/hook] autoLinkDeveloperToOrg failed:", err));
     autoLinkUserToDeveloper(sql, apiKeyUserId, event.developerId)
       .catch((err) => console.error("[events/hook] autoLinkUserToDeveloper failed:", err));

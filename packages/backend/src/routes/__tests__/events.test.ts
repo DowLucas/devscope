@@ -748,6 +748,49 @@ describe("POST /events", () => {
     expect(orgIds).toContain("org-1");
     expect(orgIds).toContain("org-2");
   });
+
+  // -----------------------------------------------------------------------
+  // DEV-68: first-event WS broadcast race
+  // -----------------------------------------------------------------------
+
+  test("awaits autoLinkDeveloperToOrg so a fresh developer's first event broadcasts", async () => {
+    // Regression for DEV-68. Previously autoLinkDeveloperToOrg was
+    // fire-and-forget, so the very first event from a brand-new developerId
+    // was persisted but not broadcast — the WS fan-out in
+    // runPostInsertHandlers queried organization_developer before the link
+    // insert had landed, devOrgs came back empty, and broadcastToOrg was
+    // never called. Subsequent events from the same dev id worked because
+    // the row was now in place.
+    const sql = makeMockSql([], []); // no existing session, no org rows initially
+
+    // Simulate the link insert landing on a macrotask boundary — AFTER all
+    // synchronous microtasks. If the route still fires-and-forgets the link
+    // (buggy version), runPostInsertHandlers will see orgRows = [] and
+    // broadcast nothing. If the route awaits the link (fix), the org row is
+    // in place before the broadcast fan-out runs.
+    mockAutoLinkDeveloperToOrg.mockImplementation(async () => {
+      await new Promise<void>((r) => setTimeout(r, 0));
+      sql._setOrgRows([{ organization_id: "org-fresh" }]);
+    });
+
+    const app = buildApp(sql, { apiKeyUserId: "user-owner-1" });
+
+    await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent()),
+    });
+
+    expect(mockAutoLinkDeveloperToOrg).toHaveBeenCalledTimes(1);
+    // The broadcast must reach the just-linked org bucket.
+    const orgIds = mockBroadcastToOrg.mock.calls.map((c: any) => c[0]);
+    expect(orgIds).toContain("org-fresh");
+    // event.new in particular must fire — that's the user-visible bug.
+    const types = mockBroadcastToOrg.mock.calls.map(
+      (c: any) => (c[1] as any).type,
+    );
+    expect(types).toContain("event.new");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -836,6 +879,46 @@ describe("POST /events/hook", () => {
 
     expect(res.status).toBe(401);
     expect(mockInsertEvent).not.toHaveBeenCalled();
+  });
+
+  // -----------------------------------------------------------------------
+  // DEV-68: first-event WS broadcast race (hook path)
+  // -----------------------------------------------------------------------
+
+  test("awaits autoLinkDeveloperToOrg so a fresh developer's first hook event broadcasts", async () => {
+    // Regression for DEV-68 on the /hook path. Mirrors the POST / case:
+    // both ingestion paths must broadcast the very first event from a
+    // brand-new developerId, not just persist it.
+    const sql = makeMockSql([], []);
+
+    mockBroadcastToOrg.mockReset();
+    mockAutoLinkDeveloperToOrg.mockImplementation(async () => {
+      await new Promise<void>((r) => setTimeout(r, 0));
+      sql._setOrgRows([{ organization_id: "org-fresh-hook" }]);
+    });
+
+    const app = buildApp(sql, {
+      apiKeyUserId: "user-owner-1",
+      user: { id: "user-owner-1", name: "Alice", email: "alice@example.com" },
+    });
+
+    const res = await app.request("/hook?event=notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: "sess-hook-fresh",
+        cwd: "/home/alice/proj",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockAutoLinkDeveloperToOrg).toHaveBeenCalledTimes(1);
+    const orgIds = mockBroadcastToOrg.mock.calls.map((c: any) => c[0]);
+    expect(orgIds).toContain("org-fresh-hook");
+    const types = mockBroadcastToOrg.mock.calls.map(
+      (c: any) => (c[1] as any).type,
+    );
+    expect(types).toContain("event.new");
   });
 });
 
