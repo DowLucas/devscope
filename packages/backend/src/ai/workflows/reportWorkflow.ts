@@ -36,6 +36,88 @@ const ReportState = Annotation.Root({
 
 type ReportStateType = typeof ReportState.State;
 
+/**
+ * Persona key for the Friday-narrative weekly team report we hand to a design
+ * partner. The branch is intentionally additive — it does not touch the
+ * `team-lead` / `developer` paths. See parent task DEV-39.
+ */
+export const WEEKLY_BUYER_PERSONA = "weekly-buyer" as const;
+
+/**
+ * Build the outline-generation prompt for the `weekly-buyer` persona.
+ *
+ * Exposed as a pure helper so the snapshot test can assert the rendered
+ * template carries zero developer-identifying tokens (names, emails, hashes)
+ * without actually calling the LLM.
+ */
+export function buildWeeklyBuyerOutlinePrompt(args: {
+  reportType: ReportType;
+  title: string;
+  data: Record<string, unknown>;
+}): string {
+  const dataStr = JSON.stringify(args.data, null, 2).slice(0, 25_000);
+
+  return `You are drafting the weekly Friday-narrative team report for DevScope.
+The reader is an external design partner — buyer-legible, not internal engineering jargon.
+
+Report type: ${args.reportType}
+Title: ${args.title}
+
+Voice & framing:
+- Friday-narrative: "this week the team worked on X. What worked: Y. What didn't: Z. Where they got stuck: W. Versus last week, the shift was V."
+- TEAM-AGGREGATE ONLY. Never mention individual developers — no names, no emails, no SHA hashes, no "Developer A/B", no "this developer", no per-person counts, no rankings or comparisons across people.
+- Concise and buyer-legible. Cut DevScope-internal jargon.
+
+Outline a ~500-word narrative with these sections, in order:
+1. Week summary (one short paragraph framing the week at a team level)
+2. What worked (up to 3 bullets, team-level only)
+3. What didn't (up to 3 bullets, team-level only)
+4. Where the team got stuck (failure clusters, project blockers — attribute to tools, projects, or sessions, never to individuals)
+5. Documentation gaps (recurring missing project context where Claude Code lacked knowledge — sourced from the \`docGaps\` field on the data when present; if absent or empty, say "Doc gap data unavailable for this period." — do not fabricate gaps)
+6. Week-over-week (use \`periodComparison\`; describe direction and magnitude in plain language)
+
+Data:
+${dataStr}
+
+Return a structured outline with the sections above. Keep it tight.`;
+}
+
+/**
+ * Build the report-writing prompt for the `weekly-buyer` persona.
+ *
+ * Like the outline helper, exported so the snapshot test can validate the
+ * rendered template against the team-aggregate guardrail without invoking
+ * the LLM.
+ */
+export function buildWeeklyBuyerWritePrompt(args: {
+  reportType: ReportType;
+  title: string;
+  outline: string;
+  data: Record<string, unknown>;
+}): string {
+  const dataStr = JSON.stringify(args.data, null, 2).slice(0, 25_000);
+
+  return `Write the weekly Friday-narrative team report in Markdown. The audience is an external design partner.
+
+Report type: ${args.reportType}
+Title: ${args.title}
+
+Outline:
+${args.outline}
+
+Data:
+${dataStr}
+
+Requirements:
+- Voice: Friday-narrative — "this week the team…", "what worked", "what didn't", "where they got stuck", "versus last week".
+- TEAM-AGGREGATE ONLY: never reference individuals. Do not include names, emails, SHA hashes, "Developer A/B", "this developer", per-person counts, or per-developer rankings or comparisons.
+- Use specific numbers and percentages from the provided data ONLY. If a figure is not in the data, say "insufficient data" — do not estimate or invent.
+- Sections, in order: "Week summary", "What worked", "What didn't", "Where the team got stuck", "Documentation gaps", "Week-over-week".
+- Documentation gaps subsection: list recurring missing project context where Claude Code lacked knowledge, sourced from the \`docGaps\` field on the data if present. If \`docGaps\` is missing or empty, write exactly: "Doc gap data unavailable for this period." — do not fabricate gaps.
+- Length: 400–700 words. Concise, buyer-legible, no DevScope-internal jargon, no instructions to the team — this is an artifact for an external reader.
+- Do NOT include "Action Items", "Improve Your Claude Code Setup", or "Claude Code Skills" sections — those are for internal personas only.`;
+}
+
 function getDaysForType(reportType: ReportType): number {
   switch (reportType) {
     case "daily":
@@ -109,6 +191,35 @@ async function gatherReportData(
 async function generateOutline(
   state: ReportStateType
 ): Promise<Partial<ReportStateType>> {
+  // Additive branch for the weekly Friday-narrative buyer report. The standard
+  // path below is untouched.
+  if (state.persona === WEEKLY_BUYER_PERSONA) {
+    const response = await callGemini(
+      [
+        {
+          role: "user",
+          parts: [
+            {
+              text: buildWeeklyBuyerOutlinePrompt({
+                reportType: state.reportType,
+                title: state.title,
+                data: state.data,
+              }),
+            },
+          ],
+        },
+      ],
+      undefined,
+      { temperature: TEMPERATURE.report }
+    );
+
+    return {
+      outline: response.text,
+      inputTokens: state.inputTokens + response.inputTokens,
+      outputTokens: state.outputTokens + response.outputTokens,
+    };
+  }
+
   const dataStr = JSON.stringify(state.data, null, 2).slice(0, 25_000);
 
   const personaGuidance = state.persona
@@ -159,6 +270,42 @@ async function writeReport(
   state: ReportStateType,
   sql: SQL
 ): Promise<Partial<ReportStateType>> {
+  // Additive branch for the weekly Friday-narrative buyer report. The standard
+  // path below is untouched.
+  if (state.persona === WEEKLY_BUYER_PERSONA) {
+    const response = await callGemini(
+      [
+        {
+          role: "user",
+          parts: [
+            {
+              text: buildWeeklyBuyerWritePrompt({
+                reportType: state.reportType,
+                title: state.title,
+                outline: state.outline,
+                data: state.data,
+              }),
+            },
+          ],
+        },
+      ],
+      undefined,
+      { temperature: TEMPERATURE.report, maxOutputTokens: 4096 }
+    );
+
+    await updateReport(sql, state.reportId, {
+      content_markdown: response.text,
+      data_context: state.data,
+      status: "completed",
+    });
+
+    return {
+      content: response.text,
+      inputTokens: state.inputTokens + response.inputTokens,
+      outputTokens: state.outputTokens + response.outputTokens,
+    };
+  }
+
   const dataStr = JSON.stringify(state.data, null, 2).slice(0, 25_000);
 
   const personaRequirements = state.persona
