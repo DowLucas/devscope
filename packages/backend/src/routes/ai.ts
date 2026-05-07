@@ -274,10 +274,17 @@ export function aiRoutes(sql: SQL) {
     const orgId = c.get("orgId" as never) as string | undefined;
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
 
+    // Reports are tenant-scoped at the DB layer (DEV-43). Without an active
+    // org we have no row to write — surface a 400 instead of orphaning.
+    if (!orgId) {
+      return c.json({ error: "No active organization" }, 400);
+    }
+
     // Run async — respond immediately with report ID
     const report = await runReportWorkflow(
       sql,
       report_type as ReportType,
+      orgId,
       title,
       period_start,
       period_end,
@@ -352,8 +359,12 @@ export function aiRoutes(sql: SQL) {
       return c.json(cached[0]);
     }
 
-    // Generate new feedback
-    const report = await runSessionFeedbackWorkflow(sql, session_id, privacyMode, isSelfView);
+    // Generate new feedback. orgId is required (DEV-43) so reports are
+    // tenant-scoped at the DB layer.
+    if (!orgId) {
+      return c.json({ error: "No active organization" }, 400);
+    }
+    const report = await runSessionFeedbackWorkflow(sql, session_id, privacyMode, isSelfView, orgId);
 
     if (orgId) {
       broadcastToOrg(orgId, { type: "ai.report.completed", data: report });
