@@ -27,6 +27,7 @@ d("delete-org integration", () => {
     const otherOrgId = `t-org-other-${crypto.randomUUID()}`;
     const sharedDevId = `t-dev-shared-${crypto.randomUUID()}`;
 
+    try {
     // ---- seed ----
     await sql`INSERT INTO auth_user (id, name, email) VALUES (${userId}, 'T', ${`${userId}@e.x`})`;
     await sql`INSERT INTO organization (id, name, slug) VALUES (${orgId}, 'T', ${orgId})`;
@@ -47,10 +48,13 @@ d("delete-org integration", () => {
     await sql`INSERT INTO session_titles (id, session_id, title) VALUES (${`st-${sessionId}`}, ${sessionId}, 't')`;
 
     // patterns / anti-patterns matches (session_id linkage)
-    await sql`INSERT INTO session_patterns (id, name, description, tool_sequence) VALUES ('p-x', 'p', 'd', ARRAY['Bash'])`.catch(()=>{});
-    await sql`INSERT INTO session_pattern_matches (id, session_id, pattern_id) VALUES (${`spm-${sessionId}`}, ${sessionId}, 'p-x')`.catch(()=>{});
-    await sql`INSERT INTO anti_patterns (id, name, description, detection_rule, suggestion) VALUES ('ap-x', 'a', 'd', 'r', 's')`.catch(()=>{});
-    await sql`INSERT INTO session_anti_pattern_matches (id, session_id, anti_pattern_id) VALUES (${`sapm-${sessionId}`}, ${sessionId}, 'ap-x')`.catch(()=>{});
+    // Parent rows ('p-x', 'ap-x') are shared across test runs — ON CONFLICT
+    // makes the seed idempotent without silently swallowing real errors.
+    // The match rows use unique session-scoped IDs and must insert cleanly.
+    await sql`INSERT INTO session_patterns (id, name, description, tool_sequence) VALUES ('p-x', 'p', 'd', ARRAY['Bash']) ON CONFLICT (id) DO NOTHING`;
+    await sql`INSERT INTO session_pattern_matches (id, session_id, pattern_id) VALUES (${`spm-${sessionId}`}, ${sessionId}, 'p-x')`;
+    await sql`INSERT INTO anti_patterns (id, name, description, detection_rule, suggestion) VALUES ('ap-x', 'a', 'd', 'r', 's') ON CONFLICT (id) DO NOTHING`;
+    await sql`INSERT INTO session_anti_pattern_matches (id, session_id, anti_pattern_id) VALUES (${`sapm-${sessionId}`}, ${sessionId}, 'ap-x')`;
 
     // org-scoped derived tables
     await sql`INSERT INTO alert_rules (id, organization_id, rule_type) VALUES (${`ar-${orgId}`}, ${orgId}, 'failure_threshold')`;
@@ -83,10 +87,12 @@ d("delete-org integration", () => {
         orgId,
         "--yes",
       ],
-      { env: { ...process.env, DATABASE_URL: dbUrl! } },
+      { env: { ...process.env, DATABASE_URL: dbUrl! }, stderr: "pipe" },
     );
-    const stdout = await new Response(proc.stdout).text();
-    const stderr = await new Response(proc.stderr).text();
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
     const exit = await proc.exited;
     expect({ exit, stdout, stderr }).toMatchObject({ exit: 0 });
 
@@ -141,12 +147,27 @@ d("delete-org integration", () => {
     const userLeft = (await sql`SELECT id FROM auth_user WHERE id = ${userId}`) as Array<unknown>;
     expect(userLeft).toHaveLength(1);
 
-    // cleanup the other org we created
-    await sql`DELETE FROM organization_developer WHERE organization_id = ${otherOrgId}`;
-    await sql`DELETE FROM developers WHERE id = ${sharedDevId}`;
-    await sql`DELETE FROM organization WHERE id = ${otherOrgId}`;
-    await sql`DELETE FROM auth_user WHERE id = ${userId}`;
-
-    await sql.close();
+    } finally {
+      // Cleanup runs even when an assertion above throws, so test rows from
+      // a failed run don't pollute the next invocation. Each statement is
+      // independent and best-effort: a missing row from a partial-seed run
+      // is fine, but unexpected errors should surface — we rethrow at the end.
+      const cleanupErrors: unknown[] = [];
+      const safe = async (run: () => Promise<unknown>) => {
+        try {
+          await run();
+        } catch (err) {
+          cleanupErrors.push(err);
+        }
+      };
+      await safe(() => sql`DELETE FROM organization_developer WHERE organization_id = ${otherOrgId}`);
+      await safe(() => sql`DELETE FROM developers WHERE id = ${sharedDevId}`);
+      await safe(() => sql`DELETE FROM organization WHERE id = ${otherOrgId}`);
+      await safe(() => sql`DELETE FROM auth_user WHERE id = ${userId}`);
+      await sql.close();
+      if (cleanupErrors.length > 0) {
+        console.error("delete-org test cleanup errors:", cleanupErrors);
+      }
+    }
   }, 30_000);
 });

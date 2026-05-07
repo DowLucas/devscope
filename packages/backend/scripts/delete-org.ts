@@ -91,23 +91,12 @@ function residualQueries(orgId: string) {
     { table: "claude_md_snapshots", where: `organization_id = $1`, params: [o] },
     { table: "claude_md_correlations", where: `organization_id = $1`, params: [o] },
     { table: "workflow_profiles", where: `organization_id = $1`, params: [o] },
-    // Sole-org-developer tail: developer rows that ONLY belonged to this org.
-    // After deletion, none of these should reference a developer that was a
-    // sole-org member of $orgId. This residual query is best-effort: once
-    // organization_developer is gone, we cannot recover the sole-org list, so
-    // we instead check that no orphan developer rows exist whose only purpose
-    // would have been this org. The pre-deletion plan handles this set
-    // explicitly; here we just look for orphans pointing at deleted sessions.
-    {
-      table: "sessions (orphans)",
-      where: `developer_id NOT IN (SELECT id FROM developers)`,
-      params: [],
-    },
-    {
-      table: "events (orphans)",
-      where: `session_id NOT IN (SELECT id FROM sessions)`,
-      params: [],
-    },
+    // Note: a global orphan scan for sessions/events was intentionally removed.
+    // Database-wide checks ("developer_id NOT IN (SELECT id FROM developers)")
+    // would surface unrelated noise from other orgs and cause false positives
+    // in --verify and the post-commit residual gate. The per-table org-scoped
+    // checks above already verify the target org's data is gone; sole-org
+    // developer cleanup is handled in runDeletePlan, not here.
   ];
 }
 
@@ -317,49 +306,50 @@ async function main() {
   }
 
   // Execute the plan inside a transaction. Bun.sql exposes sql.begin().
-  let counts: Counts = {};
-  let rolledBack = false;
   try {
-    await sql.begin(async (tx: SQL) => {
-      counts = await runDeletePlan(tx, args.orgId);
-      if (args.dryRun) {
-        // Force rollback by throwing a sentinel error
-        rolledBack = true;
-        throw new Error("__dry_run_rollback__");
+    let counts: Counts = {};
+    let rolledBack = false;
+    try {
+      await sql.begin(async (tx: SQL) => {
+        counts = await runDeletePlan(tx, args.orgId);
+        if (args.dryRun) {
+          // Force rollback by throwing a sentinel error
+          rolledBack = true;
+          throw new Error("__dry_run_rollback__");
+        }
+      });
+    } catch (err) {
+      if (rolledBack && (err as Error).message === "__dry_run_rollback__") {
+        // expected — swallow
+      } else {
+        throw err;
       }
-    });
-  } catch (err) {
-    if (rolledBack && (err as Error).message === "__dry_run_rollback__") {
-      // expected — swallow
-    } else {
-      throw err;
     }
-  }
 
-  console.log(
-    JSON.stringify(
-      {
-        orgId: args.orgId,
-        mode: args.dryRun ? "dry-run (rolled back)" : "committed",
-        deleted: counts,
-      },
-      null,
-      2,
-    ),
-  );
+    console.log(
+      JSON.stringify(
+        {
+          orgId: args.orgId,
+          mode: args.dryRun ? "dry-run (rolled back)" : "committed",
+          deleted: counts,
+        },
+        null,
+        2,
+      ),
+    );
 
-  if (!args.dryRun) {
-    const residual = await countResiduals(sql, args.orgId);
-    const nonzero = Object.entries(residual).filter(([, n]) => n > 0);
-    console.log("post-delete residual:", JSON.stringify(residual, null, 2));
-    if (nonzero.length > 0) {
-      console.error("RESIDUAL ROWS DETECTED — investigate:", nonzero);
-      await sql.close();
-      process.exit(1);
+    if (!args.dryRun) {
+      const residual = await countResiduals(sql, args.orgId);
+      const nonzero = Object.entries(residual).filter(([, n]) => n > 0);
+      console.log("post-delete residual:", JSON.stringify(residual, null, 2));
+      if (nonzero.length > 0) {
+        console.error("RESIDUAL ROWS DETECTED — investigate:", nonzero);
+        process.exitCode = 1;
+      }
     }
+  } finally {
+    await sql.close();
   }
-
-  await sql.close();
 }
 
 main().catch((e) => {
