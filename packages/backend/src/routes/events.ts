@@ -21,6 +21,7 @@ import { autoLinkDeveloperToOrg, autoLinkUserToDeveloper, computeDeveloperId } f
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 import { logEthicsEvent } from "../utils/ethicsAudit";
 import { evaluateFriction, cleanupFrictionSession } from "../services/frictionDetector";
+import { CURRENT_SALT_VERSION, deriveOrgSalt } from "../utils/orgSalt";
 
 const eventSchema = z.object({
   id: z.string().min(1).max(200),
@@ -248,7 +249,14 @@ export function eventsRoutes(sql: SQL) {
       : null;
     const shouldCreateOrReactivate = !existingSession || wasEnded || event.eventType === "session.start";
     if (shouldCreateOrReactivate) {
-      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode);
+      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode, CURRENT_SALT_VERSION);
+    }
+
+    // DEV-76: Defense-in-depth — never persist a `salt` value into events.payload.
+    // The plugin (DEV-74) MUST NOT include it; this scrub guards against
+    // accidental future regressions. salt_version IS allowed to flow through.
+    if (event.payload && typeof event.payload === "object" && "salt" in (event.payload as Record<string, unknown>)) {
+      delete (event.payload as Record<string, unknown>).salt;
     }
 
     // Log ethics event when privacy mode is activated
@@ -279,6 +287,17 @@ export function eventsRoutes(sql: SQL) {
       }
     }
 
+    // DEV-76: precompute the salt response for session.start so we can return
+    // it even when the event itself is a duplicate (plugin retries must still
+    // be able to pin the salt for the rest of the session). The salt is
+    // resolved from the API-key-owner's active org (or the cookie session
+    // for dashboard-driven flows) and never persisted.
+    const sessionCtx = c.get("session" as never) as { activeOrganizationId?: string } | undefined;
+    const sessionStartSalt =
+      event.eventType === "session.start" && sessionCtx?.activeOrganizationId
+        ? { salt: deriveOrgSalt(sessionCtx.activeOrganizationId), salt_version: CURRENT_SALT_VERSION }
+        : null;
+
     const { stored } = await insertEvent(sql, event);
 
     // Idempotency: if a previous request already stored this event id, treat
@@ -287,7 +306,7 @@ export function eventsRoutes(sql: SQL) {
     // Pre-insert side effects above (createSession, upsertDeveloper, ethics
     // privacy_mode_activated) are already idempotent in their own right.
     if (!stored) {
-      return c.json({ ok: true, duplicate: true });
+      return c.json({ ok: true, duplicate: true, ...(sessionStartSalt ?? {}) });
     }
 
     // Run shared post-insert handlers (broadcasts, compaction, snapshots, friction)
@@ -332,6 +351,14 @@ export function eventsRoutes(sql: SQL) {
           }
         }
       }
+    }
+
+    // DEV-76: hand the plugin the per-org salt + version on session.start.
+    // Salt is in-memory only — never persisted to events.payload, the
+    // session row, or any audit log. Computed before insertEvent so that
+    // duplicate (idempotent) retries also return it.
+    if (sessionStartSalt) {
+      return c.json({ ok: true, ...sessionStartSalt });
     }
 
     return c.json({ ok: true });

@@ -130,6 +130,7 @@ function buildApp(
     apiKeyUserId?: string;
     orgDeveloperIds?: string[];
     user?: { id?: string; name?: string; email?: string };
+    session?: { activeOrganizationId?: string };
   } = {},
 ) {
   const app = new Hono();
@@ -143,6 +144,9 @@ function buildApp(
     }
     if (opts.user !== undefined) {
       c.set("user" as never, opts.user as never);
+    }
+    if (opts.session !== undefined) {
+      c.set("session" as never, opts.session as never);
     }
     await next();
   });
@@ -295,6 +299,7 @@ describe("POST /events", () => {
       "my-project",
       null, // permissionMode not set in default payload
       null, // privacyMode not set in default payload
+      1, // DEV-76: CURRENT_SALT_VERSION stamped on the session row
     );
   });
 
@@ -318,7 +323,145 @@ describe("POST /events", () => {
       "my-project",
       "plan",
       "private",
+      1, // DEV-76: CURRENT_SALT_VERSION
     );
+  });
+
+  // -----------------------------------------------------------------------
+  // DEV-76: salt distribution on session.start
+  // -----------------------------------------------------------------------
+
+  test("session.start response includes salt + salt_version when active org is resolved", async () => {
+    const originalKey = process.env.PRIVACY_SALT_KEY;
+    process.env.PRIVACY_SALT_KEY = "test-salt-key";
+    try {
+      const sql = makeMockSql([], []);
+      const app = buildApp(sql, { session: { activeOrganizationId: "org-abc" } });
+
+      const res = await app.request("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(validEvent()),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { ok: boolean; salt?: string; salt_version?: number };
+      expect(body.ok).toBe(true);
+      expect(body.salt_version).toBe(1);
+      expect(body.salt).toMatch(/^[0-9a-f]{32}$/);
+    } finally {
+      if (originalKey === undefined) delete process.env.PRIVACY_SALT_KEY;
+      else process.env.PRIVACY_SALT_KEY = originalKey;
+    }
+  });
+
+  test("session.start salt is stable across requests for the same org", async () => {
+    const originalKey = process.env.PRIVACY_SALT_KEY;
+    process.env.PRIVACY_SALT_KEY = "test-salt-key";
+    try {
+      const app = buildApp(makeMockSql([], []), { session: { activeOrganizationId: "org-abc" } });
+
+      const a = (await (
+        await app.request("/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(validEvent({ id: "evt-a", sessionId: "s-a" })),
+        })
+      ).json()) as { salt?: string };
+
+      const b = (await (
+        await app.request("/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(validEvent({ id: "evt-b", sessionId: "s-b" })),
+        })
+      ).json()) as { salt?: string };
+
+      expect(a.salt).toBe(b.salt!);
+    } finally {
+      if (originalKey === undefined) delete process.env.PRIVACY_SALT_KEY;
+      else process.env.PRIVACY_SALT_KEY = originalKey;
+    }
+  });
+
+  test("session.start salt differs across orgs", async () => {
+    const originalKey = process.env.PRIVACY_SALT_KEY;
+    process.env.PRIVACY_SALT_KEY = "test-salt-key";
+    try {
+      const appA = buildApp(makeMockSql([], []), { session: { activeOrganizationId: "org-a" } });
+      const appB = buildApp(makeMockSql([], []), { session: { activeOrganizationId: "org-b" } });
+
+      const a = (await (
+        await appA.request("/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(validEvent({ id: "evt-a", sessionId: "s-a" })),
+        })
+      ).json()) as { salt?: string };
+
+      const b = (await (
+        await appB.request("/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(validEvent({ id: "evt-b", sessionId: "s-b" })),
+        })
+      ).json()) as { salt?: string };
+
+      expect(a.salt).not.toBe(b.salt);
+    } finally {
+      if (originalKey === undefined) delete process.env.PRIVACY_SALT_KEY;
+      else process.env.PRIVACY_SALT_KEY = originalKey;
+    }
+  });
+
+  test("non-session.start events do not return a salt", async () => {
+    const sql = makeMockSql([{ status: "active" }], []);
+    const app = buildApp(sql, { session: { activeOrganizationId: "org-abc" } });
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ id: "evt-2", eventType: "prompt.submit" })),
+    });
+
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.salt).toBeUndefined();
+    expect(body.salt_version).toBeUndefined();
+  });
+
+  test("session.start with no resolvable org omits salt fields", async () => {
+    const sql = makeMockSql([], []);
+    const app = buildApp(sql); // no session set → no activeOrganizationId
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent()),
+    });
+
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.salt).toBeUndefined();
+    expect(body.salt_version).toBeUndefined();
+  });
+
+  test("strips a `salt` field from event.payload before insertEvent (defense-in-depth)", async () => {
+    const sql = makeMockSql([], []);
+    const app = buildApp(sql, { session: { activeOrganizationId: "org-abc" } });
+
+    await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        validEvent({ payload: { salt: "leaked-salt-should-not-persist", salt_version: 1 } }),
+      ),
+    });
+
+    const persistedEvent = mockInsertEvent.mock.calls[0]?.[1] as { payload?: Record<string, unknown> } | undefined;
+    expect(persistedEvent?.payload).toBeDefined();
+    expect(persistedEvent!.payload).not.toHaveProperty("salt");
+    // salt_version is allowed to flow through (it's part of the wire contract once DEV-74 lands)
+    expect(persistedEvent!.payload!.salt_version).toBe(1);
   });
 
   test("calls insertEvent with the event", async () => {
