@@ -30,7 +30,10 @@ export type EthicsEventType =
   | "ai_individual_reference_blocked"
   | "privacy_mode_activated"
   | "data_request_processed"
-  | "retention_purge_executed";
+  | "retention_purge_executed"
+  // DEV-45 mission guardrail (weekly-buyer report flow).
+  | "weekly_report_llm_input"
+  | "mission_violation";
 
 export interface EthicsAuditEntry {
   id: string;
