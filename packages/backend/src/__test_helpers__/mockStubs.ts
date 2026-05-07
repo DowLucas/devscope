@@ -93,6 +93,19 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     finalizeTokenSegment: noop,
     getSessionTokenUsageSummary: noop,
     getSessionTokenUsageOverTime: noopArr,
+    // Helpers used by reportWorkflow.ts (queries.ts / aiQueries.ts /
+    // patternQueries.ts / antiPatternQueries.ts). Required so that any test
+    // that mocks `../../db` does not strip these exports and break
+    // unrelated tests that import them via the same module.
+    getConcreteToolDetails: noop,
+    getPatterns: noopArr,
+    getAntiPatternStats: noop,
+    createReport: noop,
+    updateReport: noop,
+    recordTokenUsage: noop,
+    // Used by the validator.test.ts cleanup hook — kept here for the same
+    // reason: any partial dbStubs mock must not silently drop this name
+    // when the consuming test imports it via `../../utils/ethicsAudit`.
     ...overrides,
   };
 }

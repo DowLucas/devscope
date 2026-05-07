@@ -2,6 +2,7 @@ import type { SQL } from "bun";
 import { StateGraph, Annotation, END, START } from "@langchain/langgraph";
 import { callGemini, TEMPERATURE } from "../gemini";
 import { validateAndRedactTeamOutput } from "../grounding/validator";
+import { guardWeeklyReportInput } from "../grounding/missionGuardrail";
 import {
   getPeriodComparison,
   getTeamHealth,
@@ -130,7 +131,13 @@ function getDaysForType(reportType: ReportType): number {
   }
 }
 
-async function gatherReportData(
+/**
+ * Exported for the DEV-45 mission-guardrail snapshot test, which exercises
+ * the helper-layer composition with a synthetic team to prove the LLM input
+ * payload contains zero developer-identifying strings. Not part of the
+ * stable public API.
+ */
+export async function gatherReportData(
   state: ReportStateType,
   sql: SQL
 ): Promise<Partial<ReportStateType>> {
@@ -193,11 +200,23 @@ async function gatherReportData(
 }
 
 async function generateOutline(
-  state: ReportStateType
+  state: ReportStateType,
+  sql: SQL
 ): Promise<Partial<ReportStateType>> {
   // Additive branch for the weekly Friday-narrative buyer report. The standard
   // path below is untouched.
   if (state.persona === WEEKLY_BUYER_PERSONA) {
+    // DEV-45 mission guardrail: tripwire + audit-log on every LLM input from
+    // the weekly-buyer surface. Throws BEFORE the LLM call if any developer
+    // identity sneaks through, per the DEV-37 kill criteria.
+    await guardWeeklyReportInput(sql, state.data, {
+      organizationId: state.orgId ?? null,
+      persona: WEEKLY_BUYER_PERSONA,
+      periodStart: state.periodStart,
+      periodEnd: state.periodEnd,
+      surface: "reports.weekly-buyer.outline",
+    });
+
     const response = await callGemini(
       [
         {
@@ -277,6 +296,18 @@ async function writeReport(
   // Additive branch for the weekly Friday-narrative buyer report. The standard
   // path below is untouched.
   if (state.persona === WEEKLY_BUYER_PERSONA) {
+    // DEV-45 mission guardrail: re-assert + audit on the write step. The data
+    // has not changed since the outline step, but re-asserting here means a
+    // hypothetical inline mutation between nodes still cannot reach the LLM,
+    // and the audit log captures both LLM dispatches per kill-criteria.
+    await guardWeeklyReportInput(sql, state.data, {
+      organizationId: state.orgId ?? null,
+      persona: WEEKLY_BUYER_PERSONA,
+      periodStart: state.periodStart,
+      periodEnd: state.periodEnd,
+      surface: "reports.weekly-buyer.write",
+    });
+
     const response = await callGemini(
       [
         {
@@ -391,7 +422,7 @@ Requirements:
 export function createReportWorkflow(sql: SQL) {
   const workflow = new StateGraph(ReportState)
     .addNode("gatherReportData", (state) => gatherReportData(state, sql))
-    .addNode("generateOutline", generateOutline)
+    .addNode("generateOutline", (state) => generateOutline(state, sql))
     .addNode("writeReport", (state) => writeReport(state, sql))
     .addEdge(START, "gatherReportData")
     .addEdge("gatherReportData", "generateOutline")
