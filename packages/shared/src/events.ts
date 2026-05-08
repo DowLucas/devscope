@@ -109,6 +109,14 @@ export interface AgentEventPayload {
   agentType: string;
   agentId: string;
   parentAgentId?: string | null;
+  // SubagentStop only: length of the agent's last assistant message in chars.
+  // We never store the raw message body — privacy-preserving signal that lets
+  // us reason about subagent verbosity/output volume without surfacing content.
+  lastMessageLength?: number;
+  // SubagentStop only: local filesystem path to the agent's transcript JSONL.
+  // Stored for local correlation (e.g. extracting token usage from the same
+  // transcript later); never surfaced as raw to other developers.
+  transcriptPath?: string;
 }
 
 export interface ResponsePayload {
