@@ -103,12 +103,26 @@ function makeMockSql(
   };
 }
 
+/** sha256("alice@example.com") — must match computeDeveloperId behavior. */
+const ALICE_DEV_ID =
+  "ff8d9819fc0e12bf0d24892e45987e249a28dce836a85cad60e28eaaa8c6d976";
+
+/** Default test user used by buildApp() when no overrides are passed. */
+const DEFAULT_TEST_USER = {
+  id: "user-owner-default",
+  name: "Alice",
+  email: "alice@example.com",
+};
+
 /** A valid event body for POST / */
 function validEvent(overrides: Record<string, unknown> = {}) {
   return {
     id: "evt-1",
     timestamp: "2026-03-03T12:00:00Z",
     sessionId: "sess-1",
+    // Body-declared developerId is treated as advisory by the route; the
+    // server overwrites it with SHA256(authUser.email) on insert (DEV-90).
+    // Keeping an arbitrary value here documents that override.
     developerId: "abc123def456",
     developerName: "Alice",
     developerEmail: "alice@example.com",
@@ -122,27 +136,47 @@ function validEvent(overrides: Record<string, unknown> = {}) {
 
 /**
  * Build a Hono app that optionally sets apiKeyUserId and orgDeveloperIds
- * on context (mimicking auth + orgScope middleware), then mounts the events routes.
+ * on context (mimicking auth + orgScope middleware), then mounts the events
+ * routes.
+ *
+ * DEV-90: POST /api/events now requires an authenticated API-key owner with
+ * an auth email; the route overwrites the body's developerId with
+ * SHA256(authUser.email) before persisting. To keep the bulk of the existing
+ * test suite focused on event-lifecycle behavior rather than auth plumbing,
+ * we default-inject DEFAULT_TEST_USER. Tests that intentionally exercise the
+ * unauthenticated path opt out by passing `apiKeyUserId: null` and/or
+ * `user: null`.
  */
 function buildApp(
   sql: any,
   opts: {
-    apiKeyUserId?: string;
+    apiKeyUserId?: string | null;
     orgDeveloperIds?: string[];
-    user?: { id?: string; name?: string; email?: string };
+    user?: { id?: string; name?: string; email?: string } | null;
+    session?: { activeOrganizationId?: string };
   } = {},
 ) {
   const app = new Hono();
 
+  const apiKeyUserId =
+    opts.apiKeyUserId === null
+      ? undefined
+      : opts.apiKeyUserId ?? DEFAULT_TEST_USER.id;
+  const user =
+    opts.user === null ? undefined : opts.user ?? DEFAULT_TEST_USER;
+
   app.use("/*", async (c, next) => {
-    if (opts.apiKeyUserId !== undefined) {
-      c.set("apiKeyUserId" as never, opts.apiKeyUserId as never);
+    if (apiKeyUserId !== undefined) {
+      c.set("apiKeyUserId" as never, apiKeyUserId as never);
     }
     if (opts.orgDeveloperIds !== undefined) {
       c.set("orgDeveloperIds" as never, opts.orgDeveloperIds as never);
     }
-    if (opts.user !== undefined) {
-      c.set("user" as never, opts.user as never);
+    if (user !== undefined) {
+      c.set("user" as never, user as never);
+    }
+    if (opts.session !== undefined) {
+      c.set("session" as never, opts.session as never);
     }
     await next();
   });
@@ -268,9 +302,11 @@ describe("POST /events", () => {
     });
 
     expect(mockUpsertDeveloper).toHaveBeenCalledTimes(1);
+    // DEV-90: route overwrites the body's developerId with the canonical
+    // SHA256(authUser.email) before upserting.
     expect(mockUpsertDeveloper).toHaveBeenCalledWith(
       sql,
-      "abc123def456",
+      ALICE_DEV_ID,
       "Alice",
       "alice@example.com",
     );
@@ -290,11 +326,12 @@ describe("POST /events", () => {
     expect(mockCreateSession).toHaveBeenCalledWith(
       sql,
       "sess-1",
-      "abc123def456",
+      ALICE_DEV_ID,
       "/home/user/project",
       "my-project",
       null, // permissionMode not set in default payload
       null, // privacyMode not set in default payload
+      1, // DEV-76: CURRENT_SALT_VERSION stamped on the session row
     );
   });
 
@@ -313,12 +350,150 @@ describe("POST /events", () => {
     expect(mockCreateSession).toHaveBeenCalledWith(
       sql,
       "sess-1",
-      "abc123def456",
+      ALICE_DEV_ID,
       "/home/user/project",
       "my-project",
       "plan",
       "private",
+      1, // DEV-76: CURRENT_SALT_VERSION
     );
+  });
+
+  // -----------------------------------------------------------------------
+  // DEV-76: salt distribution on session.start
+  // -----------------------------------------------------------------------
+
+  test("session.start response includes salt + salt_version when active org is resolved", async () => {
+    const originalKey = process.env.PRIVACY_SALT_KEY;
+    process.env.PRIVACY_SALT_KEY = "test-salt-key";
+    try {
+      const sql = makeMockSql([], []);
+      const app = buildApp(sql, { session: { activeOrganizationId: "org-abc" } });
+
+      const res = await app.request("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(validEvent()),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { ok: boolean; salt?: string; salt_version?: number };
+      expect(body.ok).toBe(true);
+      expect(body.salt_version).toBe(1);
+      expect(body.salt).toMatch(/^[0-9a-f]{32}$/);
+    } finally {
+      if (originalKey === undefined) delete process.env.PRIVACY_SALT_KEY;
+      else process.env.PRIVACY_SALT_KEY = originalKey;
+    }
+  });
+
+  test("session.start salt is stable across requests for the same org", async () => {
+    const originalKey = process.env.PRIVACY_SALT_KEY;
+    process.env.PRIVACY_SALT_KEY = "test-salt-key";
+    try {
+      const app = buildApp(makeMockSql([], []), { session: { activeOrganizationId: "org-abc" } });
+
+      const a = (await (
+        await app.request("/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(validEvent({ id: "evt-a", sessionId: "s-a" })),
+        })
+      ).json()) as { salt?: string };
+
+      const b = (await (
+        await app.request("/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(validEvent({ id: "evt-b", sessionId: "s-b" })),
+        })
+      ).json()) as { salt?: string };
+
+      expect(a.salt).toBe(b.salt!);
+    } finally {
+      if (originalKey === undefined) delete process.env.PRIVACY_SALT_KEY;
+      else process.env.PRIVACY_SALT_KEY = originalKey;
+    }
+  });
+
+  test("session.start salt differs across orgs", async () => {
+    const originalKey = process.env.PRIVACY_SALT_KEY;
+    process.env.PRIVACY_SALT_KEY = "test-salt-key";
+    try {
+      const appA = buildApp(makeMockSql([], []), { session: { activeOrganizationId: "org-a" } });
+      const appB = buildApp(makeMockSql([], []), { session: { activeOrganizationId: "org-b" } });
+
+      const a = (await (
+        await appA.request("/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(validEvent({ id: "evt-a", sessionId: "s-a" })),
+        })
+      ).json()) as { salt?: string };
+
+      const b = (await (
+        await appB.request("/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(validEvent({ id: "evt-b", sessionId: "s-b" })),
+        })
+      ).json()) as { salt?: string };
+
+      expect(a.salt).not.toBe(b.salt);
+    } finally {
+      if (originalKey === undefined) delete process.env.PRIVACY_SALT_KEY;
+      else process.env.PRIVACY_SALT_KEY = originalKey;
+    }
+  });
+
+  test("non-session.start events do not return a salt", async () => {
+    const sql = makeMockSql([{ status: "active" }], []);
+    const app = buildApp(sql, { session: { activeOrganizationId: "org-abc" } });
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ id: "evt-2", eventType: "prompt.submit" })),
+    });
+
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.salt).toBeUndefined();
+    expect(body.salt_version).toBeUndefined();
+  });
+
+  test("session.start with no resolvable org omits salt fields", async () => {
+    const sql = makeMockSql([], []);
+    const app = buildApp(sql); // no session set → no activeOrganizationId
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent()),
+    });
+
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.salt).toBeUndefined();
+    expect(body.salt_version).toBeUndefined();
+  });
+
+  test("strips a `salt` field from event.payload before insertEvent (defense-in-depth)", async () => {
+    const sql = makeMockSql([], []);
+    const app = buildApp(sql, { session: { activeOrganizationId: "org-abc" } });
+
+    await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        validEvent({ payload: { salt: "leaked-salt-should-not-persist", salt_version: 1 } }),
+      ),
+    });
+
+    const persistedEvent = mockInsertEvent.mock.calls[0]?.[1] as { payload?: Record<string, unknown> } | undefined;
+    expect(persistedEvent?.payload).toBeDefined();
+    expect(persistedEvent!.payload).not.toHaveProperty("salt");
+    // salt_version is allowed to flow through (it's part of the wire contract once DEV-74 lands)
+    expect(persistedEvent!.payload!.salt_version).toBe(1);
   });
 
   test("calls insertEvent with the event", async () => {
@@ -390,24 +565,46 @@ describe("POST /events", () => {
     });
 
     expect(mockAutoLinkDeveloperToOrg).toHaveBeenCalledTimes(1);
+    // DEV-90: autoLink uses the canonical SHA256(authUser.email), not the
+    // body-declared developerId.
     expect(mockAutoLinkDeveloperToOrg).toHaveBeenCalledWith(
       sql,
       "user-owner-1",
-      "abc123def456",
+      ALICE_DEV_ID,
     );
   });
 
-  test("does NOT call autoLinkDeveloperToOrg when apiKeyUserId is absent", async () => {
+  test("rejects with 401 when apiKeyUserId is absent (DEV-90)", async () => {
     const sql = makeMockSql();
-    const app = buildApp(sql); // no apiKeyUserId
+    // Opt out of the default-injected auth context.
+    const app = buildApp(sql, { apiKeyUserId: null, user: null });
 
-    await app.request("/", {
+    const res = await app.request("/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(validEvent()),
     });
 
+    expect(res.status).toBe(401);
     expect(mockAutoLinkDeveloperToOrg).not.toHaveBeenCalled();
+    expect(mockInsertEvent).not.toHaveBeenCalled();
+  });
+
+  test("rejects with 401 when authenticated user has no email (DEV-90)", async () => {
+    const sql = makeMockSql();
+    const app = buildApp(sql, {
+      apiKeyUserId: "user-owner-1",
+      user: { id: "user-owner-1", name: "Alice" }, // missing email
+    });
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent()),
+    });
+
+    expect(res.status).toBe(401);
+    expect(mockInsertEvent).not.toHaveBeenCalled();
   });
 
   // -----------------------------------------------------------------------
@@ -706,7 +903,7 @@ describe("POST /events", () => {
   // Optional developerEmail
   // -----------------------------------------------------------------------
 
-  test("defaults developerEmail to empty string when omitted", async () => {
+  test("ignores body's developerEmail and uses auth-user email (DEV-90)", async () => {
     const sql = makeMockSql();
     const app = buildApp(sql);
 
@@ -719,11 +916,14 @@ describe("POST /events", () => {
       body: JSON.stringify(event),
     });
 
+    // DEV-90: developerEmail is sourced from the API-key owner's auth account,
+    // not the request body. zValidator's optional/default-empty fallback is
+    // intentionally bypassed by the overwrite.
     expect(mockUpsertDeveloper).toHaveBeenCalledWith(
       sql,
-      "abc123def456",
+      ALICE_DEV_ID,
       "Alice",
-      "",
+      "alice@example.com",
     );
   });
 
@@ -852,7 +1052,8 @@ describe("POST /events/hook", () => {
 
   test("rejects when API key auth is missing", async () => {
     const sql = makeMockSql();
-    const app = buildApp(sql); // no apiKeyUserId, no user
+    // Opt out of buildApp's default-injected auth context.
+    const app = buildApp(sql, { apiKeyUserId: null, user: null });
 
     const res = await app.request("/hook?event=notification", {
       method: "POST",

@@ -21,6 +21,7 @@ import { autoLinkDeveloperToOrg, autoLinkUserToDeveloper, computeDeveloperId } f
 import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 import { logEthicsEvent } from "../utils/ethicsAudit";
 import { evaluateFriction, cleanupFrictionSession } from "../services/frictionDetector";
+import { CURRENT_SALT_VERSION, deriveOrgSalt } from "../utils/orgSalt";
 
 const eventSchema = z.object({
   id: z.string().min(1).max(200),
@@ -215,24 +216,50 @@ export function eventsRoutes(sql: SQL) {
     const event = c.req.valid("json") as unknown as DevscopeEvent;
     event.timestamp = sanitizeTimestamp(event.timestamp);
 
+    // Identity-trust gate (DEV-90). The plugin declares a developerId in the
+    // body computed locally as SHA256(git config user.email). The route can
+    // not trust that on its own — without verification, any holder of a valid
+    // API key could post events under any developerId of their choosing, and
+    // the same human running with a divergent git/SaaS email lands in two
+    // distinct developer rows (one per ingestion path).
+    //
+    // Rule (overwrite-on-insert):
+    //   1. Require API-key auth + an auth-user email; otherwise 401.
+    //   2. Compute the canonical developerId server-side from the API-key
+    //      owner's auth-account email and OVERWRITE the body's identity
+    //      fields before persisting. The plugin-declared developerId,
+    //      developerName, and developerEmail are treated as advisory hints
+    //      and are not stored.
+    //
+    // This converges with /api/events/hook, which already derives identity
+    // server-side, so a single human producing events on either path lands
+    // on one developer row even when their git email and SaaS account email
+    // differ.
+    const apiKeyUserId = c.get("apiKeyUserId" as never) as string | undefined;
+    const authUser = c.get("user" as never) as { id?: string; name?: string; email?: string } | undefined;
+    if (!apiKeyUserId || !authUser?.email) {
+      return c.json({ error: "Event ingestion requires authenticated API key" }, 401);
+    }
+    event.developerId = computeDeveloperId(authUser.email);
+    event.developerEmail = authUser.email;
+    event.developerName =
+      authUser.name && authUser.name.length > 0 ? authUser.name : "Developer";
+
     await upsertDeveloper(sql, event.developerId, event.developerName, event.developerEmail ?? "");
 
-    // Auto-link plugin developer to the API key owner's org
-    const apiKeyUserId = c.get("apiKeyUserId" as never) as string | undefined;
-    if (apiKeyUserId) {
-      // DEV-68: await the org link before any code that queries
-      // organization_developer (privacy_mode_activated logging below and the
-      // broadcast fan-out in runPostInsertHandlers). Otherwise the very first
-      // event from a brand-new developerId is persisted but not broadcast
-      // because the link insert hasn't landed when the lookup runs.
-      // Errors are still caught so a failed link does not abort ingestion.
-      await autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId)
-        .catch((err) => console.error("[events] autoLinkDeveloperToOrg failed:", err));
-      // autoLinkUserToDeveloper is not on the broadcast critical path; keep
-      // it fire-and-forget so we don't add an extra round-trip per event.
-      autoLinkUserToDeveloper(sql, apiKeyUserId, event.developerId)
-        .catch((err) => console.error("[events] autoLinkUserToDeveloper failed:", err));
-    }
+    // Auto-link the canonical developer to the API key owner's org.
+    // DEV-68: await the org link before any code that queries
+    // organization_developer (privacy_mode_activated logging below and the
+    // broadcast fan-out in runPostInsertHandlers). Otherwise the very first
+    // event from a brand-new developerId is persisted but not broadcast
+    // because the link insert hasn't landed when the lookup runs.
+    // Errors are still caught so a failed link does not abort ingestion.
+    await autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId)
+      .catch((err) => console.error("[events] autoLinkDeveloperToOrg failed:", err));
+    // autoLinkUserToDeveloper is not on the broadcast critical path; keep
+    // it fire-and-forget so we don't add an extra round-trip per event.
+    autoLinkUserToDeveloper(sql, apiKeyUserId, event.developerId)
+      .catch((err) => console.error("[events] autoLinkUserToDeveloper failed:", err));
 
     // Check if this event is reactivating an ended session (e.g. after backend restart)
     const [existingSession] = await sql`SELECT status FROM sessions WHERE id = ${event.sessionId}`;
@@ -248,7 +275,14 @@ export function eventsRoutes(sql: SQL) {
       : null;
     const shouldCreateOrReactivate = !existingSession || wasEnded || event.eventType === "session.start";
     if (shouldCreateOrReactivate) {
-      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode);
+      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode, CURRENT_SALT_VERSION);
+    }
+
+    // DEV-76: Defense-in-depth — never persist a `salt` value into events.payload.
+    // The plugin (DEV-74) MUST NOT include it; this scrub guards against
+    // accidental future regressions. salt_version IS allowed to flow through.
+    if (event.payload && typeof event.payload === "object" && "salt" in (event.payload as Record<string, unknown>)) {
+      delete (event.payload as Record<string, unknown>).salt;
     }
 
     // Log ethics event when privacy mode is activated
@@ -279,6 +313,17 @@ export function eventsRoutes(sql: SQL) {
       }
     }
 
+    // DEV-76: precompute the salt response for session.start so we can return
+    // it even when the event itself is a duplicate (plugin retries must still
+    // be able to pin the salt for the rest of the session). The salt is
+    // resolved from the API-key-owner's active org (or the cookie session
+    // for dashboard-driven flows) and never persisted.
+    const sessionCtx = c.get("session" as never) as { activeOrganizationId?: string } | undefined;
+    const sessionStartSalt =
+      event.eventType === "session.start" && sessionCtx?.activeOrganizationId
+        ? { salt: deriveOrgSalt(sessionCtx.activeOrganizationId), salt_version: CURRENT_SALT_VERSION }
+        : null;
+
     const { stored } = await insertEvent(sql, event);
 
     // Idempotency: if a previous request already stored this event id, treat
@@ -287,7 +332,7 @@ export function eventsRoutes(sql: SQL) {
     // Pre-insert side effects above (createSession, upsertDeveloper, ethics
     // privacy_mode_activated) are already idempotent in their own right.
     if (!stored) {
-      return c.json({ ok: true, duplicate: true });
+      return c.json({ ok: true, duplicate: true, ...(sessionStartSalt ?? {}) });
     }
 
     // Run shared post-insert handlers (broadcasts, compaction, snapshots, friction)
@@ -332,6 +377,14 @@ export function eventsRoutes(sql: SQL) {
           }
         }
       }
+    }
+
+    // DEV-76: hand the plugin the per-org salt + version on session.start.
+    // Salt is in-memory only — never persisted to events.payload, the
+    // session row, or any audit log. Computed before insertEvent so that
+    // duplicate (idempotent) retries also return it.
+    if (sessionStartSalt) {
+      return c.json({ ok: true, ...sessionStartSalt });
     }
 
     return c.json({ ok: true });

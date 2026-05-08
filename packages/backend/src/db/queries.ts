@@ -56,11 +56,15 @@ export async function createSession(
   projectPath: string,
   projectName: string,
   permissionMode: string | null,
-  privacyMode: string | null = null
+  privacyMode: string | null = null,
+  saltVersion: number = 1,
 ) {
+  // DEV-76: salt_version is set on first INSERT and intentionally NOT
+  // updated on conflict — once a session has been stamped with a version,
+  // events recorded against it must keep referencing that version.
   await sql`
-    INSERT INTO sessions (id, developer_id, project_path, project_name, permission_mode, privacy_mode)
-    VALUES (${id}, ${developerId}, ${projectPath}, ${projectName}, ${permissionMode}, ${privacyMode})
+    INSERT INTO sessions (id, developer_id, project_path, project_name, permission_mode, privacy_mode, salt_version)
+    VALUES (${id}, ${developerId}, ${projectPath}, ${projectName}, ${permissionMode}, ${privacyMode}, ${saltVersion})
     ON CONFLICT(id) DO UPDATE SET
       permission_mode = COALESCE(EXCLUDED.permission_mode, sessions.permission_mode),
       privacy_mode = COALESCE(EXCLUDED.privacy_mode, sessions.privacy_mode),
