@@ -24,6 +24,23 @@ describe("stripSensitivePayload", () => {
     expect(result).not.toHaveProperty("responseText");
   });
 
+  test("removes transcriptPath from agent.stop payloads (local fs path must not reach other devs)", () => {
+    const payload = {
+      agentType: "general-purpose",
+      agentId: "abc123",
+      lastMessageLength: 512,
+      transcriptPath: "/home/dev/.claude/transcripts/abc123.jsonl",
+    };
+    const result = stripSensitivePayload(payload);
+
+    expect(result).toEqual({
+      agentType: "general-purpose",
+      agentId: "abc123",
+      lastMessageLength: 512,
+    });
+    expect(result).not.toHaveProperty("transcriptPath");
+  });
+
   test("handles payload with only some sensitive keys", () => {
     const payload = {
       toolName: "read",
