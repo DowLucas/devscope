@@ -132,13 +132,21 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
               <div className="flex items-center gap-2 text-destructive">
                 {totalFails > 0 && <span>{totalFails} failures</span>}
               </div>
-              {sessionTokens > 0 && (
+              {/*
+                Mission constraint (DEV-98): per-session token totals and cost
+                are self-view only. Org viewers can load another teammate's
+                session card to see project/duration/tool counts (team workflow
+                visibility), but token + cost figures stay private to the
+                session owner — they are an individual productivity proxy and
+                belong on aggregate-only surfaces (TokenUsageCards) instead.
+              */}
+              {isSelfView && sessionTokens > 0 && (
                 <div className="flex items-center gap-2">
                   <Zap className="h-3.5 w-3.5 text-muted-foreground" />
                   <span>{formatTokenCount(sessionTokens)} tokens</span>
                 </div>
               )}
-              {sessionCost > 0 && (
+              {isSelfView && sessionCost > 0 && (
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
                   <span>{formatCost(sessionCost)}</span>
