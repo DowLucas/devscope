@@ -12,6 +12,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The plugin↔backend wire-contract test
+      # (packages/backend/src/routes/__tests__/events.contract.test.ts) loads
+      # fixtures from the side-by-side devscope-plugin checkout. Mirrors the
+      # symmetric pattern in DowLucas/devscope-plugin's smoke job, which
+      # cross-checks out devscope.
+      - name: Checkout devscope-plugin (sibling — wire-contract fixtures)
+        uses: actions/checkout@v4
+        with:
+          repository: DowLucas/devscope-plugin
+          ref: main
+          path: devscope-plugin
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
