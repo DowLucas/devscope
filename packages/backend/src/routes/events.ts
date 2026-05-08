@@ -216,24 +216,50 @@ export function eventsRoutes(sql: SQL) {
     const event = c.req.valid("json") as unknown as DevscopeEvent;
     event.timestamp = sanitizeTimestamp(event.timestamp);
 
+    // Identity-trust gate (DEV-90). The plugin declares a developerId in the
+    // body computed locally as SHA256(git config user.email). The route can
+    // not trust that on its own — without verification, any holder of a valid
+    // API key could post events under any developerId of their choosing, and
+    // the same human running with a divergent git/SaaS email lands in two
+    // distinct developer rows (one per ingestion path).
+    //
+    // Rule (overwrite-on-insert):
+    //   1. Require API-key auth + an auth-user email; otherwise 401.
+    //   2. Compute the canonical developerId server-side from the API-key
+    //      owner's auth-account email and OVERWRITE the body's identity
+    //      fields before persisting. The plugin-declared developerId,
+    //      developerName, and developerEmail are treated as advisory hints
+    //      and are not stored.
+    //
+    // This converges with /api/events/hook, which already derives identity
+    // server-side, so a single human producing events on either path lands
+    // on one developer row even when their git email and SaaS account email
+    // differ.
+    const apiKeyUserId = c.get("apiKeyUserId" as never) as string | undefined;
+    const authUser = c.get("user" as never) as { id?: string; name?: string; email?: string } | undefined;
+    if (!apiKeyUserId || !authUser?.email) {
+      return c.json({ error: "Event ingestion requires authenticated API key" }, 401);
+    }
+    event.developerId = computeDeveloperId(authUser.email);
+    event.developerEmail = authUser.email;
+    event.developerName =
+      authUser.name && authUser.name.length > 0 ? authUser.name : "Developer";
+
     await upsertDeveloper(sql, event.developerId, event.developerName, event.developerEmail ?? "");
 
-    // Auto-link plugin developer to the API key owner's org
-    const apiKeyUserId = c.get("apiKeyUserId" as never) as string | undefined;
-    if (apiKeyUserId) {
-      // DEV-68: await the org link before any code that queries
-      // organization_developer (privacy_mode_activated logging below and the
-      // broadcast fan-out in runPostInsertHandlers). Otherwise the very first
-      // event from a brand-new developerId is persisted but not broadcast
-      // because the link insert hasn't landed when the lookup runs.
-      // Errors are still caught so a failed link does not abort ingestion.
-      await autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId)
-        .catch((err) => console.error("[events] autoLinkDeveloperToOrg failed:", err));
-      // autoLinkUserToDeveloper is not on the broadcast critical path; keep
-      // it fire-and-forget so we don't add an extra round-trip per event.
-      autoLinkUserToDeveloper(sql, apiKeyUserId, event.developerId)
-        .catch((err) => console.error("[events] autoLinkUserToDeveloper failed:", err));
-    }
+    // Auto-link the canonical developer to the API key owner's org.
+    // DEV-68: await the org link before any code that queries
+    // organization_developer (privacy_mode_activated logging below and the
+    // broadcast fan-out in runPostInsertHandlers). Otherwise the very first
+    // event from a brand-new developerId is persisted but not broadcast
+    // because the link insert hasn't landed when the lookup runs.
+    // Errors are still caught so a failed link does not abort ingestion.
+    await autoLinkDeveloperToOrg(sql, apiKeyUserId, event.developerId)
+      .catch((err) => console.error("[events] autoLinkDeveloperToOrg failed:", err));
+    // autoLinkUserToDeveloper is not on the broadcast critical path; keep
+    // it fire-and-forget so we don't add an extra round-trip per event.
+    autoLinkUserToDeveloper(sql, apiKeyUserId, event.developerId)
+      .catch((err) => console.error("[events] autoLinkUserToDeveloper failed:", err));
 
     // Check if this event is reactivating an ended session (e.g. after backend restart)
     const [existingSession] = await sql`SELECT status FROM sessions WHERE id = ${event.sessionId}`;
