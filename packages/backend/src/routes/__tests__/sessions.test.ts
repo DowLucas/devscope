@@ -163,6 +163,7 @@ describe("GET /sessions", () => {
       status: "active",
       permissionMode: "default",
       privacyMode: null,
+      model: null,
       developerName: "Alice",
       developerEmail: "alice@example.com",
       eventCount: 5,
@@ -379,6 +380,37 @@ describe("GET /sessions/:id", () => {
     expect(body.events).toHaveLength(1);
     expect(body.events[0].id).toBe("evt-1");
     expect(body.events[0].event_type).toBe("tool.use");
+  });
+
+  test("exposes session.model when persisted on the row (DEV-93)", async () => {
+    const session = makeSessionRow({
+      developer_id: "dev-aaa",
+      model: "claude-sonnet-4-20250514",
+    });
+    mockGetSessionDetail.mockImplementation(() =>
+      Promise.resolve({ session, events: [] })
+    );
+
+    const app = buildApp({ orgDeveloperIds: ["dev-aaa"], user: { id: "user-1" } });
+    const res = await app.request("/sessions/sess-1");
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.session.model).toBe("claude-sonnet-4-20250514");
+  });
+
+  test("exposes session.model as null when the row has no model (DEV-93)", async () => {
+    const session = makeSessionRow({ developer_id: "dev-aaa" }); // no model field
+    mockGetSessionDetail.mockImplementation(() =>
+      Promise.resolve({ session, events: [] })
+    );
+
+    const app = buildApp({ orgDeveloperIds: ["dev-aaa"], user: { id: "user-1" } });
+    const res = await app.request("/sessions/sess-1");
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.session.model).toBeNull();
   });
 
   // -----------------------------------------------------------------------

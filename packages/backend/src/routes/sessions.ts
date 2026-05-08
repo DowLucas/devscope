@@ -21,6 +21,7 @@ function mapSession(row: any) {
     status: row.status,
     permissionMode: row.permission_mode,
     privacyMode: row.privacy_mode ?? null,
+    model: row.model ?? null,
     developerName: row.developer_name,
     developerEmail: row.developer_email,
     eventCount: row.event_count,

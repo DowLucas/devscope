@@ -58,16 +58,21 @@ export async function createSession(
   permissionMode: string | null,
   privacyMode: string | null = null,
   saltVersion: number = 1,
+  model: string | null = null,
 ) {
   // DEV-76: salt_version is set on first INSERT and intentionally NOT
   // updated on conflict — once a session has been stamped with a version,
   // events recorded against it must keep referencing that version.
+  // DEV-93: model is captured from session.start payload. COALESCE on
+  // conflict so a later session.start without `model` (older plugin) does
+  // not blank out a previously-stamped value.
   await sql`
-    INSERT INTO sessions (id, developer_id, project_path, project_name, permission_mode, privacy_mode, salt_version)
-    VALUES (${id}, ${developerId}, ${projectPath}, ${projectName}, ${permissionMode}, ${privacyMode}, ${saltVersion})
+    INSERT INTO sessions (id, developer_id, project_path, project_name, permission_mode, privacy_mode, salt_version, model)
+    VALUES (${id}, ${developerId}, ${projectPath}, ${projectName}, ${permissionMode}, ${privacyMode}, ${saltVersion}, ${model})
     ON CONFLICT(id) DO UPDATE SET
       permission_mode = COALESCE(EXCLUDED.permission_mode, sessions.permission_mode),
       privacy_mode = COALESCE(EXCLUDED.privacy_mode, sessions.privacy_mode),
+      model = COALESCE(EXCLUDED.model, sessions.model),
       status = 'active',
       ended_at = NULL`;
 }
@@ -2525,7 +2530,13 @@ export interface TokenUsageInput {
 /**
  * Update session token usage from a response.complete or session.end event.
  * Uses segment peaks to correctly accumulate across compaction boundaries.
- * Cost is computed from the token_pricing table.
+ *
+ * Cost is computed from the `token_pricing` table by matching `sessions.model`
+ * against `token_pricing.model_pattern` via SQL LIKE. The most-specific match
+ * wins (longest non-'*' pattern); the literal '*' row is the fallback when
+ * the session has no model or no specific pattern matches. See migration
+ * `038_token_pricing_model_patterns.sql` for seeded rows and
+ * `packages/backend/docs/token-pricing.md` for the runbook on rate updates.
  */
 export async function updateSessionTokens(
   sql: SQL,
@@ -2549,8 +2560,15 @@ export async function updateSessionTokens(
           ((s.total_cache_creation_tokens - s.segment_peak_cache_creation) + GREATEST(s.segment_peak_cache_creation, ${usage.cacheCreationTokens})) * p.cache_creation_price_per_mtok / 1000000.0 +
           ((s.total_cache_read_tokens - s.segment_peak_cache_read) + GREATEST(s.segment_peak_cache_read, ${usage.cacheReadTokens})) * p.cache_read_price_per_mtok / 1000000.0
         FROM sessions s
-        CROSS JOIN token_pricing p
-        WHERE s.id = ${sessionId} AND p.id = 'default'
+        CROSS JOIN LATERAL (
+          SELECT *
+          FROM token_pricing
+          WHERE (model_pattern <> '*' AND COALESCE(s.model, '') LIKE model_pattern)
+             OR model_pattern = '*'
+          ORDER BY (model_pattern = '*') ASC, length(model_pattern) DESC
+          LIMIT 1
+        ) p
+        WHERE s.id = ${sessionId}
       )
     WHERE id = ${sessionId}`;
 }
