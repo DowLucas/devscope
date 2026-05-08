@@ -17,6 +17,7 @@ import {
   recordTokenUsage,
   createReport,
   updateReport,
+  getDocGapsForOrg,
 } from "../../db";
 import type { AiReport, ReportType } from "@devscope/shared";
 
@@ -180,6 +181,40 @@ export async function gatherReportData(
     orgId: state.orgId,
   });
 
+  // DEV-48 doc-gap subsection — only computed for the weekly-buyer persona
+  // because the prompt slot lives on that persona only. Resolved here so the
+  // mission guardrail tripwire in `generateOutline` covers the full payload.
+  // If the helper has nothing to report (no CLAUDE.md snapshots, no period
+  // bounds, or no candidate terms), the field is omitted and the prompt's
+  // "Doc gap data unavailable" branch handles the absence gracefully.
+  //
+  // Failure mode: `createReport` above has already inserted a pending report
+  // row, so a thrown error from the helper would orphan that record AND
+  // abort the report. The doc-gap subsection is a wedge enhancement, not a
+  // load-bearing field — degrade by logging and omitting `docGaps` so the
+  // rest of the report still ships.
+  let docGaps: Awaited<ReturnType<typeof getDocGapsForOrg>> | undefined;
+  if (
+    state.persona === WEEKLY_BUYER_PERSONA &&
+    state.periodStart &&
+    state.periodEnd &&
+    state.orgId
+  ) {
+    try {
+      docGaps = await getDocGapsForOrg(sql, state.orgId, {
+        start: state.periodStart,
+        end: state.periodEnd,
+      });
+    } catch (err) {
+      console.warn(
+        `[gatherReportData] getDocGapsForOrg failed for org=${state.orgId} ` +
+          `period=${state.periodStart}..${state.periodEnd} — ` +
+          `omitting docGaps from this report.`,
+        err
+      );
+    }
+  }
+
   return {
     data: {
       periodComparison,
@@ -194,6 +229,7 @@ export async function gatherReportData(
       failureClusters,
       effectivePatterns,
       antiPatternSummary,
+      ...(docGaps && docGaps.length > 0 ? { docGaps } : {}),
     },
     reportId: report.id,
   };

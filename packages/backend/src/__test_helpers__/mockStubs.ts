@@ -78,6 +78,7 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     getClaudeMdTimeline: noopArr,
     getClaudeMdProjects: noopArr,
     computeClaudeMdCorrelation: noop,
+    getDocGapsForOrg: noopArr,
     // topologyQueries.ts
     computeTeamToolTopology: noop,
     getTeamToolTopology: noopArr,
