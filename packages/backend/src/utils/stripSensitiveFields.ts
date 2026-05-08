@@ -13,6 +13,10 @@ export function stripSensitivePayload(payload: Record<string, unknown>): Record<
   delete stripped.promptText;
   delete stripped.toolInput;
   delete stripped.responseText;
+  // transcriptPath is a local filesystem path. Fine to store in DB for the
+  // event author's own correlation, but must not be broadcast to other devs
+  // on the shared WebSocket feed. (CodeRabbit #54 inline comment.)
+  delete stripped.transcriptPath;
   return stripped;
 }
 
