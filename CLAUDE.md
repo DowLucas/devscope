@@ -77,6 +77,34 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/health` | GET | Health check + WS client count |
 | `/ws` | WS | Real-time event stream |
 
+## Local dev: making API calls
+
+Two flavors of auth — pick one per route:
+
+- **API key (`x-api-key` header)** — the plugin path. Required by `/api/events` and the plugin-accessible routes (`/api/ai`, `/api/insights`, `/api/patterns`, `/api/playbooks`, `/api/skills`, `/api/topology`, `/api/workflow-profiles`, `/api/friction`, `/api/sessions`). Keys are minted via better-auth's `auth.api.createApiKey({ body: { userId, name } })`; the dashboard exposes this at Settings → API Keys, but there's no UI before you have a session.
+- **Session cookie** — what the dashboard uses. Sign-in via `/api/auth/sign-in/email` returns a session cookie. Most dashboard routes go through `orgScopeMiddleware`, which reads `session.activeOrganizationId` to scope queries.
+
+Two traps that bite manual testers:
+
+1. **Local API-key minting has no helper out of the box.** `install.sh` is a prod marketplace flow.
+2. **Sign-in leaves `activeOrganizationId: null`.** The WS upgrade reads it, and a null org means `addClient(ws, undefined)` — the client lands in no org bucket and broadcasts go nowhere (`clients` stays at 0 for `/api/health` even with an open socket). The dashboard fixes this for you by calling `auth.api.setActiveOrganization` post-login; manual testers must POST `/api/auth/organization/set-active` with an `Origin: <BASE>` header (CSRF) before the WS handshake.
+
+**Use the dev-bootstrap script instead** — it handles both:
+
+```bash
+DATABASE_URL=postgres://devscope:devscope@localhost:5432/devscope \
+  bun run packages/backend/scripts/dev-bootstrap.ts
+```
+
+It is idempotent and per-run:
+
+- Ensures an admin user (default `admin@devscope.local`) and an org with that user as owner.
+- Updates any existing `auth_session` rows for the user with `activeOrganizationId` so already-open browser sessions get WS broadcasts.
+- Mints a fresh API key (the script never persists the key to disk; the printed value is the only copy).
+- Prints a sample `curl` for `/api/events` and the `DEVSCOPE_URL`/`DEVSCOPE_API_KEY` env to point a Claude Code session at the local stack.
+
+Override defaults via flags: `--email=`, `--password=`, `--org=`, or via env (`DEVSCOPE_ADMIN_EMAIL`, `DEVSCOPE_ADMIN_PASSWORD`, `DEVSCOPE_ORG_NAME`). Dev-only — do not check minted keys into the repo.
+
 ## Plugin & Marketplace
 
 The plugin lives in a **separate repo**: [`DowLucas/devscope-plugin`](https://github.com/DowLucas/devscope-plugin). It is not part of this monorepo.
