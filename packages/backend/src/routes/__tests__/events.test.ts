@@ -332,6 +332,7 @@ describe("POST /events", () => {
       null, // permissionMode not set in default payload
       null, // privacyMode not set in default payload
       1, // DEV-76: CURRENT_SALT_VERSION stamped on the session row
+      null, // DEV-93: model not set in default payload
     );
   });
 
@@ -356,6 +357,32 @@ describe("POST /events", () => {
       "plan",
       "private",
       1, // DEV-76: CURRENT_SALT_VERSION
+      null, // DEV-93: model not set in this payload
+    );
+  });
+
+  test("passes model from session.start payload through to createSession (DEV-93)", async () => {
+    const sql = makeMockSql([], []);
+    const app = buildApp(sql);
+
+    await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        validEvent({ payload: { model: "claude-sonnet-4-20250514" } }),
+      ),
+    });
+
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      sql,
+      "sess-1",
+      ALICE_DEV_ID,
+      "/home/user/project",
+      "my-project",
+      null,
+      null,
+      1,
+      "claude-sonnet-4-20250514", // DEV-93: model id round-trips from payload to createSession
     );
   });
 

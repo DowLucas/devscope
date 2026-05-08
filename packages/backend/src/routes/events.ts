@@ -273,9 +273,14 @@ export function eventsRoutes(sql: SQL) {
     const privacyMode = event.eventType === "session.start"
       ? (event.payload as { privacyMode?: string }).privacyMode ?? null
       : null;
+    // DEV-93: capture Claude Code model id from session.start payload so the
+    // session row records which model the session ran under.
+    const model = event.eventType === "session.start"
+      ? (event.payload as { model?: string }).model ?? null
+      : null;
     const shouldCreateOrReactivate = !existingSession || wasEnded || event.eventType === "session.start";
     if (shouldCreateOrReactivate) {
-      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode, CURRENT_SALT_VERSION);
+      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode, CURRENT_SALT_VERSION, model);
     }
 
     // DEV-76: Defense-in-depth — never persist a `salt` value into events.payload.
