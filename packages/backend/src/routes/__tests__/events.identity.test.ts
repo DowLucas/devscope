@@ -237,18 +237,22 @@ const ARBITRARY_DEV_ID = "deadbeef".repeat(8); // 64 hex chars, no email basis
 //   "Mismatched tuples are rejected OR strictly auto-linked under documented
 //    rules."
 //
-// Today's behavior on `main`:
-//   - matched, mismatched, sameOrgForge, arbitrary: route ACCEPTS and stores
-//     the declared developerId verbatim. Only `matched` is correct; the others
-//     are forgery vectors.
-//   - anon: route ACCEPTS without auth.
-//   - expired: indistinguishable from anon at the route level (auth middleware
-//     should have rejected upstream; we assert the route's behavior on the
-//     downstream case where the middleware did not strip the body).
+// Behavior after DEV-90 fix (mode (b), "overwrite-on-insert"):
+//   - matched: route accepts and persists the canonical id.
+//   - mismatched, sameOrgForge, arbitrary: route OVERWRITES the body's
+//     declared developerId with SHA256(authUser.email) before persisting.
+//     The plugin-declared id is treated as advisory and is not stored.
+//     This preserves plugin compatibility for users whose `git config
+//     user.email` diverges from their SaaS account email, and converges
+//     the dual-namespace gap below.
+//   - anon, expired: route REJECTS with 401 — there is no authoritative
+//     auth-user email to derive an identity from, so the event cannot be
+//     attributed.
 //
-// Therefore every non-matched row is expected to FAIL RED until the route
-// either (a) rejects mismatched developerIds, or (b) overwrites the declared
-// id with the canonical SHA256(authUser.email) before persisting.
+// Documented rule (see DEV-90 header comment in events.ts): on POST
+// /api/events the API-key owner's auth-account email is the sole source of
+// identity truth; plugin-declared developerId/Name/Email fields are hints
+// only.
 // ---------------------------------------------------------------------------
 
 type ForgeryCase = {
@@ -283,7 +287,7 @@ const forgeryMatrix: ForgeryCase[] = [
     authUser: { id: USER_A.authUserId, name: USER_A.name, email: USER_A.email },
     declaredDeveloperId: BOB_DEV_ID,
     canonicalDeveloperId: ALICE_DEV_ID,
-    expectation: "reject",
+    expectation: "normalize",
   },
   {
     name: "sameOrgForge: apiKey=A, declared=SHA256(B.email) [B is in A's org]",
@@ -293,7 +297,7 @@ const forgeryMatrix: ForgeryCase[] = [
     canonicalDeveloperId: ALICE_DEV_ID,
     // Same-org membership does not authorize cross-identity event posting.
     // Either reject or normalize to A — never silently store as B.
-    expectation: "reject",
+    expectation: "normalize",
   },
   {
     name: "arbitrary: apiKey=A, declared=opaque hex (no email basis)",
@@ -301,7 +305,7 @@ const forgeryMatrix: ForgeryCase[] = [
     authUser: { id: USER_A.authUserId, name: USER_A.name, email: USER_A.email },
     declaredDeveloperId: ARBITRARY_DEV_ID,
     canonicalDeveloperId: ALICE_DEV_ID,
-    expectation: "reject",
+    expectation: "normalize",
   },
   {
     name: "anon: no apiKey, declared=SHA256(B.email)",
