@@ -453,10 +453,18 @@ export function eventsRoutes(sql: SQL) {
           teammateName: raw.teammate_name ?? raw.teammateName ?? "",
           teamName: raw.team_name ?? raw.teamName ?? "",
         };
-      case "permission.request":
-        return {
+      case "permission.request": {
+        const permPayload: Record<string, unknown> = {
           toolName: raw.tool_name ?? raw.toolName ?? "unknown",
         };
+        // DEV-96: pass tool_input through for HTTP hook clients. The plugin
+        // already privacy-sanitizes before sending, so no further redaction
+        // is needed here. stripSensitivePayload in the broadcast path already
+        // drops toolInput from cross-developer views.
+        const toolInput = raw.tool_input ?? raw.toolInput;
+        if (toolInput != null) permPayload.toolInput = toolInput;
+        return permPayload;
+      }
       case "worktree.create":
         return {
           worktreeName: raw.name ?? raw.worktreeName ?? "",
