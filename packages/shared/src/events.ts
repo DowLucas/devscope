@@ -103,20 +103,20 @@ export interface ToolEventPayload {
   errorMessage?: string;
   isInterrupt?: boolean;
   agentId?: string | null;
+  /**
+   * DEV-94: per-invocation correlation id from Claude Code's PreToolUse /
+   * PostToolUse hooks. Pairs tool.start with tool.complete/tool.fail even
+   * when the same tool runs concurrently in parallel sub-agent calls.
+   * Optional — older plugin versions do not emit it; consumers MUST fall
+   * back to (toolName, toolSubcommand) matching when absent.
+   */
+  toolUseId?: string;
 }
 
 export interface AgentEventPayload {
   agentType: string;
   agentId: string;
   parentAgentId?: string | null;
-  // SubagentStop only: length of the agent's last assistant message in chars.
-  // We never store the raw message body — privacy-preserving signal that lets
-  // us reason about subagent verbosity/output volume without surfacing content.
-  lastMessageLength?: number;
-  // SubagentStop only: local filesystem path to the agent's transcript JSONL.
-  // Stored for local correlation (e.g. extracting token usage from the same
-  // transcript later); never surfaced as raw to other developers.
-  transcriptPath?: string;
 }
 
 export interface ResponsePayload {
@@ -147,6 +147,14 @@ export interface TaskCompletedPayload {
 
 export interface PermissionRequestPayload {
   toolName: string;
+  /**
+   * DEV-96: full PermissionRequest tool_input from the Claude Code hook.
+   * In `private` mode the plugin applies the same redaction as tool.start so
+   * paths/patterns are hashed and Bash command / Write content / Edit args
+   * are dropped before the event is sent. `permission_suggestions` is
+   * intentionally omitted (low signal vs. payload size).
+   */
+  toolInput?: Record<string, unknown>;
 }
 
 export interface WorktreeCreatePayload {
