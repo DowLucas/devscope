@@ -453,10 +453,17 @@ export function eventsRoutes(sql: SQL) {
           teammateName: raw.teammate_name ?? raw.teammateName ?? "",
           teamName: raw.team_name ?? raw.teamName ?? "",
         };
-      case "permission.request":
+      case "permission.request": {
+        // DEV-96: pass through tool_input when the hook client supplies it.
+        // The plugin already privacy-sanitizes before send; for raw HTTP
+        // hook clients the field is opt-in (typed Record<string, unknown>).
+        // permission_suggestions is intentionally dropped (low signal).
+        const ti = raw.tool_input ?? raw.toolInput;
         return {
           toolName: raw.tool_name ?? raw.toolName ?? "unknown",
+          ...(ti && typeof ti === "object" ? { toolInput: ti } : {}),
         };
+      }
       case "worktree.create":
         return {
           worktreeName: raw.name ?? raw.worktreeName ?? "",
