@@ -42,23 +42,40 @@ export function buildTurns(events: RawEvent[]): SessionTurn[] {
         const turn = ensureTurn();
         // For tool.start, add a placeholder; for complete/fail, try to update the last matching entry
         const toolInput = p.toolInput as Record<string, unknown> | undefined;
+        const toolUseId = p.toolUseId ? String(p.toolUseId) : undefined;
         if (event.event_type === "tool.start") {
           turn.toolCalls.push({
             toolName: String(p.toolName ?? "Unknown"),
             toolSubcommand: p.toolSubcommand ? String(p.toolSubcommand) : undefined,
+            toolUseId,
             toolInput,
             timestamp: event.created_at,
           });
         } else {
-          // Find matching tool.start to update, or add new.
-          // Prefer matching by (toolName, toolSubcommand) when subcommand is present.
+          // DEV-94: prefer toolUseId for pairing — it uniquely identifies each
+          // invocation, so concurrent same-tool calls (e.g. parallel Read) are
+          // matched correctly. Fall back to (toolName, toolSubcommand) when
+          // toolUseId is absent (older plugin versions or hosts that don't
+          // surface tool_use_id in the hook input).
           const toolSub = p.toolSubcommand ? String(p.toolSubcommand) : undefined;
-          const existing = turn.toolCalls.findLast(
-            (tc) =>
-              tc.toolName === String(p.toolName ?? "") &&
-              tc.success === undefined &&
-              (toolSub === undefined || tc.toolSubcommand === toolSub)
-          );
+          let existing: typeof turn.toolCalls[number] | undefined;
+          if (toolUseId) {
+            existing = turn.toolCalls.findLast(
+              (tc) => tc.toolUseId === toolUseId && tc.success === undefined
+            );
+          }
+          if (!existing) {
+            existing = turn.toolCalls.findLast(
+              (tc) =>
+                tc.toolName === String(p.toolName ?? "") &&
+                tc.success === undefined &&
+                // When the complete event carries a toolUseId but the entry
+                // already has a different one, don't collapse them by name —
+                // that's exactly the collision DEV-94 fixes.
+                (toolUseId === undefined || tc.toolUseId === undefined) &&
+                (toolSub === undefined || tc.toolSubcommand === toolSub)
+            );
+          }
           if (existing) {
             existing.success = event.event_type === "tool.complete";
             existing.isInterrupt = (p.isInterrupt as boolean) || undefined;
@@ -66,10 +83,12 @@ export function buildTurns(events: RawEvent[]): SessionTurn[] {
             existing.errorMessage = p.errorMessage as string | undefined;
             if (toolInput) existing.toolInput = toolInput;
             if (p.toolSubcommand) existing.toolSubcommand = String(p.toolSubcommand);
+            if (toolUseId && !existing.toolUseId) existing.toolUseId = toolUseId;
           } else {
             turn.toolCalls.push({
               toolName: String(p.toolName ?? "Unknown"),
               toolSubcommand: p.toolSubcommand ? String(p.toolSubcommand) : undefined,
+              toolUseId,
               toolInput,
               success: event.event_type === "tool.complete",
               isInterrupt: (p.isInterrupt as boolean) || undefined,

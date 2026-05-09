@@ -81,6 +81,8 @@ export interface ToolCallEntry {
   duration?: number;
   errorMessage?: string;
   timestamp: string;
+  /** DEV-94: per-invocation correlation id; pairs start/complete reliably for parallel same-tool calls. */
+  toolUseId?: string;
 }
 
 export interface SessionTurn {

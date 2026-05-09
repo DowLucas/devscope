@@ -103,6 +103,14 @@ export interface ToolEventPayload {
   errorMessage?: string;
   isInterrupt?: boolean;
   agentId?: string | null;
+  /**
+   * DEV-94: per-invocation correlation id from Claude Code's PreToolUse /
+   * PostToolUse hooks. Pairs tool.start with tool.complete/tool.fail even
+   * when the same tool runs concurrently in parallel sub-agent calls.
+   * Optional — older plugin versions do not emit it; consumers MUST fall
+   * back to (toolName, toolSubcommand) matching when absent.
+   */
+  toolUseId?: string;
 }
 
 export interface AgentEventPayload {
@@ -147,6 +155,12 @@ export interface TaskCompletedPayload {
 
 export interface PermissionRequestPayload {
   toolName: string;
+  // Full PermissionRequest tool_input from the Claude Code hook. In `private`
+  // mode the plugin runs this through the same redaction helper as tool.start,
+  // so paths/patterns are hashed and Bash command / Write content / Edit args
+  // are dropped before the event is sent (DEV-96). `permission_suggestions` is
+  // intentionally omitted per the upstream issue (low signal).
+  toolInput?: Record<string, unknown>;
 }
 
 export interface WorktreeCreatePayload {
