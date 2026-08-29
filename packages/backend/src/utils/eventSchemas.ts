@@ -55,9 +55,22 @@ const instructionsFileSchema = z
   })
   .strict();
 
-/** `salt_version` may be tacked onto any payload by send-event.sh (private mode). */
+/**
+ * Fields `send-event.sh` may tack onto *any* payload, regardless of event type.
+ *
+ * - `salt_version` — private mode only (DEV-74).
+ * - `promptId` / `permissionMode` / `effortLevel` — plugin 0.15.0 forwards the
+ *   base hook-input fields Claude Code stamps on every hook event. `promptId`
+ *   correlates every event back to the prompt that caused it and matches the
+ *   `prompt.id` OpenTelemetry attribute. Note `session.start` also declares
+ *   `permissionMode` as a required field of its own payload; that is the same
+ *   value and the per-event schema takes precedence there.
+ */
 const privacyAnnotations = {
   salt_version: z.number().optional(),
+  promptId: z.string().optional(),
+  permissionMode: z.string().optional(),
+  effortLevel: z.string().optional(),
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -254,6 +267,101 @@ const teammateIdlePayloadSchema = z
 // Map keyed by EventType — single lookup point for the route + tests
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Plugin 0.15.0 — hook events Claude Code introduced after the plugin was last
+// updated. Shapes mirror the emitting scripts in `devscope-plugin/scripts/`.
+// ---------------------------------------------------------------------------
+
+/** `tool-batch.sh` — PostToolBatch. */
+const toolBatchPayloadSchema = z
+  .object({
+    batchSize: z.number(),
+    toolNames: z.array(z.string()),
+    ...privacyAnnotations,
+  })
+  .strict();
+
+/** `prompt-expansion.sh` — UserPromptExpansion. Prompt body is never sent. */
+const promptExpansionPayloadSchema = z
+  .object({
+    expansionType: z.string(),
+    commandName: z.string(),
+    commandSource: z.string(),
+    argsLength: z.number(),
+    ...privacyAnnotations,
+  })
+  .strict();
+
+/** `response-failed.sh` — StopFailure. */
+const responseFailedPayloadSchema = z
+  .object({
+    error: z.string(),
+    errorDetails: z.string().optional(),
+    ...privacyAnnotations,
+  })
+  .strict();
+
+/** `model-switch.sh` — PostModelSwitch. */
+const modelSwitchPayloadSchema = z
+  .object({
+    fromModel: z.string(),
+    toModel: z.string(),
+    requestedModel: z.string().optional(),
+    source: z.string(),
+    contextTokens: z.number(),
+    promptCacheWarm: z.boolean(),
+    ...privacyAnnotations,
+  })
+  .strict();
+
+/** `permission-denied.sh` — PermissionDenied. */
+const permissionDeniedPayloadSchema = z
+  .object({
+    toolName: z.string(),
+    toolUseId: z.string(),
+    reason: z.string(),
+    toolSubcommand: z.string().optional(),
+    ...privacyAnnotations,
+  })
+  .strict();
+
+/** `task-created.sh` — TaskCreated. */
+const taskCreatedPayloadSchema = z
+  .object({
+    taskId: z.string(),
+    taskSubject: z.string(),
+    taskDescription: z.string(),
+    teammateName: z.string(),
+    ...privacyAnnotations,
+  })
+  .strict();
+
+/** `cwd-changed.sh` — CwdChanged. Paths are hashed in private mode. */
+const cwdChangePayloadSchema = z
+  .object({
+    oldCwd: z.string(),
+    newCwd: z.string(),
+    ...privacyAnnotations,
+  })
+  .strict();
+
+/** `directory-added.sh` — DirectoryAdded. Path is hashed in private mode. */
+const directoryAddedPayloadSchema = z
+  .object({
+    directory: z.string(),
+    source: z.string(),
+    ...privacyAnnotations,
+  })
+  .strict();
+
+/** `setup-hook.sh` — Setup (plugin init / maintenance). */
+const pluginSetupPayloadSchema = z
+  .object({
+    trigger: z.string(),
+    ...privacyAnnotations,
+  })
+  .strict();
+
 export const payloadSchemasByEventType = {
   "session.start": sessionStartPayloadSchema,
   "session.end": sessionEndPayloadSchema,
@@ -276,6 +384,17 @@ export const payloadSchemasByEventType = {
   "elicitation.response": elicitationResultPayloadSchema,
   "instructions.loaded": instructionsLoadedPayloadSchema,
   "teammate.idle": teammateIdlePayloadSchema,
+  // Added in plugin 0.15.0. `worktree.create` / `worktree.remove` above stay:
+  // pre-0.15.0 plugins remain installed and keep sending them.
+  "tool.batch": toolBatchPayloadSchema,
+  "prompt.expansion": promptExpansionPayloadSchema,
+  "response.failed": responseFailedPayloadSchema,
+  "model.switch": modelSwitchPayloadSchema,
+  "permission.denied": permissionDeniedPayloadSchema,
+  "task.created": taskCreatedPayloadSchema,
+  "cwd.change": cwdChangePayloadSchema,
+  "directory.added": directoryAddedPayloadSchema,
+  "plugin.setup": pluginSetupPayloadSchema,
 } as const;
 
 export type EventTypeKey = keyof typeof payloadSchemasByEventType;

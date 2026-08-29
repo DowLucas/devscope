@@ -22,6 +22,7 @@ import {
   MessageCircleQuestion,
   FileText,
   UserX,
+  Activity,
 } from "lucide-react";
 import { Link } from "wouter";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -30,6 +31,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useActivityStore } from "@/stores/activityStore";
 import { useListApiKeys } from "@/hooks/useListApiKeys";
 import { timeAgo } from "@/lib/utils";
+import { EVENT_LABELS, getEventSummary } from "@/lib/eventDisplay";
 import type { DevscopeEvent } from "@devscope/shared";
 
 // ---------------------------------------------------------------------------
@@ -59,7 +61,8 @@ type FeedItem =
   | { kind: "compact-complete"; key: string; event: DevscopeEvent }
   | { kind: "elicitation"; key: string; event: DevscopeEvent }
   | { kind: "instructions"; key: string; event: DevscopeEvent }
-  | { kind: "teammate-idle"; key: string; event: DevscopeEvent };
+  | { kind: "teammate-idle"; key: string; event: DevscopeEvent }
+  | { kind: "event"; key: string; event: DevscopeEvent };
 
 // ---------------------------------------------------------------------------
 // Build compacted feed from raw events
@@ -188,6 +191,21 @@ function buildFeedItems(events: DevscopeEvent[]): FeedItem[] {
       case "teammate.idle":
         flushTools();
         items.push({ kind: "teammate-idle", key: event.id, event });
+        break;
+      // Added in plugin 0.15.0. These share one generic renderer: they are
+      // low-frequency and read fine as "<label> — <summary>", so nine
+      // near-identical components would be all cost and no clarity.
+      case "tool.batch":
+      case "prompt.expansion":
+      case "response.failed":
+      case "model.switch":
+      case "permission.denied":
+      case "task.created":
+      case "cwd.change":
+      case "directory.added":
+      case "plugin.setup":
+        flushTools();
+        items.push({ kind: "event", key: event.id, event });
         break;
     }
   }
@@ -850,6 +868,41 @@ function TeammateIdleItem({
 }
 
 // ---------------------------------------------------------------------------
+// Generic item — anything without a bespoke renderer, driven by the shared
+// label/summary maps so the feed and the event cards stay in step.
+// ---------------------------------------------------------------------------
+
+function GenericEventItem({
+  event,
+  isLast,
+}: {
+  event: DevscopeEvent;
+  isLast: boolean;
+}) {
+  const label = EVENT_LABELS[event.eventType] ?? event.eventType;
+  const summary = getEventSummary(event);
+  return (
+    <TimelineNode
+      dotColor="bg-slate-500"
+      icon={<Activity className="h-3.5 w-3.5 text-white" />}
+      isLast={isLast}
+    >
+      <div className="flex items-center gap-2 pt-1">
+        <span className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{label}</span>
+          {summary && summary !== event.eventType && (
+            <span className="ml-1.5">{summary}</span>
+          )}
+        </span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {timeAgo(event.timestamp)}
+        </span>
+      </div>
+    </TimelineNode>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -954,6 +1007,9 @@ export function LiveFeed() {
                 )}
                 {item.kind === "teammate-idle" && (
                   <TeammateIdleItem event={item.event} isLast={isLast} />
+                )}
+                {item.kind === "event" && (
+                  <GenericEventItem event={item.event} isLast={isLast} />
                 )}
               </motion.div>
             );

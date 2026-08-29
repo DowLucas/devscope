@@ -154,6 +154,121 @@ function transformNotification(raw: Record<string, unknown>) {
 }
 
 // ---------------------------------------------------------------------------
+// Plugin 0.15.0 transforms
+// ---------------------------------------------------------------------------
+
+/**
+ * Mirrors the block in `scripts/send-event.sh` that forwards the base
+ * hook-input fields Claude Code stamps on every event. Each is added only when
+ * present on the hook input, so these spread into every 0.15.0 payload below.
+ */
+function baseFields(raw: Record<string, unknown>) {
+  const effort = raw.effort as { level?: string } | undefined;
+  return {
+    ...(raw.prompt_id ? { promptId: raw.prompt_id as string } : {}),
+    ...(raw.permission_mode ? { permissionMode: raw.permission_mode as string } : {}),
+    ...(effort?.level ? { effortLevel: effort.level } : {}),
+  };
+}
+
+function transformToolBatch(raw: Record<string, unknown>) {
+  // Mirrors scripts/tool-batch.sh.
+  const calls = (raw.tool_calls as Array<Record<string, unknown>>) ?? [];
+  return envelope("tool.batch", {
+    batchSize: calls.length,
+    toolNames: calls.map((c) => c.tool_name as string).filter(Boolean),
+    ...baseFields(raw),
+  });
+}
+
+function transformPromptExpansion(raw: Record<string, unknown>) {
+  // Mirrors scripts/prompt-expansion.sh.
+  return envelope("prompt.expansion", {
+    expansionType: (raw.expansion_type as string) ?? "",
+    commandName: (raw.command_name as string) ?? "",
+    commandSource: (raw.command_source as string) ?? "",
+    argsLength: ((raw.command_args as string) ?? "").length,
+    ...baseFields(raw),
+  });
+}
+
+function transformResponseFailed(raw: Record<string, unknown>) {
+  // Mirrors scripts/response-failed.sh.
+  const details = (raw.error_details as string) ?? "";
+  return envelope("response.failed", {
+    error: String(raw.error ?? "").slice(0, 300),
+    ...(details ? { errorDetails: details.slice(0, 500) } : {}),
+    ...baseFields(raw),
+  });
+}
+
+function transformModelSwitch(raw: Record<string, unknown>) {
+  // Mirrors scripts/model-switch.sh.
+  const requested = (raw.requested_model as string) ?? "";
+  return envelope("model.switch", {
+    fromModel: (raw.from_model as string) ?? "",
+    toModel: (raw.to_model as string) ?? "",
+    source: (raw.source as string) ?? "",
+    contextTokens: (raw.context_tokens as number) ?? 0,
+    promptCacheWarm: (raw.prompt_cache_warm as boolean) ?? false,
+    ...(requested ? { requestedModel: requested } : {}),
+    ...baseFields(raw),
+  });
+}
+
+function transformPermissionDenied(raw: Record<string, unknown>) {
+  // Mirrors scripts/permission-denied.sh. `toolSubcommand` comes from
+  // _ds_extract_subcommand; the Bash fixture yields the leading argv token.
+  const input = (raw.tool_input as Record<string, unknown>) ?? {};
+  const command = (input.command as string) ?? "";
+  const sub = command ? command.trim().split(/\s+/)[0] : "";
+  return envelope("permission.denied", {
+    toolName: (raw.tool_name as string) ?? "",
+    toolUseId: (raw.tool_use_id as string) ?? "",
+    reason: ((raw.reason as string) ?? "").slice(0, 300),
+    ...(sub ? { toolSubcommand: sub } : {}),
+    ...baseFields(raw),
+  });
+}
+
+function transformTaskCreated(raw: Record<string, unknown>) {
+  // Mirrors scripts/task-created.sh.
+  return envelope("task.created", {
+    taskId: (raw.task_id as string) ?? "",
+    taskSubject: (raw.task_subject as string) ?? "",
+    taskDescription: (raw.task_description as string) ?? "",
+    teammateName: (raw.teammate_name as string) ?? "",
+    ...baseFields(raw),
+  });
+}
+
+function transformCwdChanged(raw: Record<string, unknown>) {
+  // Mirrors scripts/cwd-changed.sh (standard mode — no path hashing).
+  return envelope("cwd.change", {
+    oldCwd: (raw.old_cwd as string) ?? "",
+    newCwd: (raw.new_cwd as string) ?? "",
+    ...baseFields(raw),
+  });
+}
+
+function transformDirectoryAdded(raw: Record<string, unknown>) {
+  // Mirrors scripts/directory-added.sh (standard mode — no path hashing).
+  return envelope("directory.added", {
+    directory: (raw.directory as string) ?? "",
+    source: (raw.source as string) ?? "",
+    ...baseFields(raw),
+  });
+}
+
+function transformPluginSetup(raw: Record<string, unknown>) {
+  // Mirrors scripts/setup-hook.sh.
+  return envelope("plugin.setup", {
+    trigger: (raw.trigger as string) ?? "",
+    ...baseFields(raw),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -175,6 +290,16 @@ describe("plugin↔backend wire contract (DEV-88)", () => {
     { file: "tool-complete.json", transform: transformToolComplete, eventType: "tool.complete" },
     { file: "response-stop.json", transform: transformResponseStop, eventType: "response.complete" },
     { file: "notification.json", transform: transformNotification, eventType: "notification" },
+    // Added in plugin 0.15.0.
+    { file: "tool-batch.json", transform: transformToolBatch, eventType: "tool.batch" },
+    { file: "prompt-expansion.json", transform: transformPromptExpansion, eventType: "prompt.expansion" },
+    { file: "response-failed.json", transform: transformResponseFailed, eventType: "response.failed" },
+    { file: "model-switch.json", transform: transformModelSwitch, eventType: "model.switch" },
+    { file: "permission-denied.json", transform: transformPermissionDenied, eventType: "permission.denied" },
+    { file: "task-created.json", transform: transformTaskCreated, eventType: "task.created" },
+    { file: "cwd-changed.json", transform: transformCwdChanged, eventType: "cwd.change" },
+    { file: "directory-added.json", transform: transformDirectoryAdded, eventType: "directory.added" },
+    { file: "setup-hook.json", transform: transformPluginSetup, eventType: "plugin.setup" },
   ];
 
   for (const { file, transform, eventType } of fixtureCases) {
@@ -218,6 +343,16 @@ describe("plugin↔backend wire contract (DEV-88)", () => {
         "tool.start",
         "worktree.create",
         "worktree.remove",
+        // Added in plugin 0.15.0.
+        "tool.batch",
+        "prompt.expansion",
+        "response.failed",
+        "model.switch",
+        "permission.denied",
+        "task.created",
+        "cwd.change",
+        "directory.added",
+        "plugin.setup",
       ].sort(),
     );
   });

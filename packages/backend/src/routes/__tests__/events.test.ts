@@ -259,6 +259,50 @@ describe("POST /events", () => {
     expect(res.status).toBe(400);
   });
 
+  // The plugin drops 4xx events instead of queueing them (retrying a malformed
+  // event would just fill the retry buffer), so an event type missing from the
+  // enum is silently lost rather than delayed. Pin the whole 0.15.0 set.
+  test.each([
+    "tool.batch",
+    "prompt.expansion",
+    "response.failed",
+    "model.switch",
+    "permission.denied",
+    "task.created",
+    "cwd.change",
+    "directory.added",
+    "plugin.setup",
+  ])("accepts eventType %s (added in plugin 0.15.0)", async (eventType) => {
+    const sql = makeMockSql();
+    const app = buildApp(sql);
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ eventType })),
+    });
+
+    expect(res.status).not.toBe(400);
+  });
+
+  // Pre-0.15.0 plugins stay installed and keep sending these; dropping them
+  // from the enum would turn their events into 400s.
+  test.each(["worktree.create", "worktree.remove"])(
+    "still accepts legacy eventType %s from older plugins",
+    async (eventType) => {
+      const sql = makeMockSql();
+      const app = buildApp(sql);
+
+      const res = await app.request("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(validEvent({ eventType })),
+      });
+
+      expect(res.status).not.toBe(400);
+    },
+  );
+
   test("rejects empty id with 400", async () => {
     const sql = makeMockSql();
     const app = buildApp(sql);

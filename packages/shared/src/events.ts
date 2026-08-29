@@ -19,7 +19,20 @@ export type EventType =
   | "elicitation.request"
   | "elicitation.response"
   | "instructions.loaded"
-  | "teammate.idle";
+  | "teammate.idle"
+  // Added in plugin 0.15.0, for hook events Claude Code introduced after the
+  // plugin was last updated. `worktree.create` / `worktree.remove` above are
+  // retained deliberately: plugin versions before 0.15.0 stay installed in the
+  // wild and keep sending them. The 0.15.0 plugin no longer produces them.
+  | "tool.batch"
+  | "prompt.expansion"
+  | "response.failed"
+  | "model.switch"
+  | "permission.denied"
+  | "task.created"
+  | "cwd.change"
+  | "directory.added"
+  | "plugin.setup";
 
 export interface DevscopeEvent {
   id: string;

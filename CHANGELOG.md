@@ -6,7 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Support for the nine hook events added in plugin 0.15.0**: `tool.batch`,
+  `prompt.expansion`, `response.failed`, `model.switch`, `permission.denied`,
+  `task.created`, `cwd.change`, `directory.added`, `plugin.setup`. These correspond to
+  Claude Code hook events (`PostToolBatch`, `UserPromptExpansion`, `StopFailure`,
+  `PostModelSwitch`, `PermissionDenied`, `TaskCreated`, `CwdChanged`, `DirectoryAdded`,
+  `Setup`) introduced since the plugin was last updated.
+  - `eventType` enum in `packages/backend/src/routes/events.ts` and the `EventType` union
+    in `packages/shared/src/events.ts`. Deploy this **before** releasing plugin 0.15.0:
+    `zValidator` rejects unknown types with 400, and the plugin drops 4xx events rather
+    than queueing them, so events would be lost rather than delayed.
+  - Regression tests pinning the whole set, plus tests asserting `worktree.create` /
+    `worktree.remove` are still accepted — pre-0.15.0 plugins stay installed in the wild
+    and keep sending them, so those enum members must not be removed.
+  - Strict per-EventType payload schemas in `packages/backend/src/utils/eventSchemas.ts`
+    for all nine, so the DEV-88 wire contract stays complete. The plugin↔backend contract
+    test now parses the plugin's own fixture for each new type against those schemas,
+    giving real cross-repo verification that the emitting scripts and the backend agree.
+  - Dashboard rendering: colours, labels and summaries for the new types, and a generic
+    live-feed item so they appear in the feed instead of being silently dropped by a
+    switch with no default case.
+- Event payloads now carry `promptId` (correlates every event back to the prompt that
+  caused it, and joins to the `prompt.id` OpenTelemetry attribute), `permissionMode`, and
+  `effortLevel`. The ingest route needed no change (`payload` is `z.record(z.unknown())`),
+  but the three are now allowed on every payload in the strict schema's shared
+  `privacyAnnotations` block — otherwise a strict parse would reject them as unknown keys
+  for every event type.
+
 ### Changed
+
+- Event presentation (colours, labels, per-type summaries) moved out of
+  `EventCard.tsx` into `packages/dashboard/src/lib/eventDisplay.ts` so the event cards
+  and the live feed share one source instead of drifting apart.
 
 - **Hosting migration from Railway to self-hosted Docker.** Production now runs on a self-hosted Docker host behind Cloudflare Tunnel instead of Railway. CI publishes `ghcr.io/dowlucas/devscope-backend:{latest,sha}` on every push to `main`, and Watchtower auto-deploys by polling GHCR every 5 minutes. The Postgres database was dumped from Railway and restored on the new host with full row-count verification; no data loss. The public endpoint (`https://devscope.sh`) and plugin contract are unchanged.
 - Renamed `docker/railway.Dockerfile` → `docker/production.Dockerfile` (the file is no longer Railway-specific).

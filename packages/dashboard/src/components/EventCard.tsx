@@ -1,54 +1,7 @@
 import { motion } from "motion/react";
 import type { DevscopeEvent } from "@devscope/shared";
 import { timeAgo } from "@/lib/utils";
-
-const EVENT_COLORS: Record<string, string> = {
-  "session.start": "border-emerald-500/50 bg-emerald-500/5",
-  "session.end": "border-gray-500/50 bg-gray-500/5",
-  "prompt.submit": "border-blue-500/50 bg-blue-500/5",
-  "tool.start": "border-amber-500/50 bg-amber-500/5",
-  "tool.complete": "border-green-500/50 bg-green-500/5",
-  "tool.fail": "border-red-500/50 bg-red-500/5",
-  "agent.start": "border-purple-500/50 bg-purple-500/5",
-  "agent.stop": "border-purple-500/30 bg-purple-500/5",
-  "response.complete": "border-cyan-500/50 bg-cyan-500/5",
-  "notification": "border-yellow-500/50 bg-yellow-500/5",
-  "compact.pending": "border-orange-500/50 bg-orange-500/5",
-  "task.completed": "border-teal-500/50 bg-teal-500/5",
-  "permission.request": "border-rose-500/50 bg-rose-500/5",
-  "worktree.create": "border-indigo-500/50 bg-indigo-500/5",
-  "worktree.remove": "border-indigo-500/30 bg-indigo-500/5",
-  "config.change": "border-slate-500/50 bg-slate-500/5",
-  "compact.complete": "border-orange-500/50 bg-orange-500/5",
-  "elicitation.request": "border-violet-500/50 bg-violet-500/5",
-  "elicitation.response": "border-violet-500/30 bg-violet-500/5",
-  "instructions.loaded": "border-sky-500/50 bg-sky-500/5",
-  "teammate.idle": "border-gray-500/30 bg-gray-500/5",
-};
-
-const EVENT_LABELS: Record<string, string> = {
-  "session.start": "Session Started",
-  "session.end": "Session Ended",
-  "prompt.submit": "Prompt",
-  "tool.start": "Tool Started",
-  "tool.complete": "Tool Completed",
-  "tool.fail": "Tool Failed",
-  "agent.start": "Agent Spawned",
-  "agent.stop": "Agent Finished",
-  "response.complete": "Response Complete",
-  "notification": "Notification",
-  "compact.pending": "Compacting Context",
-  "task.completed": "Task Completed",
-  "permission.request": "Permission Request",
-  "worktree.create": "Worktree Created",
-  "worktree.remove": "Worktree Removed",
-  "config.change": "Config Changed",
-  "compact.complete": "Context Compacted",
-  "elicitation.request": "MCP Elicitation",
-  "elicitation.response": "Elicitation Response",
-  "instructions.loaded": "Instructions Loaded",
-  "teammate.idle": "Teammate Idle",
-};
+import { EVENT_COLORS, EVENT_LABELS, getEventSummary } from "@/lib/eventDisplay";
 
 function getInitials(name: string): string {
   return name
@@ -57,69 +10,6 @@ function getInitials(name: string): string {
     .join("")
     .toUpperCase()
     .slice(0, 2);
-}
-
-function getEventSummary(event: DevscopeEvent): string {
-  const p = event.payload as unknown as Record<string, unknown>;
-  switch (event.eventType) {
-    case "tool.start":
-    case "tool.complete":
-    case "tool.fail": {
-      const tn = String(p.toolName ?? "Unknown tool");
-      const sub = p.toolSubcommand ?? p.tool_subcommand;
-      return sub ? `${tn} · ${String(sub)}` : tn;
-    }
-    case "prompt.submit":
-      return (p.promptText as string) || `Prompt (${p.promptLength ?? 0} chars)`;
-    case "session.start":
-      return "Started (" + (p.startType ?? "startup") + ")";
-    case "session.end":
-      return "Ended (" + (p.endReason ?? "unknown") + ")";
-    case "agent.start":
-    case "agent.stop":
-      return String(p.agentType ?? "Agent");
-    case "notification":
-      return String(p.title ?? "Notification");
-    case "compact.pending":
-      return "Trigger: " + String(p.trigger ?? "auto");
-    case "task.completed":
-      return String(p.taskSubject ?? "Task");
-    case "permission.request":
-      return String(p.toolName ?? "Unknown tool");
-    case "worktree.create":
-      return String(p.worktreeName ?? "worktree");
-    case "worktree.remove":
-      return String(p.worktreePath ?? "worktree");
-    case "config.change":
-      return String(p.filePath ?? p.source ?? "config");
-    case "compact.complete": {
-      const reduction = Number(p.reductionPercent ?? p.reduction_percent ?? 0);
-      const before = Number(p.tokensBefore ?? p.tokens_before ?? 0);
-      return before > 0
-        ? `${before.toLocaleString()} tokens (${reduction}% reduction)`
-        : "Context compacted";
-    }
-    case "elicitation.request":
-      return `MCP: ${String(p.mcpServerName ?? p.mcp_server_name ?? "server")}`;
-    case "elicitation.response": {
-      const dur = Number(p.duration ?? 0);
-      const server = String(p.mcpServerName ?? p.mcp_server_name ?? "server");
-      return dur > 0
-        ? `${server} (${dur > 1000 ? `${(dur / 1000).toFixed(1)}s` : `${dur}ms`})`
-        : server;
-    }
-    case "instructions.loaded": {
-      const files = Array.isArray(p.files) ? p.files : [];
-      return `${files.length} file${files.length !== 1 ? "s" : ""} loaded`;
-    }
-    case "teammate.idle": {
-      const name = String(p.teammateName ?? p.teammate_name ?? "agent");
-      const reason = p.idleReason ?? p.idle_reason;
-      return name + (reason ? ` (${String(reason)})` : "");
-    }
-    default:
-      return event.eventType;
-  }
 }
 
 export function EventCard({ event }: { event: DevscopeEvent }) {
