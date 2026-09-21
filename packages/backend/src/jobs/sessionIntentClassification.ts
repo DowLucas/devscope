@@ -71,7 +71,7 @@ async function fetchSessionSummaries(sql: SQL): Promise<SessionRow[]> {
   return (await sql`
     SELECT
       s.id,
-      s.session_title as title,
+      s.current_title as title,
       s.project_name,
       ROUND(EXTRACT(EPOCH FROM (s.ended_at - s.started_at)) / 60)::INT as duration_min,
       (
