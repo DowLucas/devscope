@@ -140,6 +140,37 @@ claude plugin marketplace list                            # List marketplace sou
 claude plugin update devscope                             # Update plugin (after version bump)
 ```
 
+## Two AI models, split by job
+
+The backend calls two providers, and the split is deliberate:
+
+- **Gemini** (`src/ai/gemini.ts`) generates prose: reports, insights, session titles, chat answers.
+- **TypeSafe System One / Jev** (`src/ai/typesafe.ts`) answers typed questions — `Choice`, `Score`, `Noul` — and returns probabilities plus calibrated confidence. It produces **no free text at all**.
+
+That second property is the reason it is used on the mission-critical surfaces. The ethics rules below are enforced on Gemini output by prompt instructions plus a post-hoc grounding check, because a text model can always drift. A model with no text channel cannot emit a developer name in the first place, so moving a decision to TypeSafe converts an advisory guard into a structural one.
+
+**Every TypeSafe call site must have a fallback.** `askSystemOne` never throws; it returns `null` on a missing key, timeout, rate limit, or any API error, and the caller drops back to its previous behaviour. TypeSafe's published rate limits are explicitly volatile, so availability is best-effort everywhere and especially on the live hook path.
+
+Surfaces using it:
+
+| Surface | Question type | Fallback when unavailable |
+|---|---|---|
+| `jobs/sessionIntentClassification.ts` | one `Choice` per session, fanned out into one request | Gemini JSON prompt |
+| `ai/grounding/semanticLeak.ts` (via `validator.ts`) | `Noul` + `Score` | lexical roster/shape checks alone |
+| `ai/detection/successClaim.ts` | two `Noul` per session | `detectHallucinatedSuccess` regex |
+| `ai/detection/stuckness.ts` (nudge gate) | `Score` | send the nudge, as before |
+| `ai/grounding/injectionScreen.ts` | `Noul` per term | pass terms through unscreened |
+
+Conventions:
+
+- **Fail open, never silently closed.** An unavailable guard must leave behaviour exactly as strong as before, never weaker and never disabled.
+- **Code answers facts, the model answers language.** `hallucinatedSuccessWorkflow.ts` is the reference: code decides from the event log whether a verification tool ran, and only the "does this text claim success" half goes to the model.
+- **Decompose broad judgments.** Prefer several atomic questions combined in code over one question that weighs multiple factors. Adding questions to a request barely changes latency, since all questions are evaluated in parallel against one shared `state`.
+- **Confidence is a second axis.** `CONFIDENCE.floor` (0.5) is the "model is genuinely unsure" line; gate riskier actions higher. `Noul` answers carry no confidence field, so gate on distance from 0.5 via `noulDecisiveness`.
+- **Privacy gate.** Anything sending ingested developer content to TypeSafe runs only on content already allowed to leave the box. `assertScreenable` is the tripwire; private-mode sessions never persist `content_text` upstream.
+
+Verify against the live API with `bun run scripts/typesafe-smoke.ts`.
+
 ## Ethics & Design Principles
 
 DevScope exists to improve **team workflow and tooling** — not to monitor, rank, or compare individual developers.

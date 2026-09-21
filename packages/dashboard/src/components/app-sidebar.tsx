@@ -18,6 +18,7 @@ import {
   FileText,
   Fingerprint,
   Shield,
+  Lightbulb,
 } from "lucide-react";
 import { useActivityStore } from "@/stores/activityStore";
 import { authClient } from "@/lib/auth-client";
@@ -255,6 +256,18 @@ export function AppSidebar() {
       <SidebarFooter>
         {session?.user && (
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={isActive(location, "/dashboard/coaching")}
+                tooltip="My coaching (only you)"
+              >
+                <Link href="/dashboard/coaching">
+                  <Lightbulb />
+                  <span>My coaching</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild

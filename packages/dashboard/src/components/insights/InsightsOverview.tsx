@@ -22,6 +22,7 @@ import { ThroughputCards } from "./ThroughputCards";
 import { MinuteActivityChart } from "./charts/MinuteActivityChart";
 import { TokenUsageCards } from "./TokenUsageCards";
 import { TokenUsageChart } from "./charts/TokenUsageChart";
+import { ContributionPillarsChart } from "./charts/ContributionPillarsChart";
 
 export function InsightsOverview() {
   const { days } = useDateRange();
@@ -50,6 +51,8 @@ export function InsightsOverview() {
       <TokenUsageCards data={tokenSummary.data} loading={tokenSummary.loading} />
 
       <PeriodComparison />
+
+      <ContributionPillarsChart weeks={Math.max(4, Math.min(52, Math.ceil(days / 7)))} />
 
       <MinuteActivityChart />
 

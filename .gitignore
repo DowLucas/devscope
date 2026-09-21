@@ -19,3 +19,4 @@ Thumbs.db
 
 # Local-only docs (SSH details, infra specifics not meant for the public repo)
 *.local.md
+.gstack/

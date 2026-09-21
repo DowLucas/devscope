@@ -13,6 +13,10 @@
 
 import type { SQL } from "bun";
 import { logEthicsEvent } from "../../utils/ethicsAudit";
+import {
+  assessIndividualTargeting,
+  type SemanticLeakAssessment,
+} from "./semanticLeak";
 
 /** Roster-cache TTL: short enough to pick up new developers, long enough to avoid
  *  re-querying for every LLM call during a burst. */
@@ -133,7 +137,7 @@ async function loadRoster(sql: SQL): Promise<RosterEntry[]> {
 export type GroundingAction = "allow" | "redact" | "reject";
 
 export interface GroundingHit {
-  kind: "name" | "email" | "per_dev_shape";
+  kind: "name" | "email" | "per_dev_shape" | "semantic_targeting";
   match: string;
   developerId?: string;
 }
@@ -152,6 +156,11 @@ export interface ValidateOptions {
   orgId?: string | null;
   /** Override fallback message (e.g. for reports vs short chat answers). */
   fallback?: string;
+  /**
+   * Run the semantic targeting check (default true). Set false only on paths
+   * where the extra round-trip is unacceptable; the lexical checks still run.
+   */
+  semantic?: boolean;
 }
 
 const DEFAULT_FALLBACK =
@@ -304,6 +313,38 @@ export async function validateAndRedactTeamOutput(
   const shapeHits = detectPerDevShape(text);
   hits.push(...shapeHits);
 
+  // 3. Semantic targeting check. Only worth running when the lexical layers
+  // found nothing: if they already have a hit the action is decided below, and
+  // the model would add latency without changing the outcome. The case this
+  // catches is the inverse — text that singles out an individual while
+  // containing no roster token and no per-dev sentence shape.
+  let semantic: SemanticLeakAssessment | null = null;
+  if (hits.length === 0 && opts.semantic !== false) {
+    semantic = await assessIndividualTargeting(sql, text);
+
+    if (semantic?.shouldReject) {
+      const semanticHit: GroundingHit = {
+        kind: "semantic_targeting",
+        match: `targeting p=${semantic.targetingProbability.toFixed(2)} severity=${semantic.severity.toFixed(2)}`,
+      };
+      hits.push(semanticHit);
+    } else if (semantic?.shouldFlag) {
+      // Below the reject bar. Record it so thresholds can be tuned against
+      // real traffic, but do not alter the response.
+      try {
+        logEthicsEvent(sql, opts.orgId ?? null, "ai_individual_reference_blocked", {
+          surface: opts.surface,
+          action: "flagged",
+          targeting_probability: semantic.targetingProbability,
+          severity: semantic.severity,
+          confidence: semantic.confidence,
+        });
+      } catch (err) {
+        console.error("[ai-grounding] failed to record semantic flag", err);
+      }
+    }
+  }
+
   if (hits.length === 0) {
     return { action: "allow", text, hits: [] };
   }
@@ -314,8 +355,13 @@ export async function validateAndRedactTeamOutput(
   //     after name redaction (e.g. "[redacted] completed 12 sessions" is still
   //     individual-level telemetry).
   //   - more than 5 roster matches (heavy per-dev content).
+  // A semantic hit always rejects: unlike a name or an email there is no token
+  // to strike out, so redaction cannot make the text safe.
   const shouldReject =
-    shapeHits.length > 0 || seenIds.size > 5 || hits.length > 8;
+    shapeHits.length > 0 ||
+    seenIds.size > 5 ||
+    hits.length > 8 ||
+    semantic?.shouldReject === true;
 
   const fallback = opts.fallback ?? DEFAULT_FALLBACK;
   const result: GroundingResult = shouldReject

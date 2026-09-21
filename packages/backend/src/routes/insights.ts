@@ -21,6 +21,7 @@ import {
   getSessionTokenUsageOverTime,
 } from "../db";
 import { gateSelfDeveloperId } from "../middleware/selfDeveloperGate";
+import { getTeamContributionPillars } from "../db/patternQueries";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
   if (!val) return def;
@@ -165,6 +166,14 @@ export function insightsRoutes(sql: SQL) {
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     if (!devIds || devIds.length === 0) return c.json([]);
     return c.json(await getSessionTokenUsageOverTime(sql, days, devIds));
+  });
+
+  // --- Contribution Pillars (team-aggregated only — no per-developer breakdown by design) ---
+  app.get("/pillars", async (c) => {
+    const weeks = clampInt(c.req.query("weeks"), 12, 52);
+    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
+    if (!devIds || devIds.length === 0) return c.json([]);
+    return c.json(await getTeamContributionPillars(sql, devIds, weeks));
   });
 
   return app;

@@ -25,6 +25,7 @@ import { PlaybooksView } from "@/components/playbooks/PlaybooksView";
 import { PrivacyDashboard } from "@/components/privacy/PrivacyDashboard";
 import { ClaudeMdEvolutionView } from "@/components/claudemd/ClaudeMdEvolutionView";
 import { WorkflowProfileView } from "@/components/workflow/WorkflowProfileView";
+import { CoachingPage } from "@/components/coaching/CoachingPage";
 import { useDevscopeSocket } from "@/hooks/useWebSocket";
 import { useActivityStore, type ActiveAgent, type ActivityState } from "@/stores/activityStore";
 import { apiFetch } from "@/lib/api";
@@ -93,6 +94,7 @@ function AppContent() {
         <Route path="/dashboard/workflow/*?" component={WorkflowProfileView} />
         <Route path="/dashboard/privacy/*?" component={PrivacyDashboard} />
         <Route path="/dashboard/team/*?" component={TeamView} />
+        <Route path="/dashboard/coaching" component={CoachingPage} />
         <Route path="/dashboard/account/*?" component={SettingsPage} />
         {/* Default dashboard view — Activity feed */}
         <Route component={LiveFeed} />

@@ -22,6 +22,14 @@ import { stripSensitivePayload } from "../utils/stripSensitiveFields";
 import { logEthicsEvent } from "../utils/ethicsAudit";
 import { evaluateFriction, cleanupFrictionSession } from "../services/frictionDetector";
 import { CURRENT_SALT_VERSION, deriveOrgSalt } from "../utils/orgSalt";
+import {
+  recordToolResult,
+  shouldDedupNudge,
+  clearStuckState,
+  recentToolSummary,
+} from "../services/sessionStuckState";
+import { phraseNudge } from "../ai/workflows/nudgeWorkflow";
+import { assessStuckness } from "../ai/detection/stuckness";
 
 const eventSchema = z.object({
   id: z.string().min(1).max(200),
@@ -89,7 +97,11 @@ export function eventsRoutes(sql: SQL) {
       sessionCreatedOrReactivated: boolean;
       sessionEnded: boolean;
     }
-  ) {
+  ): Promise<{
+    devOrgs: any[];
+    nudge: { type: "soft"; severity: string; message: string; signals: Record<string, unknown> } | null;
+  }> {
+    let nudgeOut: { type: "soft"; severity: string; message: string; signals: Record<string, unknown> } | null = null;
     // Look up developer's orgs for scoped broadcasting
     const devOrgs = await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${event.developerId}`;
 
@@ -195,7 +207,23 @@ export function eventsRoutes(sql: SQL) {
       }
     }
 
+    // Track per-session stuck state for the proactive nudge layer
+    if (event.eventType === "tool.fail" || event.eventType === "tool.complete") {
+      const tp = event.payload as any;
+      const inputHash = typeof tp?.toolInputHash === "string" ? tp.toolInputHash : null;
+      const toolName = typeof tp?.toolName === "string" ? tp.toolName : null;
+      if (inputHash && toolName) {
+        recordToolResult(
+          event.sessionId,
+          toolName,
+          inputHash,
+          event.eventType === "tool.complete",
+        );
+      }
+    }
+
     // Friction detection for active sessions
+    let firstTrippedAlert: { rule_type: string; data_context: any; severity: string; description: string } | null = null;
     if (["tool.fail", "prompt.submit", "tool.complete", "response.complete"].includes(event.eventType)) {
       try {
         for (const row of devOrgs as any[]) {
@@ -205,6 +233,14 @@ export function eventsRoutes(sql: SQL) {
           if (frictionAlert) {
             const saved = await insertFrictionAlert(sql, { ...frictionAlert, organization_id: orgId });
             broadcastToDevOrgs({ type: "friction.alert", data: saved });
+            if (!firstTrippedAlert) {
+              firstTrippedAlert = {
+                rule_type: frictionAlert.rule_type,
+                data_context: frictionAlert.data_context,
+                severity: frictionAlert.severity,
+                description: frictionAlert.description,
+              };
+            }
           }
         }
       } catch {
@@ -212,12 +248,58 @@ export function eventsRoutes(sql: SQL) {
       }
     }
 
+    // Build a soft nudge from the first tripped alert (if any).
+    // Dedupe per (session, rule_type) so we don't nudge every event during
+    // an ongoing loop. Failures here must not block ingestion.
+    if (firstTrippedAlert && (event.eventType === "tool.fail" || event.eventType === "tool.complete")) {
+      const ruleKey = `${firstTrippedAlert.rule_type}`;
+      if (!shouldDedupNudge(event.sessionId, ruleKey)) {
+        try {
+          const ctx = firstTrippedAlert.data_context ?? {};
+          const toolName = typeof ctx.toolName === "string" ? ctx.toolName : "(multiple)";
+          const failureCount =
+            typeof ctx.failureCount === "number"
+              ? ctx.failureCount
+              : typeof ctx.uniqueToolCount === "number"
+                ? ctx.uniqueToolCount
+                : 0;
+
+          // The counter-based rule has tripped; ask whether the session is
+          // actually stuck before interrupting. Fails open — a null verdict
+          // means the gate could not run, and the nudge goes out as before.
+          const verdict = await assessStuckness({
+            ruleType: firstTrippedAlert.rule_type,
+            toolName,
+            failureCount,
+            recentTools: recentToolSummary(event.sessionId),
+          });
+          if (!verdict || verdict.shouldNudge) {
+            const message = await phraseNudge({
+              ruleType: firstTrippedAlert.rule_type,
+              toolName,
+              failureCount,
+              staticSuggestion: firstTrippedAlert.description,
+            });
+            nudgeOut = {
+              type: "soft",
+              severity: firstTrippedAlert.severity,
+              message,
+              signals: { rule_type: firstTrippedAlert.rule_type, ...ctx },
+            };
+          }
+        } catch (err) {
+          console.error("[nudge] phrasing failed:", (err as Error).message);
+        }
+      }
+    }
+
     // Clean up friction state on session end
     if (event.eventType === "session.end") {
       cleanupFrictionSession(event.sessionId);
+      clearStuckState(event.sessionId);
     }
 
-    return { devOrgs };
+    return { devOrgs, nudge: nudgeOut };
   }
 
   app.post("/", zValidator("json", eventSchema), async (c) => {
@@ -349,7 +431,7 @@ export function eventsRoutes(sql: SQL) {
     }
 
     // Run shared post-insert handlers (broadcasts, compaction, snapshots, friction)
-    const { devOrgs } = await runPostInsertHandlers(event, {
+    const { devOrgs, nudge } = await runPostInsertHandlers(event, {
       sessionCreatedOrReactivated: broadcastSessionActive,
       sessionEnded: broadcastSessionEnded,
     });
@@ -396,11 +478,11 @@ export function eventsRoutes(sql: SQL) {
     // Salt is in-memory only — never persisted to events.payload, the
     // session row, or any audit log. Computed before insertEvent so that
     // duplicate (idempotent) retries also return it.
-    if (sessionStartSalt) {
-      return c.json({ ok: true, ...sessionStartSalt });
-    }
-
-    return c.json({ ok: true });
+    return c.json({
+      ok: true,
+      ...(sessionStartSalt ?? {}),
+      ...(nudge ? { nudge } : {}),
+    });
   });
 
   app.get("/recent", async (c) => {
@@ -592,12 +674,12 @@ export function eventsRoutes(sql: SQL) {
     }
 
     // Run shared post-insert handlers (broadcasts, compaction, snapshots, friction)
-    await runPostInsertHandlers(event, {
+    const { nudge } = await runPostInsertHandlers(event, {
       sessionCreatedOrReactivated,
       sessionEnded: false,
     });
 
-    return c.json({ ok: true });
+    return c.json({ ok: true, ...(nudge ? { nudge } : {}) });
   });
 
   return app;

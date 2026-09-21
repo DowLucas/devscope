@@ -25,7 +25,10 @@ import { startToolingHealthCheck } from "./jobs/toolingHealth";
 import { startClaudeMdCorrelation } from "./jobs/claudeMdCorrelation";
 import { startTopologyComputation } from "./jobs/topologyComputation";
 import { startWorkflowProfileComputation } from "./jobs/workflowProfileComputation";
+import { startSessionIntentClassification } from "./jobs/sessionIntentClassification";
+import { startCoachingCardGeneration } from "./jobs/coachingCards";
 import { aiRoutes } from "./routes/ai";
+import { coachingRoutes } from "./routes/coaching";
 import { frictionRoutes } from "./routes/friction";
 import { claudeMdRoutes } from "./routes/claudeMd";
 import { topologyRoutes } from "./routes/topology";
@@ -38,6 +41,8 @@ import { ethicsRoutes } from "./routes/ethics";
 import { privacyRoutes } from "./routes/privacy";
 import { accountRoutes } from "./routes/account";
 import { waitlistRoutes } from "./routes/waitlist";
+import { nudgesRoutes } from "./routes/nudges";
+import { promptSimilarityRoutes } from "./routes/promptSimilarity";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware, getClientIp } from "./middleware/rateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
@@ -75,6 +80,8 @@ startToolingHealthCheck(sql);
 startClaudeMdCorrelation(sql);
 startTopologyComputation(sql);
 startWorkflowProfileComputation(sql);
+startSessionIntentClassification(sql);
+startCoachingCardGeneration(sql);
 
 // Seed default friction rules
 await seedDefaultFrictionRules(sql);
@@ -201,7 +208,7 @@ app.use("/api/events", requireApiKeyOrSession);
 
 // Plugin-facing routes: accept API keys or session cookies
 // This allows plugin commands (e.g. /devscope:ask, /devscope:review) to call these endpoints
-const pluginAccessiblePrefixes = ["/api/ai", "/api/insights", "/api/patterns", "/api/playbooks", "/api/skills", "/api/topology", "/api/workflow-profiles", "/api/friction", "/api/sessions"];
+const pluginAccessiblePrefixes = ["/api/ai", "/api/insights", "/api/patterns", "/api/playbooks", "/api/skills", "/api/topology", "/api/workflow-profiles", "/api/friction", "/api/sessions", "/api/nudges", "/api/prompts"];
 for (const prefix of pluginAccessiblePrefixes) {
   app.use(`${prefix}/*`, requireApiKeyOrSession);
   app.use(prefix, requireApiKeyOrSession);
@@ -309,6 +316,9 @@ app.route("/api/friction", frictionRoutes(sql));
 app.route("/api/claude-md", claudeMdRoutes(sql));
 app.route("/api/topology", topologyRoutes(sql));
 app.route("/api/workflow-profiles", workflowProfileRoutes(sql));
+app.route("/api/coaching", coachingRoutes(sql));
+app.route("/api/nudges", nudgesRoutes(sql));
+app.route("/api/prompts", promptSimilarityRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })

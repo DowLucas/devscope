@@ -559,6 +559,46 @@ export async function getDeveloperSessionQuality(
     ORDER BY week ASC`) as any[];
 }
 
+// --- Contribution Pillars (team-aggregated only — never per-developer) ---
+
+export type SessionIntent =
+  | "debug"
+  | "build"
+  | "refactor"
+  | "doc"
+  | "review"
+  | "exploration"
+  | "tooling"
+  | "other"
+  | "unclassified";
+
+export async function getTeamContributionPillars(
+  sql: SQL,
+  devIds: string[],
+  weeks: number = 12,
+): Promise<{
+  week: string;
+  intent: SessionIntent;
+  session_count: number;
+  total_minutes: number;
+}[]> {
+  if (devIds.length === 0) return [];
+  return (await sql`
+    SELECT
+      date_trunc('week', s.started_at)::DATE::TEXT as week,
+      COALESCE(s.session_intent, 'unclassified') as intent,
+      COUNT(*)::INT as session_count,
+      ROUND(
+        SUM(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::NUMERIC,
+        1
+      )::FLOAT as total_minutes
+    FROM sessions s
+    WHERE s.developer_id IN (${inList(devIds)})
+      AND s.started_at >= NOW() - make_interval(weeks => ${weeks})
+    GROUP BY week, intent
+    ORDER BY week ASC, session_count DESC`) as any[];
+}
+
 // --- Team Skills Queries ---
 
 export async function getTeamSessionProductivity(

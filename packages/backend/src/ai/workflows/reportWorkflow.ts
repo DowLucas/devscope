@@ -3,6 +3,7 @@ import { StateGraph, Annotation, END, START } from "@langchain/langgraph";
 import { callGemini, TEMPERATURE } from "../gemini";
 import { validateAndRedactTeamOutput } from "../grounding/validator";
 import { guardWeeklyReportInput } from "../grounding/missionGuardrail";
+import { screenForInjection } from "../grounding/injectionScreen";
 import {
   getPeriodComparison,
   getTeamHealth,
@@ -205,6 +206,22 @@ export async function gatherReportData(
         start: state.periodStart,
         end: state.periodEnd,
       });
+
+      // Doc-gap terms are lifted verbatim out of developer tool inputs and
+      // rendered into the prompt below, so screen them for embedded
+      // instructions first. A null result means screening was unavailable —
+      // the terms pass through unchanged, matching how the rest of this
+      // subsection degrades.
+      if (docGaps && docGaps.length > 0) {
+        const screen = await screenForInjection(
+          sql,
+          docGaps.map((g, i) => ({ id: String(i), text: g.term })),
+          { surface: "weekly_report_doc_gaps", orgId: state.orgId },
+        );
+        if (screen && screen.dropped.size > 0) {
+          docGaps = docGaps.filter((_, i) => !screen.dropped.has(String(i)));
+        }
+      }
     } catch (err) {
       console.warn(
         `[gatherReportData] getDocGapsForOrg failed for org=${state.orgId} ` +

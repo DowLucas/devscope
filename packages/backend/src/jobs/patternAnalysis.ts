@@ -2,6 +2,7 @@ import type { SQL } from "bun";
 import { isAiAvailable } from "../ai/gemini";
 import { runPatternWorkflow } from "../ai/workflows/patternWorkflow";
 import { runAntiPatternWorkflow } from "../ai/workflows/antiPatternWorkflow";
+import { runHallucinatedSuccessDetection } from "../ai/workflows/hallucinatedSuccessWorkflow";
 import { runPlaybookWorkflow } from "../ai/workflows/playbookWorkflow";
 import { runSkillGenerationWorkflow } from "../ai/workflows/skillGenerationWorkflow";
 import { runSkillRefinementWorkflow } from "../ai/workflows/skillRefinementWorkflow";
@@ -58,6 +59,16 @@ export function startPatternAnalysis(sql: SQL) {
 
         for (const ap of antiPatterns) {
           broadcast({ type: "ai.antipattern.new", data: ap });
+        }
+
+        // 2b. Hallucinated-success audit (rule-based, no LLM)
+        try {
+          const hallucinated = await runHallucinatedSuccessDetection(sql, 1);
+          if (hallucinated > 0) {
+            console.log(`[pattern-analysis] Flagged ${hallucinated} hallucinated-success sessions`);
+          }
+        } catch (err) {
+          console.error("[pattern-analysis] Hallucinated-success detection failed:", err);
         }
       } catch (err) {
         console.error("[pattern-analysis] Daily analysis failed:", err);

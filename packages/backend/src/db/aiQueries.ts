@@ -380,6 +380,19 @@ export async function recordTokenUsage(
     VALUES (${id}, ${source}, ${model}, ${inputTokens}, ${outputTokens}, ${orgId ?? null})`;
 }
 
+/**
+ * Aggregate AI token usage.
+ *
+ * `by_model` exists because two providers now write to this table and their
+ * tokens are not comparable. Gemini charges for input and output; TypeSafe
+ * charges ~$0.042 per million input tokens and nothing for output. Summing
+ * them into `total_tokens` is still useful as a volume figure but is no longer
+ * a proxy for spend, so any cost view must read `by_model`, not the totals.
+ *
+ * `by_source` is kept as-is for compatibility, but note that a source label can
+ * span both providers: `session-intent` is written by the TypeSafe classifier
+ * and by its Gemini fallback, so that row alone cannot tell you which ran.
+ */
 export async function getTokenUsageSummary(
   sql: SQL,
   days: number = 30
@@ -388,6 +401,12 @@ export async function getTokenUsageSummary(
   total_output_tokens: number;
   total_tokens: number;
   by_source: { source: string; input_tokens: number; output_tokens: number }[];
+  by_model: {
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    requests: number;
+  }[];
 }> {
   const [totals] = await sql`
     SELECT
@@ -407,11 +426,23 @@ export async function getTokenUsageSummary(
     GROUP BY source
     ORDER BY SUM(input_tokens + output_tokens) DESC`;
 
+  const byModel = await sql`
+    SELECT
+      model,
+      SUM(input_tokens)::INT as input_tokens,
+      SUM(output_tokens)::INT as output_tokens,
+      COUNT(*)::INT as requests
+    FROM ai_token_usage
+    WHERE created_at >= NOW() - make_interval(days => ${days})
+    GROUP BY model
+    ORDER BY SUM(input_tokens + output_tokens) DESC`;
+
   return {
     total_input_tokens: (totals as any)?.total_input_tokens ?? 0,
     total_output_tokens: (totals as any)?.total_output_tokens ?? 0,
     total_tokens: (totals as any)?.total_tokens ?? 0,
     by_source: bySource as any[],
+    by_model: byModel as any[],
   };
 }
 
