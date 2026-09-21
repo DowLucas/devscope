@@ -6,7 +6,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-21
+
 ### Added
+
+- **TypeSafe System One (Jev) as a second AI provider**, alongside Gemini. Gemini
+  generates prose; TypeSafe answers typed `Choice` / `Score` / `Noul` questions and
+  returns probabilities plus calibrated confidence. It emits no free text at all, which
+  is why it now backs the mission-critical surfaces: the no-individual-surveillance rule
+  was previously enforced on Gemini by prompt instructions plus a post-hoc grounding
+  check, and a model with no text channel cannot leak a developer name in the first
+  place. Shared client in `packages/backend/src/ai/typesafe.ts`.
+  - **Every call site falls back.** `askSystemOne` never throws — it returns `null` on a
+    missing key, timeout, rate limit or any API error, and the caller drops back to its
+    previous behaviour. With `TYPESAFE_API_KEY` unset the whole integration is inert and
+    behaviour is identical to 0.4.1.
+  - Session intent classification (`jobs/sessionIntentClassification.ts`) now fans every
+    session in a batch out as its own `Choice` question against one shared state: one
+    request instead of a JSON prompt, with no response parsing and answers constrained to
+    the bucket labels by construction. Falls back to the Gemini prompt.
+  - Semantic individual-targeting guard (`ai/grounding/semanticLeak.ts`), wired as a
+    third stage in `validator.ts` after the roster and shape checks. Catches leaks that
+    name nobody — "the engineer who owns the auth service has the highest failure rate" —
+    which are invisible to lexical matching. A semantic hit always rejects rather than
+    redacts, because there is no token to strike out.
+  - Hallucinated-success detection split along the line it should always have had
+    (`ai/detection/successClaim.ts`): code decides from the event log whether a
+    verification tool ran, and the model decides only whether the response claims
+    success. A second `Noul` asks whether the response discloses being unverified, so a
+    session that follows the anti-pattern's own advice is no longer flagged for it.
+  - Stuckness gate on the proactive nudge path (`ai/detection/stuckness.ts`). Counter
+    rules cannot tell "three failures while narrowing down a cause" from "three
+    identical retries"; a rubric score can. 600 ms budget, no retries, fails open to
+    nudging. Carries tool names and success flags only — no prompt text.
+  - Prompt-injection screening for ingested content (`ai/grounding/injectionScreen.ts`).
+    Doc-gap terms are lifted verbatim out of `payload->'toolInput'->>'pattern'` into the
+    weekly report prompt, an untrusted-input-to-LLM path that nothing previously checked.
+    `assertScreenable` is a tripwire that throws on private-mode content rather than
+    filtering it.
+- `sessions.session_intent_confidence` (migration 041), so a confidently-classified
+  "other" stays distinguishable from a genuinely ambiguous session.
+- `by_model` on the token usage summary. Two providers now write to `ai_token_usage` and
+  their tokens are not comparable — TypeSafe bills ~$0.042 per million input tokens with
+  free output — so `total_tokens` is still a volume figure but is no longer a proxy for
+  spend. A `source` label can also span both providers (`session-intent` is written by
+  the TypeSafe classifier and by its Gemini fallback), so the model dimension is the only
+  way to tell which ran.
+- `TYPESAFE_API_KEY`, `TYPESAFE_MODEL` and `DEVSCOPE_INJECTION_SCREEN` in
+  `.env.production.example`, and a live smoke test at
+  `packages/backend/scripts/typesafe-smoke.ts` covering all five surfaces with
+  hand-labelled fixtures.
 
 - **Support for the nine hook events added in plugin 0.15.0**: `tool.batch`,
   `prompt.expansion`, `response.failed`, `model.switch`, `permission.denied`,
@@ -37,6 +86,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+
 - Event presentation (colours, labels, per-type summaries) moved out of
   `EventCard.tsx` into `packages/dashboard/src/lib/eventDisplay.ts` so the event cards
   and the live feed share one source instead of drifting apart.
@@ -44,6 +94,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Hosting migration from Railway to self-hosted Docker.** Production now runs on a self-hosted Docker host behind Cloudflare Tunnel instead of Railway. CI publishes `ghcr.io/dowlucas/devscope-backend:{latest,sha}` on every push to `main`, and Watchtower auto-deploys by polling GHCR every 5 minutes. The Postgres database was dumped from Railway and restored on the new host with full row-count verification; no data loss. The public endpoint (`https://devscope.sh`) and plugin contract are unchanged.
 - Renamed `docker/railway.Dockerfile` → `docker/production.Dockerfile` (the file is no longer Railway-specific).
 - Removed `railway.toml` (Railway no longer in use).
+
+### Fixed
+
+- Migrations `028_session_intent.sql` and `029_coaching_cards.sql` were numbered into a
+  range already taken on `main` (`028_tool_subcommand`,
+  `029_user_developer_link_unique_developer`), re-introducing the collision that the
+  contiguous-sequence rename set out to remove. Renumbered to 039 and 040. Migrations are
+  re-run every boot with no ledger table and these are idempotent, so no data was
+  affected.
 
 ## [0.4.1] - 2026-03-04
 
