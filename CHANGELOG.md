@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-21
+
+### Added
+
+- **B-tier TypeSafe surfaces**, completing the System One integration started in 0.5.0.
+  All three fail open to prior behaviour when TypeSafe is unavailable.
+  - Model-scored prompt specificity (`ai/detection/promptSpecificity.ts`). The local
+    heuristic scored five regex probes and so rewarded prompts for *looking* specific;
+    a rubric judges whether the prompt actually pins down what to change.
+  - Chat intent routing (`ai/workflows/queryRouting.ts`). An individual-targeting
+    question is now refused before any Gemini call and before any per-developer row is
+    fetched, rather than after, by the output-side grounding check. Wired into both the
+    blocking and streaming paths.
+  - Usefulness reranking (`ai/detection/relevanceRank.ts`). Coaching cards are cut to
+    three on usefulness instead of on the order the generator emitted them.
+- `scripts/backfill-session-intent.ts` — classifies sessions the hourly job can never
+  reach. The job caps at 30 days while the Contribution Pillars chart looks back up to
+  52 weeks, so 2021 sessions were permanently `unclassified` and the chart rendered
+  93.5% as one bar. Sends first prompt and files touched where privacy permits, which
+  the live job does not: on a sample that cut below-floor answers from 46% to 27.5% and
+  shrank the `other` bucket from 38% to 6%. Dry run is the default; re-running resumes.
+
+### Changed
+
+- `promptFeatures.ts` no longer claims prompt text is never sent to an LLM. It is, for
+  `avg_specificity` only, and only for sessions in `open`/`full` privacy mode. Values
+  from the model are tagged `specificity_source: "model"` with a confidence.
+- The prompt-text query in `patternQueries.ts` now selects `privacy_mode` and joins
+  `sessions`. It previously had no privacy filter at all, which was safe only while the
+  text never left the box.
+
+
 ## [0.5.0] - 2026-09-21
 
 ### Added
