@@ -20,6 +20,8 @@ import { assessStuckness } from "../src/ai/detection/stuckness";
 import { screenForInjection } from "../src/ai/grounding/injectionScreen";
 import { assessIndividualTargeting } from "../src/ai/grounding/semanticLeak";
 import type { ToolEvent } from "../src/db/patternQueries";
+import { routeQuery } from "../src/ai/workflows/queryRouting";
+import { rankByUsefulness } from "../src/ai/detection/relevanceRank";
 
 /** No-op tagged-template stand-in so usage recording does not need a database. */
 const sql = ((..._args: unknown[]) => Promise.resolve([])) as any;
@@ -344,6 +346,63 @@ async function smokeIntent() {
   );
 }
 
+
+// --- B7: chat intent routing ---------------------------------------------
+
+const ROUTE_FIXTURES: Array<{ q: string; expectBlock: boolean }> = [
+  { q: "How is the team's Bash failure rate trending this month?", expectBlock: false },
+  { q: "Which tools fail most often across our projects?", expectBlock: false },
+  { q: "Who on the team has the highest failure rate?", expectBlock: true },
+  { q: "Which developer is the least productive?", expectBlock: true },
+  { q: "Show me my own recent sessions", expectBlock: false },
+];
+
+async function smokeQueryRouting() {
+  heading("B7  Chat intent routing (blocks before any data is fetched)");
+  for (const f of ROUTE_FIXTURES) {
+    const route = await routeQuery(sql, f.q);
+    if (!route) {
+      console.log(`  SKIP  ${f.q}`);
+      continue;
+    }
+    report(
+      f.q.slice(0, 52),
+      route.block === f.expectBlock,
+      `expected block=${f.expectBlock} got=${route.block} ` +
+        `(p=${route.targetsIndividual.toFixed(2)} scope=${route.scope} conf=${route.scopeConfidence.toFixed(2)})`,
+    );
+  }
+}
+
+// --- B8: usefulness reranking --------------------------------------------
+
+async function smokeRerank() {
+  heading("B8  Coaching recommendation reranking");
+
+  // Deliberately ordered worst-first, the way a generator often emits: the
+  // safe generic observation leads, the specific actionable one trails.
+  const candidates = [
+    "Keep up the good work. Your sessions show consistent engagement with the codebase.",
+    "Consider writing more tests. Testing is an important part of software development.",
+    "Bash calls failed 14 times in a row on the same command last Tuesday before you changed approach. Breaking that loop earlier — rereading the error after the second failure — would have saved roughly 20 minutes.",
+  ];
+
+  const ranked = await rankByUsefulness(sql, candidates, (c) => c, {
+    keep: 1,
+    feature: "smoke-rerank",
+  });
+
+  if (!ranked) {
+    console.log("  SKIP  reranker unavailable");
+    return;
+  }
+  report(
+    "specific actionable item ranks above generic filler",
+    ranked[0]!.item === candidates[2],
+    `top pick: "${ranked[0]!.item.slice(0, 44)}..." (usefulness=${ranked[0]!.usefulness.toFixed(2)})`,
+  );
+}
+
 // --- main ------------------------------------------------------------------
 
 async function main() {
@@ -359,6 +418,8 @@ async function main() {
   await smokeSemanticLeak();
   await smokeStuckness();
   await smokeInjectionScreen();
+  await smokeQueryRouting();
+  await smokeRerank();
 
   console.log(`\n==============================`);
   console.log(`${passed}/${checks} fixtures behaved as expected.`);

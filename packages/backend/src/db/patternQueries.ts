@@ -3,6 +3,7 @@ import { sql as Sql } from "bun";
 import type { SessionPattern, SessionPatternMatch } from "@devscope/shared";
 import { inList } from "./utils";
 import { extractPromptFeatures, type PromptFeatures } from "../ai/detection/promptFeatures";
+import { scorePromptSpecificity, mayScore } from "../ai/detection/promptSpecificity";
 
 // --- Tool Sequence Extraction ---
 
@@ -135,8 +136,9 @@ export async function getRecentSessionSequences(
         AND e.event_type IN ('agent.start', 'agent.stop')
       ORDER BY e.created_at ASC`,
     sql`
-      SELECT e.session_id, e.payload->>'promptText' as prompt_text
+      SELECT e.session_id, e.payload->>'promptText' as prompt_text, s.privacy_mode
       FROM events e
+      JOIN sessions s ON s.id = e.session_id
       WHERE e.session_id IN (${inList(sessionIds)})
         AND e.event_type = 'prompt.submit'
       ORDER BY e.created_at ASC`,
@@ -185,10 +187,14 @@ export async function getRecentSessionSequences(
   }
 
   const promptTextsBySession = new Map<string, (string | null)[]>();
+  // Recorded privacy mode per session, so the specificity pass below can apply
+  // its own egress gate rather than trusting this query's filtering.
+  const privacyBySession = new Map<string, string | null>();
   for (const row of allPromptTexts as any[]) {
     const sid = row.session_id;
     if (!promptTextsBySession.has(sid)) promptTextsBySession.set(sid, []);
     promptTextsBySession.get(sid)!.push(row.prompt_text ?? null);
+    if (!privacyBySession.has(sid)) privacyBySession.set(sid, row.privacy_mode ?? null);
   }
 
   // Group concrete tool details by session
@@ -234,7 +240,9 @@ export async function getRecentSessionSequences(
     const agentStarts = agents.filter(a => a.event_type === "agent.start");
     const agentTypes = [...new Set(agentStarts.map(a => a.agent_type).filter(Boolean))];
 
-    // Extract prompt features locally (never sends raw text to LLM)
+    // Extract prompt features locally. Everything here is computed on-box;
+    // only `avg_specificity` may later be replaced by a model score, and only
+    // for sessions whose privacy mode permits it (see the pass after this loop).
     const hasAnyText = promptTexts.some(t => t !== null);
     const promptFeatures = hasAnyText ? extractPromptFeatures(promptTexts) : null;
 
@@ -291,6 +299,37 @@ export async function getRecentSessionSequences(
       prompt_features: promptFeatures,
       concrete_details: concreteDetails,
     });
+  }
+
+  // B6: replace the regex-derived `avg_specificity` with a rubric score where
+  // privacy permits. The local heuristic rewards text for looking specific
+  // (paths, identifiers, line numbers); the rubric judges whether the prompt
+  // actually pins down what to change and what the result should be.
+  //
+  // Best-effort and per-session: a null result, an ineligible privacy mode, or
+  // a low-confidence answer all leave that session's local value untouched.
+  const specificityInputs = sequences
+    .filter((seq) => seq.prompt_features && mayScore(privacyBySession.get(seq.session_id)))
+    .map((seq) => ({
+      sessionId: seq.session_id,
+      prompts: promptTextsBySession.get(seq.session_id) ?? [],
+      privacyMode: privacyBySession.get(seq.session_id) ?? null,
+    }));
+
+  if (specificityInputs.length > 0) {
+    const scored = await scorePromptSpecificity(sql, specificityInputs);
+    if (scored) {
+      for (const seq of sequences) {
+        const verdict = scored.get(seq.session_id);
+        if (!verdict || !seq.prompt_features) continue;
+        seq.prompt_features = {
+          ...seq.prompt_features,
+          avg_specificity: verdict.specificity,
+          specificity_source: "model",
+          specificity_confidence: verdict.confidence,
+        };
+      }
+    }
   }
 
   return sequences;

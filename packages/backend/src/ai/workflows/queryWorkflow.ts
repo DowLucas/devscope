@@ -10,6 +10,12 @@ import { TEMPERATURE, DEFAULT_MODEL, isAiAvailable } from "../gemini";
 import { getToolDeclarations, findTool } from "../tools";
 import { recordTokenUsage } from "../../db";
 import { validateAndRedactTeamOutput } from "../grounding/validator";
+import {
+  routeQuery,
+  canShortCircuit,
+  INDIVIDUAL_REFUSAL,
+  UNSUPPORTED_ANSWER,
+} from "./queryRouting";
 
 /**
  * Internal Gemini caller that supports systemInstruction via the SDK's
@@ -299,6 +305,17 @@ export async function runQueryWorkflow(
   conversationHistory: Content[] = [],
   developerIds?: string[]
 ): Promise<QueryResult> {
+  // B7: route before spending anything. An individual-targeting question is
+  // refused here, so no Gemini call is made and no per-developer rows are ever
+  // fetched. Fails open — a null route proceeds exactly as before.
+  const route = await routeQuery(sql, question);
+  if (route?.block) {
+    return { answer: INDIVIDUAL_REFUSAL, inputTokens: 0, outputTokens: 0 };
+  }
+  if (route && canShortCircuit(route)) {
+    return { answer: UNSUPPORTED_ANSWER, inputTokens: 0, outputTokens: 0 };
+  }
+
   const app = createQueryWorkflow(sql);
 
   const result = await app.invoke({
@@ -345,6 +362,18 @@ export async function runQueryWorkflowStreaming(
   return new ReadableStream({
     async start(controller) {
       try {
+        // B7: same input-side gate as the non-streaming path. Doing this before
+        // the workflow matters more here — once a chunk is on the wire we
+        // cannot unsay it, so a refusal must be decided before any bytes flow.
+        const route = await routeQuery(sql, question);
+        if (route?.block || (route && canShortCircuit(route))) {
+          const text = route.block ? INDIVIDUAL_REFUSAL : UNSUPPORTED_ANSWER;
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+          return;
+        }
+
         // Phase 1: classify intent and call tools (non-streaming)
         const app = createQueryWorkflow(sql);
         const result = await app.invoke({

@@ -2,9 +2,16 @@
  * Local prompt feature extraction.
  *
  * Analyzes prompt text to extract structured features about how a developer
- * communicates with Claude Code. Features are computed locally — raw prompt
- * text is NEVER sent to the LLM. Only the extracted feature summary is
- * included in pattern analysis data.
+ * communicates with Claude Code. Every feature in this file is computed
+ * locally; nothing here sends prompt text anywhere.
+ *
+ * ONE EXCEPTION, added in 0.6.0: `avg_specificity` may be replaced downstream
+ * by a model-scored value. `patternQueries.ts` runs `scorePromptSpecificity`
+ * after building each sequence, which sends prompt text to TypeSafe — but only
+ * for sessions in `open`/`full` privacy mode, and the result is marked with
+ * `specificity_source: "model"`. Sessions in `standard`, `private`, or a null
+ * (legacy) mode keep the local value computed here and their text is never
+ * sent. See `ai/detection/promptSpecificity.ts` for the gate.
  */
 
 export interface PromptFeatures {
@@ -22,6 +29,10 @@ export interface PromptFeatures {
   slash_commands: number;
   /** Average specificity score 0-1 (higher = more specific prompts) */
   avg_specificity: number;
+  /** Where `avg_specificity` came from. Absent means the local heuristic. */
+  specificity_source?: "model";
+  /** Calibrated confidence, present only when `specificity_source` is "model". */
+  specificity_confidence?: number;
   /** Fraction of prompts with available text (vs metadata-only) */
   text_available_ratio: number;
 }
