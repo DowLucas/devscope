@@ -3,6 +3,19 @@ import { sql as Sql } from "bun";
 import { getOrgDeveloperIds } from "../services/developerLink";
 import { upsertWorkflowProfile } from "../db";
 import { inList } from "../db/utils";
+import type { WorkflowIntentProfile } from "@devscope/shared";
+import { CONFIDENCE } from "../ai/typesafe";
+import {
+  MAX_EPISODES,
+  rateEpisodes,
+  recoveryQualityFrom,
+  toVerdicts,
+} from "../ai/detection/recoveryQuality";
+import {
+  computeDimensions,
+  extractFailureEpisodes,
+  sessionsByIntent,
+} from "../services/workflowDimensions";
 
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // Daily
 
@@ -30,20 +43,22 @@ export function startWorkflowProfileComputation(sql: SQL) {
         for (const devId of devIds) {
           // Check if we already computed recently
           const [existing] = await sql`
-            SELECT computed_at FROM workflow_profiles
+            SELECT computed_at, by_intent FROM workflow_profiles
             WHERE developer_id = ${devId}
               AND period_start >= ${periodStart.toISOString()}::timestamptz
             LIMIT 1
           ` as any[];
 
-          if (existing) {
+          // Rows from before migration 042 lack by_intent; recompute those so
+          // the new dimensions appear without waiting for the next period.
+          if (existing && existing.by_intent != null) {
             const lastComputed = new Date(existing.computed_at);
             if (periodEnd.getTime() - lastComputed.getTime() < 6 * 24 * 60 * 60 * 1000) continue;
           }
 
           // Get session data for this developer in the period
           const sessions = await sql`
-            SELECT id, started_at, ended_at,
+            SELECT id, started_at, ended_at, session_intent, session_intent_confidence,
               EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at)) / 60 as duration_min
             FROM sessions
             WHERE developer_id = ${devId}
@@ -62,95 +77,34 @@ export function startWorkflowProfileComputation(sql: SQL) {
             ORDER BY created_at ASC
           ` as any[];
 
-          // Compute dimensions
-          const totalToolCalls = events.filter((e: any) =>
-            e.event_type === "tool.complete" || e.event_type === "tool.fail"
-          ).length;
-          const uniqueTools = new Set(
-            events
-              .filter(
-                (e: any) =>
-                  e.event_type === "tool.complete" || e.event_type === "tool.fail"
-              )
-              .map((e: any) => {
-                const p =
-                  typeof e.payload === "string"
-                    ? JSON.parse(e.payload)
-                    : e.payload;
-                return p?.toolName ?? "unknown";
-              })
-          ).size;
+          const overall = computeDimensions(sessions, events);
 
-          const prompts = events.filter(
-            (e: any) => e.event_type === "prompt.submit"
-          );
-          const totalDurationMin = sessions.reduce(
-            (sum: number, s: any) => sum + (Number(s.duration_min) || 0),
-            0
-          );
+          // Model-rated recovery over the most recent failure episodes. Null
+          // when TypeSafe is unavailable; the dashboard then falls back to the
+          // heuristic recovery_speed, so nothing gets weaker.
+          const episodes = extractFailureEpisodes(events).slice(-MAX_EPISODES);
+          const ratings = await rateEpisodes(episodes, { sql, orgId });
+          const verdicts = ratings ? toVerdicts(episodes, ratings) : null;
 
-          // tool_diversity: unique/total, 0-1
-          const toolDiversity =
-            totalToolCalls > 0
-              ? Math.min(
-                  uniqueTools / Math.max(totalToolCalls * 0.1, 1),
-                  1
-                )
-              : null;
-
-          // session_depth: avg duration / 120 min cap
-          const avgDuration = totalDurationMin / sessions.length;
-          const sessionDepth = Math.min(avgDuration / 120, 1);
-
-          // prompt_density: prompts per minute / 2.0 cap
-          const promptsPerMin =
-            totalDurationMin > 0 ? prompts.length / totalDurationMin : 0;
-          const promptDensity = Math.min(promptsPerMin / 2.0, 1);
-
-          // agent_usage
-          const sessionsWithAgents = new Set(
-            events
-              .filter((e: any) => e.event_type === "agent.start")
-              .map((e: any) => e.session_id)
-          ).size;
-          const agentUsage =
-            sessions.length > 0 ? sessionsWithAgents / sessions.length : 0;
-
-          // iterative_vs_planning: high tool/prompt ratio = iterative
-          const toolsPerPrompt =
-            prompts.length > 0 ? totalToolCalls / prompts.length : 0;
-          const iterativeVsPlanning = Math.min(toolsPerPrompt / 5, 1); // cap at 5 tools/prompt
-
-          // recovery_speed: avg time between fail and next complete
-          const recoveryTimes: number[] = [];
-          const eventsBySession = new Map<string, any[]>();
-          for (const e of events) {
-            const arr = eventsBySession.get(e.session_id) ?? [];
-            arr.push(e);
-            eventsBySession.set(e.session_id, arr);
+          // Per-intent slices, so a debugging-heavy week is compared with
+          // other debugging rather than read as a change in style.
+          const byIntent: Record<string, WorkflowIntentProfile> = {};
+          for (const [intent, slice] of sessionsByIntent(sessions, CONFIDENCE.floor)) {
+            const ids = new Set(slice.map((s: any) => s.id));
+            const d = computeDimensions(slice, events.filter((e: any) => ids.has(e.session_id)));
+            byIntent[intent] = {
+              iterative_vs_planning: d.iterative_vs_planning,
+              tool_diversity: d.tool_diversity,
+              recovery_speed: d.recovery_speed,
+              recovery_quality: verdicts
+                ? recoveryQualityFrom(verdicts.filter((v) => ids.has(v.session_id)))
+                : null,
+              session_depth: d.session_depth,
+              prompt_density: d.prompt_density,
+              agent_usage: d.agent_usage,
+              sessions_analyzed: d.sessions_analyzed,
+            };
           }
-          for (const [, sessionEvents] of eventsBySession) {
-            for (let i = 0; i < sessionEvents.length; i++) {
-              if (sessionEvents[i].event_type === "tool.fail") {
-                for (let j = i + 1; j < sessionEvents.length; j++) {
-                  if (sessionEvents[j].event_type === "tool.complete") {
-                    const dt =
-                      (new Date(sessionEvents[j].created_at).getTime() -
-                        new Date(sessionEvents[i].created_at).getTime()) /
-                      1000;
-                    recoveryTimes.push(dt);
-                    break;
-                  }
-                }
-              }
-            }
-          }
-          // No failures = perfect recovery; otherwise scale inversely with avg recovery time
-          const avgRecovery =
-            recoveryTimes.length > 0
-              ? recoveryTimes.reduce((a, b) => a + b, 0) / recoveryTimes.length
-              : 0;
-          const recoverySpeed = recoveryTimes.length === 0 ? 1 : 1 / (1 + avgRecovery / 60);
 
           await upsertWorkflowProfile(sql, {
             id: crypto.randomUUID(),
@@ -158,22 +112,21 @@ export function startWorkflowProfileComputation(sql: SQL) {
             developer_id: devId,
             period_start: periodStart.toISOString(),
             period_end: periodEnd.toISOString(),
-            iterative_vs_planning: iterativeVsPlanning,
-            tool_diversity: toolDiversity,
-            recovery_speed: recoverySpeed,
-            session_depth: sessionDepth,
-            prompt_density: promptDensity,
-            agent_usage: agentUsage,
+            iterative_vs_planning: overall.iterative_vs_planning,
+            tool_diversity: overall.tool_diversity,
+            recovery_speed: overall.recovery_speed,
+            recovery_quality: verdicts ? recoveryQualityFrom(verdicts) : null,
+            session_depth: overall.session_depth,
+            prompt_density: overall.prompt_density,
+            agent_usage: overall.agent_usage,
+            by_intent: byIntent,
             raw_metrics: {
-              total_sessions: sessions.length,
-              total_events: events.length,
-              total_tool_calls: totalToolCalls,
-              unique_tools: uniqueTools,
-              total_prompts: prompts.length,
-              avg_duration_min: avgDuration,
-              avg_recovery_seconds: avgRecovery,
+              ...overall.raw_metrics,
+              failure_episodes: episodes.length,
+              recovery_rated_episodes: verdicts?.length ?? 0,
+              recovery_source: verdicts ? "typesafe" : "unavailable",
             },
-            sessions_analyzed: sessions.length,
+            sessions_analyzed: overall.sessions_analyzed,
           });
         }
       }

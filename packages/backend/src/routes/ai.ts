@@ -315,7 +315,7 @@ export function aiRoutes(sql: SQL) {
 
     // Fetch session to get developer_id and privacy_mode
     const sessionRows = await sql`
-      SELECT id, developer_id, privacy_mode, status
+      SELECT id, developer_id, privacy_mode, status, ended_at
       FROM sessions
       WHERE id = ${session_id}
     ` as any[];
@@ -345,15 +345,27 @@ export function aiRoutes(sql: SQL) {
     const isSelfView = viewerDevIds.length > 0 && viewerDevIds.includes(sessionRow.developer_id);
     const contentIncluded = isSelfView && privacyMode === "open";
 
-    // Check cache: return existing report if available for same privacy tier
-    const cached = await sql`
-      SELECT * FROM ai_reports
-      WHERE report_type = 'session'
-        AND data_context->>'session_id' = ${session_id}
-        AND data_context->>'content_included' = ${String(contentIncluded)}
-      ORDER BY created_at DESC
-      LIMIT 1
-    ` as any[];
+    // Check cache: return existing report if available for same privacy tier.
+    //
+    // This lookup never matched until migration 044: data_context was stored
+    // as a JSON string, so ->> returned NULL and every request regenerated.
+    // Now that it does match, it only serves a report that cannot be stale or
+    // foreign: completed, in this org, and written after the session ended.
+    // A report on a session that was still running would otherwise be served
+    // forever, however much the session did afterwards.
+    const cached = sessionRow.ended_at && orgId
+      ? await sql`
+          SELECT * FROM ai_reports
+          WHERE report_type = 'session'
+            AND status = 'completed'
+            AND organization_id = ${orgId}
+            AND data_context->>'session_id' = ${session_id}
+            AND data_context->>'content_included' = ${String(contentIncluded)}
+            AND created_at >= ${sessionRow.ended_at}::timestamptz
+          ORDER BY created_at DESC
+          LIMIT 1
+        ` as any[]
+      : [];
 
     if (cached.length > 0) {
       return c.json(cached[0]);

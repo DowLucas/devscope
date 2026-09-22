@@ -177,7 +177,7 @@ export async function detectSkillGaps(
           ) VALUES (
             ${id}, ${orgId}, ${toolName}, ${gap.gapType},
             ${gap.severity}, ${gap.description},
-            ${JSON.stringify(gap.dataContext)}::JSONB,
+            ${gap.dataContext}::JSONB,
             NOW()
           )`;
       }

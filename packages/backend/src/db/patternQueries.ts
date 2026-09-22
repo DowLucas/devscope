@@ -361,7 +361,7 @@ export async function upsertPattern(
     const ex = existing[0] as any;
     const newCount = ex.occurrence_count + pattern.occurrence_count;
     const newRate = (ex.avg_success_rate * ex.occurrence_count + pattern.avg_success_rate * pattern.occurrence_count) / newCount;
-    const updatedContext = JSON.stringify(pattern.data_context ?? ex.data_context ?? {});
+    const updatedContext = pattern.data_context ?? ex.data_context ?? {};
 
     await sql`
       UPDATE session_patterns SET
@@ -380,7 +380,7 @@ export async function upsertPattern(
   }
 
   const id = crypto.randomUUID();
-  const dataContext = JSON.stringify(pattern.data_context ?? {});
+  const dataContext = pattern.data_context ?? {};
   const toolSeq = `{${pattern.tool_sequence.map(t => `"${t.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
 
   await sql`

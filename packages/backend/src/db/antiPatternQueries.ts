@@ -38,7 +38,7 @@ export async function upsertAntiPattern(
   }
 
   const id = crypto.randomUUID();
-  const dataContext = JSON.stringify(ap.data_context ?? {});
+  const dataContext = ap.data_context ?? {};
 
   await sql`
     INSERT INTO anti_patterns (id, name, description, detection_rule, severity, suggestion, occurrence_count, data_context)
@@ -57,11 +57,10 @@ export async function createAntiPatternMatch(
   details: Record<string, unknown> = {}
 ): Promise<SessionAntiPatternMatch> {
   const id = crypto.randomUUID();
-  const detailsJson = JSON.stringify(details);
 
   await sql`
     INSERT INTO session_anti_pattern_matches (id, session_id, anti_pattern_id, details)
-    VALUES (${id}, ${sessionId}, ${antiPatternId}, ${detailsJson}::JSONB)`;
+    VALUES (${id}, ${sessionId}, ${antiPatternId}, ${details}::JSONB)`;
 
   const [row] = await sql`SELECT * FROM session_anti_pattern_matches WHERE id = ${id}`;
   return row as SessionAntiPatternMatch;

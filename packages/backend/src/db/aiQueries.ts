@@ -90,10 +90,8 @@ export async function createMessage(
   }
 ): Promise<AiMessage> {
   const id = crypto.randomUUID();
-  const toolCalls = opts?.toolCalls ? JSON.stringify(opts.toolCalls) : null;
-  const toolResults = opts?.toolResults
-    ? JSON.stringify(opts.toolResults)
-    : null;
+  const toolCalls = opts?.toolCalls ?? null;
+  const toolResults = opts?.toolResults ?? null;
   const tokenCount = opts?.tokenCount ?? 0;
   const model = opts?.model ?? null;
 
@@ -135,7 +133,7 @@ export async function createInsight(
   }
 ): Promise<AiInsight> {
   const id = crypto.randomUUID();
-  const dataContext = JSON.stringify(insight.data_context ?? {});
+  const dataContext = insight.data_context ?? {};
   const source = insight.source ?? "automated";
   const expiresAt = insight.expires_at ?? null;
   const orgId = insight.orgId ?? null;
@@ -303,8 +301,7 @@ export async function updateReport(
     await sql`UPDATE ai_reports SET content_markdown = ${updates.content_markdown} WHERE id = ${id}`;
   }
   if (updates.data_context !== undefined) {
-    const ctx = JSON.stringify(updates.data_context);
-    await sql`UPDATE ai_reports SET data_context = ${ctx}::JSONB WHERE id = ${id}`;
+    await sql`UPDATE ai_reports SET data_context = ${updates.data_context}::JSONB WHERE id = ${id}`;
   }
   if (updates.status !== undefined) {
     await sql`UPDATE ai_reports SET status = ${updates.status} WHERE id = ${id}`;
