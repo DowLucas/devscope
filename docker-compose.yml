@@ -1,6 +1,10 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    # postgres:17.9-alpine + pgvector (semantic retrieval, migration 045)
+    build:
+      context: docker
+      dockerfile: postgres.Dockerfile
+    image: devscope-postgres:local
     environment:
       POSTGRES_USER: devscope
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
