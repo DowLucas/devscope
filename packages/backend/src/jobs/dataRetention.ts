@@ -4,6 +4,7 @@ import {
   purgeOldEvents,
   logRetentionPurge,
   getRetentionSettings,
+  deleteOrphanedSessionEmbeddings,
 } from "../db";
 import { getOrgDeveloperIds } from "../services/developerLink";
 import { logEthicsEvent } from "../utils/ethicsAudit";
@@ -60,6 +61,15 @@ export function startDataRetention(sql: SQL) {
         } catch (orgErr) {
           console.error(`[retention] Error processing org ${orgId}:`, orgErr);
         }
+      }
+
+      // Turns cascade away with their purged prompt events; drop session
+      // vectors that no longer have any turn behind them. Isolated so it can
+      // never fail the retention run itself.
+      try {
+        await deleteOrphanedSessionEmbeddings(sql);
+      } catch (err) {
+        console.error("[retention] Session embedding cleanup failed:", err);
       }
 
       lastRunDate = todayStr;

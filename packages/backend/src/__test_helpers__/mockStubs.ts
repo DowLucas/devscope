@@ -104,6 +104,15 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     createReport: noop,
     updateReport: noop,
     recordTokenUsage: noop,
+    // semanticQueries.ts
+    buildTurns: mock(() => Promise.resolve(0)),
+    getPendingEmbeddings: noopArr,
+    upsertTurnEmbeddings: noop,
+    refreshSessionEmbeddings: mock(() => Promise.resolve(0)),
+    deleteOrphanedSessionEmbeddings: noop,
+    searchSimilarTurns: noopArr,
+    searchSimilarSessions: noopArr,
+    isSessionInOrg: mock(() => Promise.resolve(false)),
     // Used by the validator.test.ts cleanup hook — kept here for the same
     // reason: any partial dbStubs mock must not silently drop this name
     // when the consuming test imports it via `../../utils/ethicsAudit`.

@@ -9,3 +9,4 @@ export * from "./frictionQueries";
 export * from "./claudeMdQueries";
 export * from "./topologyQueries";
 export * from "./workflowProfileQueries";
+export * from "./semanticQueries";
