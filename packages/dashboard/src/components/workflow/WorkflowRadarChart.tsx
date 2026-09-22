@@ -1,28 +1,17 @@
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Legend } from "recharts";
 import { Card } from "@/components/ui/card";
-import type { WorkflowProfile, TeamWorkflowSummary } from "@devscope/shared";
-
-const DIMENSIONS = [
-  { key: "iterative_vs_planning", label: "Iteration Style" },
-  { key: "tool_diversity", label: "Tool Breadth" },
-  { key: "recovery_speed", label: "Recovery Flow" },
-  { key: "session_depth", label: "Session Depth" },
-  { key: "prompt_density", label: "Prompt Rhythm" },
-  { key: "agent_usage", label: "Agent Leverage" },
-] as const;
+import type { DimensionView } from "./dimensions";
 
 interface Props {
-  profile: WorkflowProfile;
-  teamSummary: TeamWorkflowSummary | null;
+  dimensions: DimensionView[];
+  showTeam: boolean;
 }
 
-export function WorkflowRadarChart({ profile, teamSummary }: Props) {
-  const data = DIMENSIONS.map((dim) => ({
+export function WorkflowRadarChart({ dimensions, showTeam }: Props) {
+  const data = dimensions.map((dim) => ({
     dimension: dim.label,
-    personal: Math.round(((profile[dim.key] as number) ?? 0) * 100),
-    team: teamSummary?.dimension_averages?.[dim.key] != null
-      ? Math.round(teamSummary.dimension_averages[dim.key] * 100)
-      : undefined,
+    personal: Math.round((dim.value ?? 0) * 100),
+    team: dim.team != null ? Math.round(dim.team * 100) : undefined,
   }));
 
   return (
@@ -43,7 +32,7 @@ export function WorkflowRadarChart({ profile, teamSummary }: Props) {
             fill="var(--chart-1)"
             fillOpacity={0.25}
           />
-          {teamSummary && (
+          {showTeam && (
             <Radar
               name="Team Average"
               dataKey="team"

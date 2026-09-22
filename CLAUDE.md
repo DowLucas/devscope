@@ -160,6 +160,7 @@ Surfaces using it:
 | `ai/detection/successClaim.ts` | two `Noul` per session | `detectHallucinatedSuccess` regex |
 | `ai/detection/stuckness.ts` (nudge gate) | `Score` | send the nudge, as before |
 | `ai/grounding/injectionScreen.ts` | `Noul` per term | pass terms through unscreened |
+| `ai/detection/recoveryQuality.ts` (Workflow DNA) | one `Score` per failure episode, fanned out | heuristic `recovery_speed` |
 
 Conventions:
 
@@ -168,6 +169,8 @@ Conventions:
 - **Decompose broad judgments.** Prefer several atomic questions combined in code over one question that weighs multiple factors. Adding questions to a request barely changes latency, since all questions are evaluated in parallel against one shared `state`.
 - **Confidence is a second axis.** `CONFIDENCE.floor` (0.5) is the "model is genuinely unsure" line; gate riskier actions higher. `Noul` answers carry no confidence field, so gate on distance from 0.5 via `noulDecisiveness`.
 - **Privacy gate.** Anything sending ingested developer content to TypeSafe runs only on content already allowed to leave the box. `assertScreenable` is the tripwire; private-mode sessions never persist `content_text` upstream.
+
+**Workflow DNA is self-only.** `recovery_quality` and the `by_intent` slices are model judgments about one developer's behaviour. They are acceptable only because `/api/workflow-profiles/me` returns them to that developer alone, against anonymous team averages. Never expose them per developer to anyone else, and never feed them into reports, insights or rankings. Per-intent team averages are withheld below `TEAM_INTENT_MIN_DEVELOPERS` (3) so a small team's average cannot be solved back to a colleague's numbers.
 
 Verify against the live API with `bun run scripts/typesafe-smoke.ts`.
 

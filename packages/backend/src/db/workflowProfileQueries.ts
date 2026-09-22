@@ -1,5 +1,10 @@
 import type { SQL } from "bun";
-import type { WorkflowProfile, TeamWorkflowSummary } from "@devscope/shared";
+import {
+  TEAM_INTENT_MIN_DEVELOPERS,
+  type WorkflowProfile,
+  type WorkflowIntentProfile,
+  type TeamWorkflowSummary,
+} from "@devscope/shared";
 import { inList } from "./utils";
 
 export async function upsertWorkflowProfile(
@@ -19,6 +24,8 @@ export async function upsertWorkflowProfile(
       session_depth,
       prompt_density,
       agent_usage,
+      recovery_quality,
+      by_intent,
       raw_metrics,
       sessions_analyzed,
       computed_at
@@ -34,6 +41,8 @@ export async function upsertWorkflowProfile(
       ${profile.session_depth ?? null},
       ${profile.prompt_density ?? null},
       ${profile.agent_usage ?? null},
+      ${profile.recovery_quality ?? null},
+      ${profile.by_intent ? JSON.stringify(profile.by_intent) : null}::jsonb,
       ${JSON.stringify(profile.raw_metrics)}::jsonb,
       ${profile.sessions_analyzed},
       NOW()
@@ -45,6 +54,8 @@ export async function upsertWorkflowProfile(
       session_depth = EXCLUDED.session_depth,
       prompt_density = EXCLUDED.prompt_density,
       agent_usage = EXCLUDED.agent_usage,
+      recovery_quality = EXCLUDED.recovery_quality,
+      by_intent = EXCLUDED.by_intent,
       raw_metrics = EXCLUDED.raw_metrics,
       sessions_analyzed = EXCLUDED.sessions_analyzed,
       computed_at = NOW()
@@ -64,7 +75,16 @@ export async function getWorkflowProfile(
     ORDER BY computed_at DESC
     LIMIT 1
   `;
-  return (row as WorkflowProfile) ?? null;
+  return row ? normalizeProfile(row) : null;
+}
+
+/** JSON columns arrive as text from Bun.sql; hand the dashboard objects. */
+function normalizeProfile(row: any): WorkflowProfile {
+  return {
+    ...row,
+    raw_metrics: parseJson(row.raw_metrics) ?? {},
+    by_intent: parseJson(row.by_intent),
+  };
 }
 
 export async function getWorkflowProfileHistory(
@@ -79,7 +99,7 @@ export async function getWorkflowProfileHistory(
     ORDER BY period_end DESC
     LIMIT ${limit}
   `;
-  return rows as WorkflowProfile[];
+  return (rows as any[]).map(normalizeProfile);
 }
 
 export async function getTeamWorkflowSummary(
@@ -113,6 +133,7 @@ export async function getTeamWorkflowSummary(
       AVG(session_depth)         AS avg_session_depth,
       AVG(prompt_density)        AS avg_prompt_density,
       AVG(agent_usage)           AS avg_agent_usage,
+      AVG(recovery_quality)      AS avg_recovery_quality,
 
       MIN(iterative_vs_planning) AS min_iterative_vs_planning,
       MAX(iterative_vs_planning) AS max_iterative_vs_planning,
@@ -129,7 +150,8 @@ export async function getTeamWorkflowSummary(
 
       COUNT(DISTINCT developer_id) AS developer_count,
       MIN(period_start)            AS period_start,
-      MAX(period_end)              AS period_end
+      MAX(period_end)              AS period_end,
+      JSONB_AGG(by_intent) FILTER (WHERE by_intent IS NOT NULL) AS intent_slices
     FROM latest
   ` as any[];
 
@@ -150,6 +172,7 @@ export async function getTeamWorkflowSummary(
     "session_depth",
     "prompt_density",
     "agent_usage",
+    "recovery_quality",
   ];
 
   const dimension_averages: Record<string, number> = {};
@@ -170,8 +193,70 @@ export async function getTeamWorkflowSummary(
   return {
     dimension_averages,
     dimension_ranges,
+    by_intent: teamIntentAverages(parseJson(agg.intent_slices) ?? []),
     developer_count: Number(agg.developer_count),
     period_start: agg.period_start ? new Date(agg.period_start).toISOString() : new Date().toISOString(),
     period_end: agg.period_end ? new Date(agg.period_end).toISOString() : new Date().toISOString(),
   };
+}
+
+/** Bun.sql may hand back JSON columns as text depending on the driver path. */
+function parseJson<T>(v: unknown): T | null {
+  if (v == null) return null;
+  if (typeof v === "string") {
+    try {
+      return JSON.parse(v) as T;
+    } catch {
+      return null;
+    }
+  }
+  return v as T;
+}
+
+const INTENT_DIMENSIONS = [
+  "iterative_vs_planning",
+  "tool_diversity",
+  "recovery_speed",
+  "recovery_quality",
+  "session_depth",
+  "prompt_density",
+  "agent_usage",
+] as const;
+
+/**
+ * Average each intent's dimensions across developers' latest profiles.
+ *
+ * An intent is published only when at least TEAM_INTENT_MIN_DEVELOPERS
+ * developers have a slice for it. Per-intent slices are thinner than the
+ * overall profile, and with two contributors a viewer who knows their own
+ * numbers could solve the average back to their colleague's.
+ */
+export function teamIntentAverages(
+  slices: Array<Record<string, WorkflowIntentProfile>>,
+): NonNullable<TeamWorkflowSummary["by_intent"]> {
+  const byIntent = new Map<string, WorkflowIntentProfile[]>();
+  for (const slice of slices) {
+    for (const [intent, profile] of Object.entries(slice ?? {})) {
+      const arr = byIntent.get(intent);
+      if (arr) arr.push(profile);
+      else byIntent.set(intent, [profile]);
+    }
+  }
+
+  const out: NonNullable<TeamWorkflowSummary["by_intent"]> = {};
+  for (const [intent, profiles] of byIntent) {
+    if (profiles.length < TEAM_INTENT_MIN_DEVELOPERS) continue;
+    const dimension_averages: Record<string, number> = {};
+    for (const dim of INTENT_DIMENSIONS) {
+      const values = profiles
+        .map((p) => p[dim])
+        .filter((v): v is number => typeof v === "number");
+      // Same threshold per dimension: a dimension most developers lack
+      // (recovery_quality needs failures) must not publish from one or two.
+      if (values.length < TEAM_INTENT_MIN_DEVELOPERS) continue;
+      dimension_averages[dim] = values.reduce((a, b) => a + b, 0) / values.length;
+    }
+    out[intent] = { dimension_averages, developer_count: profiles.length };
+  }
+  return out;
 }

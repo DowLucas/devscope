@@ -22,6 +22,7 @@ import { assessIndividualTargeting } from "../src/ai/grounding/semanticLeak";
 import type { ToolEvent } from "../src/db/patternQueries";
 import { routeQuery } from "../src/ai/workflows/queryRouting";
 import { rankByUsefulness } from "../src/ai/detection/relevanceRank";
+import { rateEpisodes } from "../src/ai/detection/recoveryQuality";
 
 /** No-op tagged-template stand-in so usage recording does not need a database. */
 const sql = ((..._args: unknown[]) => Promise.resolve([])) as any;
@@ -403,6 +404,42 @@ async function smokeRerank() {
   );
 }
 
+// --- Workflow DNA: model-rated recovery -------------------------------------
+
+/** "!Bash=1" = failed Bash call repeating the input of call 1. */
+function episode(spec: string) {
+  const calls = spec.split(" ").map((x) => {
+    const m = x.match(/^(!?)(\w+)(?:=(\d+))?$/)!;
+    return { tool: m[2]!, ok: !m[1], repeat_of: m[3] != null ? Number(m[3]) : null };
+  });
+  return { session_id: "fixture", first_failure: calls.findIndex((c) => !c.ok), calls };
+}
+
+const RECOVERY_FIXTURES: Array<{ name: string; spec: string; adapted: boolean }> = [
+  { name: "identical retry loop", spec: "Read !Bash !Bash=1 !Bash=1 !Bash=1 !Bash=1", adapted: false },
+  { name: "changed approach after failure", spec: "Read !Bash Read Edit Bash Bash", adapted: true },
+  { name: "flaky call, then moved on", spec: "Bash !Bash Bash Bash Read", adapted: true },
+];
+
+async function smokeRecovery() {
+  heading("Workflow DNA recovery (Score per failure episode, fanned out)");
+  const eps = RECOVERY_FIXTURES.map((f) => episode(f.spec));
+  const ratings = await rateEpisodes(eps);
+  if (!ratings) {
+    RECOVERY_FIXTURES.forEach((f) => report(f.name, false, "no answer"));
+    return;
+  }
+  RECOVERY_FIXTURES.forEach((f, i) => {
+    const r = ratings[i];
+    // Same threshold toVerdicts applies: expected score below 1 = adapted.
+    report(
+      f.name,
+      r != null && (r.score < 1) === f.adapted,
+      r ? `score=${r.score.toFixed(2)} conf=${r.confidence.toFixed(2)}` : "no answer",
+    );
+  });
+}
+
 // --- main ------------------------------------------------------------------
 
 async function main() {
@@ -420,6 +457,7 @@ async function main() {
   await smokeInjectionScreen();
   await smokeQueryRouting();
   await smokeRerank();
+  await smokeRecovery();
 
   console.log(`\n==============================`);
   console.log(`${passed}/${checks} fixtures behaved as expected.`);
