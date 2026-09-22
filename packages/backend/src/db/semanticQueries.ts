@@ -47,10 +47,11 @@ const MAX_SCAN_TUPLES = 200_000;
 export async function buildTurns(sql: SQL, limit: number): Promise<number> {
   const rows = await sql`
     WITH unindexed AS MATERIALIZED (
-      -- Prompts without a turn. The anti-join never touches the payload, so
-      -- steady-state ticks don't de-TOAST every prompt in history; only this
-      -- small remainder has its text inspected below.
-      SELECT p.id, p.session_id
+      -- Prompts without a turn. The text is projected after the anti-join, so
+      -- steady-state ticks only de-TOAST this small remainder, and nothing
+      -- below re-joins events (the planner overestimates this CTE ~40x and
+      -- would otherwise seq-scan the whole events table to join back).
+      SELECT p.id, p.session_id, p.payload->>'promptText' AS prompt_text
       FROM events p
       WHERE p.event_type = 'prompt.submit'
         AND NOT EXISTS (SELECT 1 FROM prompt_turns pt WHERE pt.prompt_event_id = p.id)
@@ -58,10 +59,9 @@ export async function buildTurns(sql: SQL, limit: number): Promise<number> {
     pending_sessions AS MATERIALIZED (
       SELECT DISTINCT u.session_id
       FROM unindexed u
-      JOIN events p ON p.id = u.id
       JOIN sessions ps ON ps.id = u.session_id
       WHERE COALESCE(ps.privacy_mode, 'standard') <> 'private'
-        AND length(btrim(COALESCE(p.payload->>'promptText', ''), E' \\t\\r\\n')) > 0
+        AND length(btrim(COALESCE(u.prompt_text, ''), E' \\t\\r\\n')) > 0
     ),
     prompts AS (
       -- All prompts of pending sessions: LEAD needs the full ordering to know
