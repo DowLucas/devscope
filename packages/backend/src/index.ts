@@ -27,6 +27,7 @@ import { startTopologyComputation } from "./jobs/topologyComputation";
 import { startWorkflowProfileComputation } from "./jobs/workflowProfileComputation";
 import { startSessionIntentClassification } from "./jobs/sessionIntentClassification";
 import { startCoachingCardGeneration } from "./jobs/coachingCards";
+import { startSemanticIndexing } from "./jobs/semanticIndexing";
 import { aiRoutes } from "./routes/ai";
 import { coachingRoutes } from "./routes/coaching";
 import { frictionRoutes } from "./routes/friction";
@@ -43,6 +44,7 @@ import { accountRoutes } from "./routes/account";
 import { waitlistRoutes } from "./routes/waitlist";
 import { nudgesRoutes } from "./routes/nudges";
 import { promptSimilarityRoutes } from "./routes/promptSimilarity";
+import { similarRoutes } from "./routes/similar";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware, getClientIp } from "./middleware/rateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
@@ -82,6 +84,7 @@ startTopologyComputation(sql);
 startWorkflowProfileComputation(sql);
 startSessionIntentClassification(sql);
 startCoachingCardGeneration(sql);
+startSemanticIndexing(sql);
 
 // Seed default friction rules
 await seedDefaultFrictionRules(sql);
@@ -208,7 +211,7 @@ app.use("/api/events", requireApiKeyOrSession);
 
 // Plugin-facing routes: accept API keys or session cookies
 // This allows plugin commands (e.g. /devscope:ask, /devscope:review) to call these endpoints
-const pluginAccessiblePrefixes = ["/api/ai", "/api/insights", "/api/patterns", "/api/playbooks", "/api/skills", "/api/topology", "/api/workflow-profiles", "/api/friction", "/api/sessions", "/api/nudges", "/api/prompts"];
+const pluginAccessiblePrefixes = ["/api/ai", "/api/insights", "/api/patterns", "/api/playbooks", "/api/skills", "/api/topology", "/api/workflow-profiles", "/api/friction", "/api/sessions", "/api/nudges", "/api/prompts", "/api/similar"];
 for (const prefix of pluginAccessiblePrefixes) {
   app.use(`${prefix}/*`, requireApiKeyOrSession);
   app.use(prefix, requireApiKeyOrSession);
@@ -296,6 +299,15 @@ app.use("/api/topology/*", orgScopeMiddleware(sql));
 app.use("/api/topology", orgScopeMiddleware(sql));
 app.use("/api/workflow-profiles/*", orgScopeMiddleware(sql));
 app.use("/api/workflow-profiles", orgScopeMiddleware(sql));
+// Each search embeds the query on the homelab GPU, so cap it tighter than the
+// global limit.
+app.use("/api/similar/*", rateLimitMiddleware({
+  maxRequests: 60,
+  windowMs: 60_000,
+  prefix: "similar",
+  keyFn: (c) => (c.get("user" as never) as any)?.id ?? getClientIp(c),
+}));
+app.use("/api/similar/*", orgScopeMiddleware(sql));
 
 app.route("/api/events", eventsRoutes(sql));
 app.route("/api/sessions", sessionsRoutes(sql));
@@ -319,6 +331,7 @@ app.route("/api/workflow-profiles", workflowProfileRoutes(sql));
 app.route("/api/coaching", coachingRoutes(sql));
 app.route("/api/nudges", nudgesRoutes(sql));
 app.route("/api/prompts", promptSimilarityRoutes(sql));
+app.route("/api/similar", similarRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })
