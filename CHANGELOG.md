@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Semantic search over past prompts and sessions.** Every prompt and Claude's
+  response is embedded by a local model on the homelab (`qwen3-embedding:0.6b` via
+  Ollama, nothing leaves the box), so you can find earlier work by meaning rather than
+  keywords, and see what it led to: tool calls, tool failures, duration, session intent.
+  - `GET /api/similar/prompts?q=` returns the nearest past turns in your org.
+  - `GET /api/similar/sessions/:id` returns sessions similar to a given one.
+  - Both are org-scoped, API-key accessible, rate limited to 60/min, and never include
+    developer identity. Private sessions are never indexed. Teammates' prompt text *is*
+    returned for non-private sessions, a documented exception to `stripSensitivePayload`.
+- `jobs/semanticIndexing.ts` keeps the index current every minute;
+  `scripts/semantic-backfill.ts --write` indexes all history (dry run by default).
+- `docker/postgres.Dockerfile`: `postgres:17.9-alpine` + pgvector, published to GHCR by
+  `.github/workflows/postgres-image.yml`. Stays on Alpine so the existing data
+  directory's collation is unchanged.
+
+### Changed
+
+- Local `docker compose` builds the pgvector Postgres image. Migration 045 is a no-op
+  on an image without pgvector, so an out-of-order deploy still boots.
+
 ## [0.6.0] - 2026-09-21
 
 ### Added
