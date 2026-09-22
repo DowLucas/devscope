@@ -74,6 +74,8 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/sessions` | GET | All sessions with event counts |
 | `/api/sessions/active` | GET | Active sessions only |
 | `/api/sessions/:id` | GET | Events for a session |
+| `/api/similar/prompts?q=&kind=prompt\|response&limit=` | GET | Semantically similar past turns in the org, with outcomes |
+| `/api/similar/sessions/:id?limit=` | GET | Sessions similar to a given session |
 | `/api/health` | GET | Health check + WS client count |
 | `/ws` | WS | Real-time event stream |
 
@@ -81,7 +83,7 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 
 Two flavors of auth — pick one per route:
 
-- **API key (`x-api-key` header)** — the plugin path. Required by `/api/events` and the plugin-accessible routes (`/api/ai`, `/api/insights`, `/api/patterns`, `/api/playbooks`, `/api/skills`, `/api/topology`, `/api/workflow-profiles`, `/api/friction`, `/api/sessions`). Keys are minted via better-auth's `auth.api.createApiKey({ body: { userId, name } })`; the dashboard exposes this at Settings → API Keys, but there's no UI before you have a session.
+- **API key (`x-api-key` header)** — the plugin path. Required by `/api/events` and the plugin-accessible routes (`/api/ai`, `/api/insights`, `/api/patterns`, `/api/playbooks`, `/api/skills`, `/api/topology`, `/api/workflow-profiles`, `/api/friction`, `/api/sessions`, `/api/similar`). Keys are minted via better-auth's `auth.api.createApiKey({ body: { userId, name } })`; the dashboard exposes this at Settings → API Keys, but there's no UI before you have a session.
 - **Session cookie** — what the dashboard uses. Sign-in via `/api/auth/sign-in/email` returns a session cookie. Most dashboard routes go through `orgScopeMiddleware`, which reads `session.activeOrganizationId` to scope queries.
 
 Two traps that bite manual testers:
@@ -171,6 +173,17 @@ Conventions:
 
 Verify against the live API with `bun run scripts/typesafe-smoke.ts`.
 
+## Semantic retrieval
+
+Every prompt and response is embedded so similar past work can be found by meaning, not keywords.
+
+- **Turns** (`prompt_turns`, migration 045) are derived from events: one `prompt.submit` plus the first `response.complete` before the next prompt, with the tool activity in between as the outcome (`tool_calls`, `tool_failures`, `tools_used`, `duration_ms`). A turn is built only once closed, and cascades away when retention purges its prompt event. Per-turn tokens are deliberately absent: `tokenUsage` is cumulative per session.
+- **Embeddings** (`turn_embeddings`, `session_embeddings`) come from a local model on the homelab's Ollama (`ai/embeddings.ts`, default `qwen3-embedding:0.6b`, 1024-dim). Nothing leaves the box. A session vector is the mean of its prompt vectors. `model` is part of the key, so switching models re-embeds alongside rather than mixing incomparable vectors; changing `EMBEDDING_DIM` needs a migration.
+- **Indexing** runs in `jobs/semanticIndexing.ts` every 60 s off the hook path; `scripts/semantic-backfill.ts --write` runs the same idempotent pass in a loop for history. The embed client never throws: when Ollama is down the job retries next tick and the API answers 503.
+- **Env:** `EMBEDDING_URL` (unset disables the feature), `EMBEDDING_MODEL`, `DISABLE_SEMANTIC_INDEXING=1`.
+- **Postgres image:** pgvector needs `docker/postgres.Dockerfile` (`postgres:17.9-alpine` + pgvector), published as `ghcr.io/dowlucas/devscope-postgres` by `.github/workflows/postgres-image.yml`. It must stay on Alpine: the prod data directory has `en_US.utf8` collation under musl, and a Debian/glibc image (e.g. `pgvector/pgvector`) sorts text differently and silently invalidates existing text indexes. Migration 045 is a guarded no-op when pgvector is missing, so an out-of-order deploy boots fine but the feature stays off; roll out the database image first, then set `EMBEDDING_URL`.
+- **Pairing caveat:** turns are paired by order within a session, not by `promptId` (only newer plugin versions send it). `response.complete` is main-thread only, so this is reliable.
+
 ## Ethics & Design Principles
 
 DevScope exists to improve **team workflow and tooling** — not to monitor, rank, or compare individual developers.
@@ -181,6 +194,8 @@ DevScope exists to improve **team workflow and tooling** — not to monitor, ran
 - **Tooling focus, not people focus**: When surfacing problems (e.g., high failure rates), attribute them to sessions, tools, or projects — never to individuals.
 - **AI guardrails**: LLM prompts must explicitly instruct against including individual developer names, rankings, or performance comparisons in generated insights and reports.
 - **Consent-first**: Developers opt in via plugin installation. Privacy mode (`DEVSCOPE_PRIVACY=standard`) is the default. Data collection should be minimal and transparent.
+
+**Semantic retrieval exception:** `/api/similar/*` returns prompt and response text from every non-private session in the org, including teammates'. This is a deliberate decision (team knowledge reuse: "what worked last time"), and a documented exception to `stripSensitivePayload`. Results carry session, project and outcome only, never developer identity. `private` sessions are never indexed.
 
 When in doubt, ask: "Does this feature help the team improve their tools and workflow, or does it enable monitoring individuals?" Only build the former.
 
