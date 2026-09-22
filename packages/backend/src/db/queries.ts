@@ -977,43 +977,57 @@ export async function getActivityPerMinute(
   const interval = hours <= 6 ? "1 minute" : hours <= 24 ? "1 minute" : hours <= 168 ? "5 minutes" : hours <= 336 ? "15 minutes" : "1 hour";
   const ivl = Sql.unsafe(`'${interval}'::INTERVAL`);
 
+  // Bucket each event once with date_bin and equi-join onto the series. The
+  // previous form joined on a date_trunc() range with no time filter, which
+  // forced a nested loop of every bucket against the whole events table
+  // (~90s for 24h at 940k events). The developer filter belongs inside the
+  // CTE: applied after the LEFT JOIN it dropped buckets that held only other
+  // orgs' events instead of reporting them as zero.
   if (developerIds && developerIds.length > 0) {
     return (await sql`
+      WITH bounds AS (
+        SELECT date_trunc('minute', NOW() - make_interval(hours => ${hours})) AS start
+      ),
+      binned AS (
+        SELECT date_bin(${ivl}, e.created_at, b.start) AS bucket, e.id, e.event_type, e.session_id
+        FROM events e
+        JOIN sessions s ON e.session_id = s.id
+        CROSS JOIN bounds b
+        WHERE e.created_at >= b.start
+          AND s.developer_id IN (${inList(developerIds)})
+      )
       SELECT
         m.minute::TEXT as minute,
-        COALESCE(COUNT(e.id), 0)::INT as event_count,
-        SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
-        SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls,
-        COUNT(DISTINCT e.session_id)::INT as sessions
-      FROM generate_series(
-        date_trunc('minute', NOW() - make_interval(hours => ${hours})),
-        date_trunc('minute', NOW()),
-        ${ivl}
-      ) AS m(minute)
-      LEFT JOIN events e
-        ON date_trunc('minute', e.created_at) >= m.minute
-        AND date_trunc('minute', e.created_at) < m.minute + ${ivl}
-      LEFT JOIN sessions s ON e.session_id = s.id
-      WHERE (e.id IS NULL OR s.developer_id IN (${inList(developerIds)}))
+        COUNT(x.id)::INT as event_count,
+        SUM(CASE WHEN x.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
+        SUM(CASE WHEN x.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls,
+        COUNT(DISTINCT x.session_id)::INT as sessions
+      FROM bounds b
+      CROSS JOIN generate_series(b.start, date_trunc('minute', NOW()), ${ivl}) AS m(minute)
+      LEFT JOIN binned x ON x.bucket = m.minute
       GROUP BY m.minute
       ORDER BY m.minute ASC`) as MinuteActivityPoint[];
   }
 
   return (await sql`
+    WITH bounds AS (
+      SELECT date_trunc('minute', NOW() - make_interval(hours => ${hours})) AS start
+    ),
+    binned AS (
+      SELECT date_bin(${ivl}, e.created_at, b.start) AS bucket, e.id, e.event_type, e.session_id
+      FROM events e
+      CROSS JOIN bounds b
+      WHERE e.created_at >= b.start
+    )
     SELECT
       m.minute::TEXT as minute,
-      COALESCE(COUNT(e.id), 0)::INT as event_count,
-      SUM(CASE WHEN e.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
-      SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls,
-      COUNT(DISTINCT e.session_id)::INT as sessions
-    FROM generate_series(
-      date_trunc('minute', NOW() - make_interval(hours => ${hours})),
-      date_trunc('minute', NOW()),
-      ${ivl}
-    ) AS m(minute)
-    LEFT JOIN events e
-      ON date_trunc('minute', e.created_at) >= m.minute
-      AND date_trunc('minute', e.created_at) < m.minute + ${ivl}
+      COUNT(x.id)::INT as event_count,
+      SUM(CASE WHEN x.event_type = 'prompt.submit' THEN 1 ELSE 0 END)::INT as prompts,
+      SUM(CASE WHEN x.event_type IN ('tool.complete', 'tool.fail', 'tool.start') THEN 1 ELSE 0 END)::INT as tool_calls,
+      COUNT(DISTINCT x.session_id)::INT as sessions
+    FROM bounds b
+    CROSS JOIN generate_series(b.start, date_trunc('minute', NOW()), ${ivl}) AS m(minute)
+    LEFT JOIN binned x ON x.bucket = m.minute
     GROUP BY m.minute
     ORDER BY m.minute ASC`) as MinuteActivityPoint[];
 }
