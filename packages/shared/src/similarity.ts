@@ -1,4 +1,4 @@
-// Semantic retrieval API types (GET /api/similar/prompts, GET /api/sessions/:id/similar).
+// Semantic retrieval API types (GET /api/similar/prompts, GET /api/similar/sessions/:id).
 // Results are attributed to sessions and projects only — never to developers.
 
 /** Tool activity between a prompt and the response that closed it. */

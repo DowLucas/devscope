@@ -12,8 +12,10 @@
  *
  * DATA SAFETY. Purely additive: it only INSERTs into prompt_turns,
  * turn_embeddings and session_embeddings, and never updates or deletes any
- * existing table. Every step is idempotent, so it is safe to interrupt and
- * re-run, and safe to run while the live job is also running.
+ * existing table, except removing turns of sessions that have since switched
+ * to private. Every step is idempotent, so it is safe to interrupt and re-run.
+ * It shares an advisory lock with the live job, so the two never index at the
+ * same time; while the job holds it, this waits.
  *
  * Usage:
  *   DATABASE_URL=... EMBEDDING_URL=http://ollama:11434 bun run scripts/semantic-backfill.ts
@@ -30,6 +32,7 @@ const BATCHES_PER_PASS = 50;
 const TURNS_PER_PASS = 2_000;
 const MAX_CONSECUTIVE_FAILURES = 5;
 const RETRY_DELAY_MS = 15_000;
+const LOCK_WAIT_MS = 5_000;
 
 function parseArgs(argv: string[]) {
   const out = { write: false };
@@ -49,16 +52,18 @@ async function report(sql: SQL) {
       (SELECT COUNT(*)::INT FROM events e JOIN sessions s ON s.id = e.session_id
         WHERE e.event_type = 'prompt.submit'
           AND COALESCE(s.privacy_mode, 'standard') <> 'private'
-          AND length(btrim(COALESCE(e.payload->>'promptText', ''))) > 0) AS eligible_prompts,
+          AND length(btrim(COALESCE(e.payload->>'promptText', ''), E' \\t\\r\\n')) > 0) AS eligible_prompts,
       (SELECT COUNT(*)::INT FROM prompt_turns) AS turns,
       (SELECT COUNT(*)::INT FROM prompt_turns WHERE response_text IS NOT NULL) AS turns_with_response,
       (SELECT COUNT(*)::INT FROM turn_embeddings WHERE model = ${EMBEDDING_MODEL}) AS embeddings,
+      (SELECT COUNT(*)::INT FROM turn_embedding_failures WHERE model = ${EMBEDDING_MODEL}) AS rejected,
       (SELECT COUNT(*)::INT FROM session_embeddings WHERE model = ${EMBEDDING_MODEL}) AS session_vectors`;
   return r as {
     eligible_prompts: number;
     turns: number;
     turns_with_response: number;
     embeddings: number;
+    rejected: number;
     session_vectors: number;
   };
 }
@@ -68,7 +73,7 @@ function printReport(label: string, r: Awaited<ReturnType<typeof report>>) {
   console.log(`${label}`);
   console.log(`  eligible prompts: ${r.eligible_prompts}`);
   console.log(`  turns built:      ${r.turns} (${r.turns_with_response} with a response)`);
-  console.log(`  embeddings:       ${r.embeddings} / ${expectedEmbeddings} for built turns`);
+  console.log(`  embeddings:       ${r.embeddings} / ${expectedEmbeddings} for built turns (${r.rejected} rejected)`);
   console.log(`  session vectors:  ${r.session_vectors}\n`);
 }
 
@@ -104,12 +109,18 @@ async function main() {
       maxBatches: BATCHES_PER_PASS,
       turnBuildLimit: TURNS_PER_PASS,
     });
+    if (s.skippedLocked) {
+      console.log("live indexing job holds the lock — waiting");
+      await Bun.sleep(LOCK_WAIT_MS);
+      continue;
+    }
     totalEmbedded += s.embedded;
 
     const elapsedMin = (Date.now() - started) / 60_000;
     console.log(
       `turns +${s.turnsBuilt}, embeddings +${s.embedded} (total ${totalEmbedded}, ` +
-        `${Math.round(totalEmbedded / Math.max(elapsedMin, 0.01))}/min), sessions +${s.sessionsRefreshed}`,
+        `${Math.round(totalEmbedded / Math.max(elapsedMin, 0.01))}/min), sessions +${s.sessionsRefreshed}` +
+        (s.rejected ? `, rejected ${s.rejected}` : ""),
     );
 
     if (s.embedderUnavailable) {
@@ -123,7 +134,7 @@ async function main() {
     }
     failures = 0;
 
-    if (s.turnsBuilt === 0 && s.embedded === 0 && s.sessionsRefreshed === 0) break;
+    if (s.turnsBuilt === 0 && s.embedded === 0 && s.rejected === 0 && s.sessionsRefreshed === 0) break;
   }
 
   printReport("after", await report(sql));

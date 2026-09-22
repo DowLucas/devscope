@@ -46,7 +46,7 @@ function mapTurn(r: SimilarTurnRow): SimilarTurn {
       toolCalls: r.tool_calls,
       toolFailures: r.tool_failures,
       toolsUsed: r.tools_used,
-      durationMs: r.duration_ms,
+      durationMs: r.duration_ms === null ? null : Number(r.duration_ms),
     },
     sessionTitle: r.session_title,
     sessionIntent: r.session_intent,

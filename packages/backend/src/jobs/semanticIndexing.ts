@@ -1,10 +1,14 @@
 import type { SQL } from "bun";
 import {
   buildTurns,
+  purgePrivateTurns,
   getPendingEmbeddings,
   upsertTurnEmbeddings,
+  recordEmbeddingFailure,
   refreshSessionEmbeddings,
+  withSemanticIndexLock,
   type EmbeddingRow,
+  type PendingEmbedding,
 } from "../db";
 import {
   EMBEDDING_MODEL,
@@ -25,59 +29,107 @@ const SESSION_REFRESH_LIMIT = 200;
 export interface IndexStats {
   turnsBuilt: number;
   embedded: number;
+  /** Texts the embedder rejected on their own; recorded and skipped from now on. */
+  rejected: number;
   sessionsRefreshed: number;
-  /** True when Ollama failed mid-run; the next run resumes where this stopped. */
+  /** True when Ollama failed as a whole; the next run resumes where this stopped. */
   embedderUnavailable: boolean;
+  /** True when another process (job or backfill) held the index lock. */
+  skippedLocked: boolean;
+}
+
+function prepare(p: PendingEmbedding): string {
+  return p.kind === "prompt" ? preparePromptText(p.text) : prepareResponseText(p.text);
+}
+
+function toRow(p: PendingEmbedding, prepared: string, vector: number[]): EmbeddingRow {
+  return {
+    turn_id: p.turn_id,
+    kind: p.kind,
+    content_hash: contentHash(prepared),
+    vector: toVectorLiteral(vector),
+  };
 }
 
 /**
- * One indexing pass: materialise closed turns, embed pending texts, refresh
- * session vectors. Every step is idempotent, so a crash or Ollama outage at
- * any point just leaves work for the next pass. Shared with the backfill
- * script, which calls it in a loop with a larger batch budget.
+ * Embed one batch. If the whole batch fails, retry item by item: if every
+ * item still fails the embedder itself is down (return null, record nothing);
+ * otherwise the items that fail alone are poison inputs and get recorded so
+ * they can't wedge the queue.
+ */
+async function embedBatch(
+  sql: SQL,
+  pending: PendingEmbedding[],
+): Promise<{ rows: EmbeddingRow[]; rejected: number } | null> {
+  const prepared = pending.map(prepare);
+  const vectors = await embedDocuments(prepared);
+  if (vectors) {
+    return { rows: pending.map((p, i) => toRow(p, prepared[i]!, vectors[i]!)), rejected: 0 };
+  }
+
+  const rows: EmbeddingRow[] = [];
+  const failed: PendingEmbedding[] = [];
+  for (const [i, p] of pending.entries()) {
+    const single = await embedDocuments([prepared[i]!]);
+    if (single) rows.push(toRow(p, prepared[i]!, single[0]!));
+    else failed.push(p);
+  }
+  if (rows.length === 0) return null;
+  for (const p of failed) await recordEmbeddingFailure(sql, EMBEDDING_MODEL, p);
+  if (failed.length > 0) {
+    console.warn(`[semantic] ${failed.length} text(s) rejected by the embedder; skipping them`);
+  }
+  return { rows, rejected: failed.length };
+}
+
+/**
+ * One indexing pass: purge newly private turns, materialise settled turns,
+ * embed pending texts, refresh session vectors. Holds an advisory lock so the
+ * live job and the backfill script never run a pass concurrently. Every step
+ * is idempotent, so a crash or Ollama outage at any point just leaves work for
+ * the next pass.
  */
 export async function indexOnce(
   sql: SQL,
   opts: { maxBatches?: number; turnBuildLimit?: number } = {},
 ): Promise<IndexStats> {
-  const maxBatches = opts.maxBatches ?? MAX_BATCHES_PER_TICK;
   const stats: IndexStats = {
     turnsBuilt: 0,
     embedded: 0,
+    rejected: 0,
     sessionsRefreshed: 0,
     embedderUnavailable: false,
+    skippedLocked: false,
   };
 
-  stats.turnsBuilt = await buildTurns(sql, opts.turnBuildLimit ?? TURN_BUILD_LIMIT);
+  const ran = await withSemanticIndexLock(sql, async () => {
+    const maxBatches = opts.maxBatches ?? MAX_BATCHES_PER_TICK;
+    await purgePrivateTurns(sql);
+    stats.turnsBuilt = await buildTurns(sql, opts.turnBuildLimit ?? TURN_BUILD_LIMIT);
 
-  for (let batch = 0; batch < maxBatches; batch++) {
-    const pending = await getPendingEmbeddings(sql, EMBEDDING_MODEL, EMBED_BATCH_SIZE);
-    if (pending.length === 0) break;
+    for (let batch = 0; batch < maxBatches; batch++) {
+      const pending = await getPendingEmbeddings(sql, EMBEDDING_MODEL, EMBED_BATCH_SIZE);
+      if (pending.length === 0) break;
 
-    const prepared = pending.map((p) =>
-      p.kind === "prompt" ? preparePromptText(p.text) : prepareResponseText(p.text),
-    );
-    const vectors = await embedDocuments(prepared);
-    if (!vectors) {
-      stats.embedderUnavailable = true;
-      break;
+      const result = await embedBatch(sql, pending);
+      if (!result) {
+        stats.embedderUnavailable = true;
+        break;
+      }
+      await upsertTurnEmbeddings(sql, EMBEDDING_MODEL, result.rows);
+      stats.embedded += result.rows.length;
+      stats.rejected += result.rejected;
     }
 
-    const rows: EmbeddingRow[] = pending.map((p, i) => ({
-      turn_id: p.turn_id,
-      kind: p.kind,
-      content_hash: contentHash(prepared[i]!),
-      vector: toVectorLiteral(vectors[i]!),
-    }));
-    await upsertTurnEmbeddings(sql, EMBEDDING_MODEL, rows);
-    stats.embedded += rows.length;
-  }
+    stats.sessionsRefreshed = await refreshSessionEmbeddings(
+      sql,
+      EMBEDDING_MODEL,
+      SESSION_REFRESH_LIMIT,
+    );
+    return true;
+  });
 
-  stats.sessionsRefreshed = await refreshSessionEmbeddings(
-    sql,
-    EMBEDDING_MODEL,
-    SESSION_REFRESH_LIMIT,
-  );
+  if (ran === null) stats.skippedLocked = true;
   return stats;
 }
 
@@ -102,9 +154,10 @@ export function startSemanticIndexing(sql: SQL) {
     running = true;
     try {
       const s = await indexOnce(sql);
-      if (s.turnsBuilt || s.embedded || s.sessionsRefreshed) {
+      if (s.turnsBuilt || s.embedded || s.sessionsRefreshed || s.rejected) {
         console.log(
           `[semantic] turns +${s.turnsBuilt}, embeddings +${s.embedded}, sessions +${s.sessionsRefreshed}` +
+            (s.rejected ? `, rejected ${s.rejected}` : "") +
             (s.embedderUnavailable ? " (embedder unavailable, will retry)" : ""),
         );
       }

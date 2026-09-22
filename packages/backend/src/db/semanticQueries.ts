@@ -3,9 +3,10 @@ import { inList } from "./utils";
 
 // Semantic retrieval over prompt/response turns (pgvector, migration 045).
 //
-// Privacy: private sessions never become turns (they store no prompt text
-// anyway) and are filtered again at query time. Results never carry a
-// developer identity; org scoping always goes through sessions.developer_id.
+// Privacy: private sessions never become turns, turns of sessions that later
+// switch to private are purged, and private sessions are filtered again at
+// query time. Results never carry a developer identity; org scoping always
+// goes through sessions.developer_id.
 
 export type TurnKind = "prompt" | "response";
 
@@ -20,17 +21,51 @@ const KIND_PREDICATE: Record<TurnKind, ReturnType<typeof Sql.unsafe>> = {
 const EXCERPT_CHARS = 4_000;
 
 /**
- * Materialise closed turns from events. A turn is a prompt.submit plus the
- * first response.complete after it and before the next prompt in the same
- * session; tool events in that window form its outcome. A turn is only built
- * once closed (response seen, a later prompt exists, or the session ended),
- * so it never needs updating. Idempotent via the unique prompt_event_id.
+ * A turn whose only closing signal is its last response waits this long, so
+ * late async tool events and follow-up Stop events land before it freezes.
+ */
+const TURN_SETTLE_MINUTES = 10;
+
+/**
+ * Upper bound on index tuples an iterative HNSW scan may visit after the org
+ * filter. Well above the whole corpus today, so small orgs get exact results.
+ */
+const MAX_SCAN_TUPLES = 200_000;
+
+/**
+ * Materialise settled turns from events. A turn is a prompt.submit plus the
+ * last response.complete before the next prompt in the same session; tool
+ * events in that window form its outcome. A turn is only built once settled
+ * (a later prompt exists, the session ended, or its last response is older
+ * than TURN_SETTLE_MINUTES), so it never needs updating. Idempotent via the
+ * unique prompt_event_id.
+ *
+ * Whitespace checks use E' \t\r\n' so SQL and JS agree on "blank".
  *
  * Returns the number of turns inserted.
  */
 export async function buildTurns(sql: SQL, limit: number): Promise<number> {
   const rows = await sql`
-    WITH prompts AS (
+    WITH unindexed AS MATERIALIZED (
+      -- Prompts without a turn. The anti-join never touches the payload, so
+      -- steady-state ticks don't de-TOAST every prompt in history; only this
+      -- small remainder has its text inspected below.
+      SELECT p.id, p.session_id
+      FROM events p
+      WHERE p.event_type = 'prompt.submit'
+        AND NOT EXISTS (SELECT 1 FROM prompt_turns pt WHERE pt.prompt_event_id = p.id)
+    ),
+    pending_sessions AS MATERIALIZED (
+      SELECT DISTINCT u.session_id
+      FROM unindexed u
+      JOIN events p ON p.id = u.id
+      JOIN sessions ps ON ps.id = u.session_id
+      WHERE COALESCE(ps.privacy_mode, 'standard') <> 'private'
+        AND length(btrim(COALESCE(p.payload->>'promptText', ''), E' \\t\\r\\n')) > 0
+    ),
+    prompts AS (
+      -- All prompts of pending sessions: LEAD needs the full ordering to know
+      -- where each pending prompt's turn ends.
       SELECT
         e.id,
         e.session_id,
@@ -41,26 +76,15 @@ export async function buildTurns(sql: SQL, limit: number): Promise<number> {
         ) AS next_prompt_at
       FROM events e
       WHERE e.event_type = 'prompt.submit'
-        -- Only sessions with an eligible prompt still lacking a turn; keeps the
-        -- window function off fully-indexed history on every tick.
-        AND e.session_id IN (
-          SELECT p.session_id
-          FROM events p
-          JOIN sessions ps ON ps.id = p.session_id
-          WHERE p.event_type = 'prompt.submit'
-            AND COALESCE(ps.privacy_mode, 'standard') <> 'private'
-            AND length(btrim(COALESCE(p.payload->>'promptText', ''))) > 0
-            AND NOT EXISTS (SELECT 1 FROM prompt_turns pt WHERE pt.prompt_event_id = p.id)
-        )
+        AND e.session_id IN (SELECT session_id FROM pending_sessions)
     ),
     candidates AS (
       SELECT p.*, s.ended_at
       FROM prompts p
       JOIN sessions s ON s.id = p.session_id
       WHERE COALESCE(s.privacy_mode, 'standard') <> 'private'
-        AND length(btrim(COALESCE(p.prompt_text, ''))) > 0
+        AND length(btrim(COALESCE(p.prompt_text, ''), E' \\t\\r\\n')) > 0
         AND NOT EXISTS (SELECT 1 FROM prompt_turns pt WHERE pt.prompt_event_id = p.id)
-      ORDER BY p.created_at
     )
     INSERT INTO prompt_turns (
       session_id, prompt_event_id, response_event_id, prompt_at,
@@ -72,12 +96,13 @@ export async function buildTurns(sql: SQL, limit: number): Promise<number> {
       r.id,
       c.created_at,
       c.prompt_text,
-      NULLIF(btrim(r.payload->>'responseText'), ''),
+      NULLIF(btrim(r.payload->>'responseText', E' \\t\\r\\n'), ''),
       COALESCE(tools.tool_calls, 0),
       COALESCE(tools.tool_failures, 0),
       COALESCE(tools.tools_used, '{}'),
+      -- BIGINT: timestamps are client-supplied, so the gap can be arbitrary.
       CASE WHEN r.id IS NOT NULL
-        THEN (EXTRACT(EPOCH FROM (r.created_at - c.created_at)) * 1000)::INT
+        THEN (EXTRACT(EPOCH FROM (r.created_at - c.created_at)) * 1000)::BIGINT
       END
     FROM candidates c
     LEFT JOIN LATERAL (
@@ -87,7 +112,7 @@ export async function buildTurns(sql: SQL, limit: number): Promise<number> {
         AND re.event_type = 'response.complete'
         AND re.created_at >= c.created_at
         AND (c.next_prompt_at IS NULL OR re.created_at < c.next_prompt_at)
-      ORDER BY re.created_at, re.id
+      ORDER BY re.created_at DESC, re.id DESC
       LIMIT 1
     ) r ON true
     LEFT JOIN LATERAL (
@@ -102,12 +127,29 @@ export async function buildTurns(sql: SQL, limit: number): Promise<number> {
         AND ev.created_at >= c.created_at
         AND ev.created_at <= COALESCE(r.created_at, c.next_prompt_at, c.ended_at)
     ) tools ON true
-    WHERE r.id IS NOT NULL OR c.next_prompt_at IS NOT NULL OR c.ended_at IS NOT NULL
+    WHERE c.next_prompt_at IS NOT NULL
+       OR c.ended_at IS NOT NULL
+       OR r.created_at < NOW() - make_interval(mins => ${TURN_SETTLE_MINUTES})
     ORDER BY c.created_at
     LIMIT ${limit}
     ON CONFLICT (prompt_event_id) DO NOTHING
     RETURNING id`;
   return (rows as unknown[]).length;
+}
+
+/**
+ * Drop stored turns (and, by cascade, their embeddings) for sessions that
+ * switched to private after they were indexed, plus their session vectors.
+ */
+export async function purgePrivateTurns(sql: SQL): Promise<void> {
+  await sql`
+    DELETE FROM session_embeddings se
+    USING sessions s
+    WHERE s.id = se.session_id AND s.privacy_mode = 'private'`;
+  await sql`
+    DELETE FROM prompt_turns t
+    USING sessions s
+    WHERE s.id = t.session_id AND s.privacy_mode = 'private'`;
 }
 
 export interface PendingEmbedding {
@@ -116,7 +158,7 @@ export interface PendingEmbedding {
   text: string;
 }
 
-/** Turn texts that have no embedding yet for `model`. */
+/** Turn texts with no embedding (and no recorded failure) for `model`. */
 export async function getPendingEmbeddings(
   sql: SQL,
   model: string,
@@ -126,19 +168,19 @@ export async function getPendingEmbeddings(
     SELECT turn_id, kind, text FROM (
       SELECT t.id AS turn_id, 'prompt' AS kind, t.prompt_text AS text
       FROM prompt_turns t
-      WHERE NOT EXISTS (
-        SELECT 1 FROM turn_embeddings te
-        WHERE te.turn_id = t.id AND te.kind = 'prompt' AND te.model = ${model}
-      )
       UNION ALL
       SELECT t.id, 'response', t.response_text
       FROM prompt_turns t
       WHERE t.response_text IS NOT NULL
-        AND NOT EXISTS (
-          SELECT 1 FROM turn_embeddings te
-          WHERE te.turn_id = t.id AND te.kind = 'response' AND te.model = ${model}
-        )
-    ) pending
+    ) candidate
+    WHERE NOT EXISTS (
+        SELECT 1 FROM turn_embeddings te
+        WHERE te.turn_id = candidate.turn_id AND te.kind = candidate.kind AND te.model = ${model}
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM turn_embedding_failures f
+        WHERE f.turn_id = candidate.turn_id AND f.kind = candidate.kind AND f.model = ${model}
+      )
     ORDER BY turn_id, kind
     LIMIT ${limit}`) as PendingEmbedding[];
 }
@@ -172,9 +214,23 @@ export async function upsertTurnEmbeddings(
   });
 }
 
+/** Record a text the embedder rejected on its own, so it leaves the queue. */
+export async function recordEmbeddingFailure(
+  sql: SQL,
+  model: string,
+  item: { turn_id: string; kind: TurnKind },
+): Promise<void> {
+  await sql`
+    INSERT INTO turn_embedding_failures (turn_id, kind, model)
+    VALUES (${item.turn_id}, ${item.kind}, ${model})
+    ON CONFLICT DO NOTHING`;
+}
+
 /**
- * Recompute session vectors (mean of prompt vectors) for ended sessions that
- * have prompt embeddings newer than their session vector. Returns rows written.
+ * Recompute session vectors (mean of prompt vectors) for ended sessions whose
+ * embedded prompt count differs from the stored one. Count-based rather than
+ * timestamp-based, so it can't miss a turn embedded concurrently. Returns
+ * rows written.
  */
 export async function refreshSessionEmbeddings(
   sql: SQL,
@@ -182,16 +238,21 @@ export async function refreshSessionEmbeddings(
   limit: number,
 ): Promise<number> {
   const rows = await sql`
-    WITH stale AS (
-      SELECT DISTINCT t.session_id
+    WITH counts AS (
+      SELECT t.session_id, COUNT(*)::INT AS n
       FROM turn_embeddings te
       JOIN prompt_turns t ON t.id = te.turn_id
-      JOIN sessions s ON s.id = t.session_id AND s.ended_at IS NOT NULL
+      WHERE te.model = ${model} AND te.kind = 'prompt'
+      GROUP BY t.session_id
+    ),
+    stale AS (
+      SELECT c.session_id
+      FROM counts c
+      JOIN sessions s ON s.id = c.session_id AND s.ended_at IS NOT NULL
       LEFT JOIN session_embeddings se
-        ON se.session_id = t.session_id AND se.model = te.model
-      WHERE te.model = ${model}
-        AND te.kind = 'prompt'
-        AND (se.session_id IS NULL OR te.embedded_at > se.computed_at)
+        ON se.session_id = c.session_id AND se.model = ${model}
+      WHERE se.turn_count IS DISTINCT FROM c.n
+      ORDER BY c.session_id
       LIMIT ${limit}
     )
     INSERT INTO session_embeddings (session_id, model, turn_count, embedding, computed_at)
@@ -201,9 +262,8 @@ export async function refreshSessionEmbeddings(
     JOIN turn_embeddings te
       ON te.turn_id = t.id AND te.kind = 'prompt' AND te.model = ${model}
     GROUP BY t.session_id
-    ON CONFLICT (session_id) DO UPDATE
-      SET model = EXCLUDED.model,
-          turn_count = EXCLUDED.turn_count,
+    ON CONFLICT (session_id, model) DO UPDATE
+      SET turn_count = EXCLUDED.turn_count,
           embedding = EXCLUDED.embedding,
           computed_at = EXCLUDED.computed_at
     RETURNING session_id`;
@@ -220,6 +280,30 @@ export async function deleteOrphanedSessionEmbeddings(sql: SQL): Promise<void> {
     WHERE NOT EXISTS (SELECT 1 FROM prompt_turns t WHERE t.session_id = se.session_id)`;
 }
 
+/** Whether a non-private session `sessionId` belongs to one of `devIds`. */
+export async function isSessionInOrg(
+  sql: SQL,
+  sessionId: string,
+  devIds: string[],
+): Promise<boolean> {
+  if (devIds.length === 0) return false;
+  const [row] = await sql`
+    SELECT 1 FROM sessions
+    WHERE id = ${sessionId}
+      AND developer_id IN (${inList(devIds)})
+      AND COALESCE(privacy_mode, 'standard') <> 'private'`;
+  return !!row;
+}
+
+/** Scan settings for KNN over the post-filtered (org-scoped) HNSW indexes. */
+async function setScanOptions(tx: SQL): Promise<void> {
+  // The org filter is applied after the index scan; iterative scan keeps
+  // walking the graph until enough rows survive it.
+  await tx`SET LOCAL hnsw.iterative_scan = relaxed_order`;
+  await tx`SET LOCAL hnsw.ef_search = 100`;
+  await tx.unsafe(`SET LOCAL hnsw.max_scan_tuples = ${MAX_SCAN_TUPLES}`);
+}
+
 export interface SimilarTurnRow {
   turn_id: string;
   session_id: string;
@@ -229,7 +313,8 @@ export interface SimilarTurnRow {
   tool_calls: number;
   tool_failures: number;
   tools_used: string[];
-  duration_ms: number | null;
+  /** BIGINT column; Bun returns it as a string. */
+  duration_ms: string | number | null;
   session_title: string | null;
   session_intent: string | null;
   project_name: string;
@@ -251,10 +336,7 @@ export async function searchSimilarTurns(
   if (opts.devIds.length === 0) return [];
   const exclude = opts.excludeSessionId ?? null;
   const rows = await sql.begin(async (tx) => {
-    // The org filter is applied after the index scan; iterative scan keeps
-    // walking the graph until enough rows survive it.
-    await tx`SET LOCAL hnsw.iterative_scan = relaxed_order`;
-    await tx`SET LOCAL hnsw.ef_search = 100`;
+    await setScanOptions(tx);
     return tx`
       SELECT
         t.id AS turn_id,
@@ -302,7 +384,7 @@ export interface SimilarSessionRow {
 /**
  * Sessions nearest to `sessionId`'s session vector within the org. Returns
  * null when the source session has no vector yet (still active or unindexed).
- * The caller must already have verified `sessionId` belongs to the org.
+ * The caller must already have verified `sessionId` with `isSessionInOrg`.
  */
 export async function searchSimilarSessions(
   sql: SQL,
@@ -316,8 +398,7 @@ export async function searchSimilarSessions(
   const vector = (source as { vector: string }).vector;
 
   const rows = await sql.begin(async (tx) => {
-    await tx`SET LOCAL hnsw.iterative_scan = relaxed_order`;
-    await tx`SET LOCAL hnsw.ef_search = 100`;
+    await setScanOptions(tx);
     return tx`
       WITH nearest AS (
         SELECT se.session_id, (1 - (se.embedding <=> ${vector}::vector))::REAL AS similarity
@@ -355,15 +436,30 @@ export async function searchSimilarSessions(
   return (rows as SimilarSessionRow[]).sort((a, b) => b.similarity - a.similarity);
 }
 
-/** Whether `sessionId` exists and belongs to one of `devIds` (org check). */
-export async function isSessionInOrg(
+/** Arbitrary constant key for the semantic indexing advisory lock. */
+const INDEX_LOCK_KEY = 7_302_645_118;
+
+/**
+ * Run `fn` holding a session-level advisory lock, so the live job and the
+ * backfill script never index concurrently (no double GPU work, no competing
+ * upserts). Returns null without running `fn` if another holder has it. The
+ * lock lives on a reserved connection and is released even if `fn` throws;
+ * if the process dies the connection closes and Postgres drops the lock.
+ */
+export async function withSemanticIndexLock<T>(
   sql: SQL,
-  sessionId: string,
-  devIds: string[],
-): Promise<boolean> {
-  if (devIds.length === 0) return false;
-  const [row] = await sql`
-    SELECT 1 FROM sessions
-    WHERE id = ${sessionId} AND developer_id IN (${inList(devIds)})`;
-  return !!row;
+  fn: () => Promise<T>,
+): Promise<T | null> {
+  const conn = await sql.reserve();
+  try {
+    const [row] = await conn`SELECT pg_try_advisory_lock(${INDEX_LOCK_KEY}) AS locked`;
+    if (!(row as { locked: boolean }).locked) return null;
+    try {
+      return await fn();
+    } finally {
+      await conn`SELECT pg_advisory_unlock(${INDEX_LOCK_KEY})`;
+    }
+  } finally {
+    conn.release();
+  }
 }
