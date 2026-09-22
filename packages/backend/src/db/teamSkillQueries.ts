@@ -25,7 +25,7 @@ export async function createTeamSkill(
   const triggerArr = `{${skill.trigger_phrases.map(t => `"${t.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
   const srcPatterns = `{${(skill.source_pattern_ids ?? []).map(t => `"${t}"`).join(",")}}`;
   const srcAntiPatterns = `{${(skill.source_anti_pattern_ids ?? []).map(t => `"${t}"`).join(",")}}`;
-  const genContext = JSON.stringify(skill.generation_context ?? {});
+  const genContext = skill.generation_context ?? {};
 
   await sql`
     INSERT INTO team_skills (

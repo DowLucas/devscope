@@ -31,7 +31,7 @@ export async function insertFrictionAlert(
       ${alert.severity},
       ${alert.title},
       ${alert.description},
-      ${JSON.stringify(alert.data_context)}::jsonb,
+      ${alert.data_context}::jsonb,
       ${alert.acknowledged}
     )
     RETURNING *
@@ -160,7 +160,7 @@ export async function seedDefaultFrictionRules(sql: SQL): Promise<void> {
         NULL,
         ${rule.rule_name},
         ${rule.rule_type},
-        ${JSON.stringify(rule.config)}::jsonb,
+        ${rule.config}::jsonb,
         TRUE
       )
       ON CONFLICT (id) DO NOTHING

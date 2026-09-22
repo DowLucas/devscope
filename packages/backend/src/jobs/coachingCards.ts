@@ -51,7 +51,7 @@ async function runForOrg(sql: SQL, orgId: string, weekStart: string): Promise<vo
           ${devId},
           ${orgId},
           ${weekStart}::DATE,
-          ${JSON.stringify(result.recommendations)}::JSONB
+          ${result.recommendations}::JSONB
         )
         ON CONFLICT (developer_id, week_start) DO NOTHING`;
       generated++;

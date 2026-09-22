@@ -18,7 +18,7 @@ export async function createPlaybook(
   }
 ): Promise<Playbook> {
   const id = crypto.randomUUID();
-  const metrics = JSON.stringify(playbook.success_metrics ?? {});
+  const metrics = playbook.success_metrics ?? {};
   const toolSeq = `{${playbook.tool_sequence.map(t => `"${t.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
 
   await sql`
