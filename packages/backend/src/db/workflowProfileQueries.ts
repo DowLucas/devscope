@@ -7,6 +7,11 @@ import {
 } from "@devscope/shared";
 import { inList } from "./utils";
 
+/**
+ * Pass objects, not JSON.stringify output: Bun.sql binds a string parameter
+ * as a JSON *string*, so `${JSON.stringify(x)}::jsonb` stores a scalar string
+ * containing the JSON rather than the object (see migration 043).
+ */
 export async function upsertWorkflowProfile(
   sql: SQL,
   profile: Omit<WorkflowProfile, "computed_at"> & { organization_id?: string | null; computed_at?: string }
@@ -42,8 +47,8 @@ export async function upsertWorkflowProfile(
       ${profile.prompt_density ?? null},
       ${profile.agent_usage ?? null},
       ${profile.recovery_quality ?? null},
-      ${profile.by_intent ? JSON.stringify(profile.by_intent) : null}::jsonb,
-      ${JSON.stringify(profile.raw_metrics)}::jsonb,
+      ${profile.by_intent ?? null}::jsonb,
+      ${profile.raw_metrics}::jsonb,
       ${profile.sessions_analyzed},
       NOW()
     )
