@@ -45,6 +45,7 @@ import { nudgesRoutes } from "./routes/nudges";
 import { promptSimilarityRoutes } from "./routes/promptSimilarity";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware, getClientIp } from "./middleware/rateLimit";
+import { apiKeyRateLimitRetryAfter } from "./middleware/apiKeyRateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
 import { getPublicStats } from "./db/queries";
 import { seedDefaultFrictionRules } from "./db";
@@ -189,6 +190,15 @@ async function requireApiKeyOrSession(c: Context, next: Next) {
           }
         }
         return next();
+      }
+      // A valid key that is merely over its rate limit must not become a 401:
+      // the plugin retries 429 but drops other 4xx as a bad event.
+      const retryAfter = apiKeyRateLimitRetryAfter(result);
+      if (retryAfter !== null) {
+        return c.json(
+          { error: "Too many requests" },
+          { status: 429, headers: { "Retry-After": String(retryAfter) } },
+        );
       }
     } catch {
       // Fall through to session check
@@ -335,6 +345,15 @@ app.post("/api/verify-connection", async (c) => {
     const result = await auth.api.verifyApiKey({ body: { key } });
     if (result?.valid) {
       return c.json({ valid: true });
+    }
+    // The key exists; it is only over its rate limit. Saying "invalid" here
+    // would send the user off to regenerate a working key.
+    const retryAfter = apiKeyRateLimitRetryAfter(result);
+    if (retryAfter !== null) {
+      return c.json(
+        { valid: false, error: "Rate limited, try again shortly" },
+        { status: 429, headers: { "Retry-After": String(retryAfter) } },
+      );
     }
     return c.json({ valid: false, error: "Invalid API key" });
   } catch {
