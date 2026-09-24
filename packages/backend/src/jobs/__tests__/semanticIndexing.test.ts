@@ -10,6 +10,9 @@ const mockPending = mock(() => Promise.resolve([] as any[]));
 const mockUpsert = mock(() => Promise.resolve());
 const mockRefresh = mock(() => Promise.resolve(1));
 const mockRecordFailure = mock(() => Promise.resolve());
+const mockPendingErrors = mock(() => Promise.resolve([] as any[]));
+const mockUpsertErrors = mock(() => Promise.resolve());
+const mockRecordErrorFailure = mock(() => Promise.resolve());
 let lockAvailable = true;
 const mockLock = mock((_sql: unknown, fn: () => Promise<unknown>) => (lockAvailable ? fn() : Promise.resolve(null)));
 
@@ -21,6 +24,9 @@ mock.module("../../db", () =>
     refreshSessionEmbeddings: mockRefresh,
     recordEmbeddingFailure: mockRecordFailure,
     withSemanticIndexLock: mockLock,
+    getPendingErrors: mockPendingErrors,
+    upsertErrorEmbeddings: mockUpsertErrors,
+    recordErrorEmbeddingFailure: mockRecordErrorFailure,
   }),
 );
 
@@ -33,6 +39,7 @@ mock.module("../../ai/embeddings", () => ({
   embedDocuments: mockEmbed,
   preparePromptText: (t: string) => `P:${t}`,
   prepareResponseText: (t: string) => `R:${t}`,
+  prepareErrorText: (tool: string, msg: string) => `E:${tool}:${msg}`,
   contentHash: (t: string) => `hash(${t})`,
   toVectorLiteral: (v: number[]) => `[${v.join(",")}]`,
 }));
@@ -40,7 +47,11 @@ mock.module("../../ai/embeddings", () => ({
 const { indexOnce } = await import("../semanticIndexing");
 
 beforeEach(() => {
-  for (const m of [mockBuildTurns, mockPending, mockUpsert, mockRefresh, mockEmbed, mockRecordFailure]) m.mockClear();
+  for (const m of [
+    mockBuildTurns, mockPending, mockUpsert, mockRefresh, mockEmbed, mockRecordFailure,
+    mockPendingErrors, mockUpsertErrors, mockRecordErrorFailure,
+  ]) m.mockClear();
+  mockPendingErrors.mockImplementation(() => Promise.resolve([]));
   lockAvailable = true;
   mockEmbed.mockImplementation(() => Promise.resolve([[1], [2]]));
 });
@@ -54,6 +65,7 @@ describe("indexOnce", () => {
     expect(stats).toEqual({
       turnsBuilt: 3,
       embedded: 2,
+      errorsEmbedded: 0,
       rejected: 0,
       sessionsRefreshed: 1,
       embedderUnavailable: false,
@@ -95,6 +107,47 @@ describe("indexOnce", () => {
       { turn_id: "1", kind: "prompt", content_hash: "hash(P:fix it)", vector: "[7]" },
     ]);
     expect((mockRecordFailure.mock.calls[0] as any[])[2]).toMatchObject({ turn_id: "1", kind: "response" });
+  });
+
+  test("embeds pending tool errors after turns", async () => {
+    let calls = 0;
+    mockPendingErrors.mockImplementation(() =>
+      Promise.resolve(calls++ === 0 ? [{ event_id: "ev1", tool: "Bash", message: "boom" }] : []),
+    );
+    mockEmbed.mockImplementation(() => Promise.resolve([[5]]));
+    const stats = await indexOnce({} as any);
+
+    expect(stats.errorsEmbedded).toBe(1);
+    expect((mockEmbed.mock.calls[0] as any[])[0]).toEqual(["E:Bash:boom"]);
+    expect((mockUpsertErrors.mock.calls[0] as any[])[2]).toEqual([
+      { event_id: "ev1", content_hash: "hash(E:Bash:boom)", vector: "[5]" },
+    ]);
+  });
+
+  test("records a poison error message by event id", async () => {
+    let calls = 0;
+    mockPendingErrors.mockImplementation(() =>
+      Promise.resolve(
+        calls++ === 0
+          ? [{ event_id: "ok", tool: "Bash", message: "fine" }, { event_id: "bad", tool: "Bash", message: "poison" }]
+          : [],
+      ),
+    );
+    mockEmbed.mockImplementation((texts: string[]) =>
+      Promise.resolve(texts.length === 1 && texts[0] === "E:Bash:fine" ? [[1]] : null),
+    );
+    const stats = await indexOnce({} as any);
+
+    expect(stats.errorsEmbedded).toBe(1);
+    expect(stats.rejected).toBe(1);
+    expect((mockRecordErrorFailure.mock.calls[0] as any[])[2]).toBe("bad");
+  });
+
+  test("skips errors when the embedder is down for turns", async () => {
+    mockPending.mockImplementation(() => Promise.resolve(pending));
+    mockEmbed.mockImplementation(() => Promise.resolve(null));
+    await indexOnce({} as any);
+    expect(mockPendingErrors).not.toHaveBeenCalled();
   });
 
   test("does nothing when another process holds the index lock", async () => {

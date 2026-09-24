@@ -7,8 +7,12 @@ import {
   recordEmbeddingFailure,
   refreshSessionEmbeddings,
   withSemanticIndexLock,
+  getPendingErrors,
+  upsertErrorEmbeddings,
+  recordErrorEmbeddingFailure,
   type EmbeddingRow,
   type PendingEmbedding,
+  type PendingError,
 } from "../db";
 import {
   EMBEDDING_MODEL,
@@ -16,6 +20,7 @@ import {
   embedDocuments,
   preparePromptText,
   prepareResponseText,
+  prepareErrorText,
   contentHash,
   toVectorLiteral,
 } from "../ai/embeddings";
@@ -29,6 +34,8 @@ const SESSION_REFRESH_LIMIT = 200;
 export interface IndexStats {
   turnsBuilt: number;
   embedded: number;
+  /** Tool-failure messages embedded for error recall. */
+  errorsEmbedded: number;
   /** Texts the embedder rejected on their own; recorded and skipped from now on. */
   rejected: number;
   sessionsRefreshed: number;
@@ -38,48 +45,70 @@ export interface IndexStats {
   skippedLocked: boolean;
 }
 
-function prepare(p: PendingEmbedding): string {
-  return p.kind === "prompt" ? preparePromptText(p.text) : prepareResponseText(p.text);
-}
-
-function toRow(p: PendingEmbedding, prepared: string, vector: number[]): EmbeddingRow {
-  return {
-    turn_id: p.turn_id,
-    kind: p.kind,
-    content_hash: contentHash(prepared),
-    vector: toVectorLiteral(vector),
-  };
-}
+const prepareTurn = (p: PendingEmbedding) =>
+  p.kind === "prompt" ? preparePromptText(p.text) : prepareResponseText(p.text);
 
 /**
- * Embed one batch. If the whole batch fails, retry item by item: if every
- * item still fails the embedder itself is down (return null, record nothing);
- * otherwise the items that fail alone are poison inputs and get recorded so
- * they can't wedge the queue.
+ * Embed one batch of prepared texts. If the whole batch fails, retry item by
+ * item: if every item still fails the embedder itself is down (return null,
+ * record nothing); otherwise the items that fail alone are poison inputs and
+ * go to `onReject` so they can't wedge the queue.
  */
-async function embedBatch(
-  sql: SQL,
-  pending: PendingEmbedding[],
-): Promise<{ rows: EmbeddingRow[]; rejected: number } | null> {
-  const prepared = pending.map(prepare);
-  const vectors = await embedDocuments(prepared);
-  if (vectors) {
-    return { rows: pending.map((p, i) => toRow(p, prepared[i]!, vectors[i]!)), rejected: 0 };
-  }
+async function embedBatch<T>(
+  items: T[],
+  prepare: (item: T) => string,
+  onReject: (item: T) => Promise<void>,
+): Promise<{ embedded: { item: T; hash: string; vector: string }[]; rejected: number } | null> {
+  const prepared = items.map(prepare);
+  const toEntry = (i: number, v: number[]) => ({
+    item: items[i]!,
+    hash: contentHash(prepared[i]!),
+    vector: toVectorLiteral(v),
+  });
 
-  const rows: EmbeddingRow[] = [];
-  const failed: PendingEmbedding[] = [];
-  for (const [i, p] of pending.entries()) {
-    const single = await embedDocuments([prepared[i]!]);
-    if (single) rows.push(toRow(p, prepared[i]!, single[0]!));
-    else failed.push(p);
+  const vectors = await embedDocuments(prepared);
+  if (vectors) return { embedded: vectors.map((v, i) => toEntry(i, v)), rejected: 0 };
+
+  const embedded = [];
+  const failed: T[] = [];
+  for (const [i, text] of prepared.entries()) {
+    const single = await embedDocuments([text]);
+    if (single) embedded.push(toEntry(i, single[0]!));
+    else failed.push(items[i]!);
   }
-  if (rows.length === 0) return null;
-  for (const p of failed) await recordEmbeddingFailure(sql, EMBEDDING_MODEL, p);
+  if (embedded.length === 0) return null;
+  for (const item of failed) await onReject(item);
   if (failed.length > 0) {
     console.warn(`[semantic] ${failed.length} text(s) rejected by the embedder; skipping them`);
   }
-  return { rows, rejected: failed.length };
+  return { embedded, rejected: failed.length };
+}
+
+/**
+ * Drain a pending queue in batches until empty, out of budget, or the
+ * embedder is down. Returns false when the embedder was unavailable.
+ */
+async function drainQueue<T>(
+  maxBatches: number,
+  stats: IndexStats,
+  counter: "embedded" | "errorsEmbedded",
+  queue: {
+    next: () => Promise<T[]>;
+    prepare: (item: T) => string;
+    reject: (item: T) => Promise<void>;
+    save: (embedded: { item: T; hash: string; vector: string }[]) => Promise<void>;
+  },
+): Promise<boolean> {
+  for (let batch = 0; batch < maxBatches; batch++) {
+    const pending = await queue.next();
+    if (pending.length === 0) break;
+    const result = await embedBatch(pending, queue.prepare, queue.reject);
+    if (!result) return false;
+    await queue.save(result.embedded);
+    stats[counter] += result.embedded.length;
+    stats.rejected += result.rejected;
+  }
+  return true;
 }
 
 /**
@@ -96,6 +125,7 @@ export async function indexOnce(
   const stats: IndexStats = {
     turnsBuilt: 0,
     embedded: 0,
+    errorsEmbedded: 0,
     rejected: 0,
     sessionsRefreshed: 0,
     embedderUnavailable: false,
@@ -107,19 +137,37 @@ export async function indexOnce(
     await purgePrivateTurns(sql);
     stats.turnsBuilt = await buildTurns(sql, opts.turnBuildLimit ?? TURN_BUILD_LIMIT);
 
-    for (let batch = 0; batch < maxBatches; batch++) {
-      const pending = await getPendingEmbeddings(sql, EMBEDDING_MODEL, EMBED_BATCH_SIZE);
-      if (pending.length === 0) break;
-
-      const result = await embedBatch(sql, pending);
-      if (!result) {
-        stats.embedderUnavailable = true;
-        break;
-      }
-      await upsertTurnEmbeddings(sql, EMBEDDING_MODEL, result.rows);
-      stats.embedded += result.rows.length;
-      stats.rejected += result.rejected;
-    }
+    const turnsOk = await drainQueue<PendingEmbedding>(maxBatches, stats, "embedded", {
+      next: () => getPendingEmbeddings(sql, EMBEDDING_MODEL, EMBED_BATCH_SIZE),
+      prepare: prepareTurn,
+      reject: (p) => recordEmbeddingFailure(sql, EMBEDDING_MODEL, p),
+      save: (done) =>
+        upsertTurnEmbeddings(
+          sql,
+          EMBEDDING_MODEL,
+          done.map(({ item, hash, vector }): EmbeddingRow => ({
+            turn_id: item.turn_id,
+            kind: item.kind,
+            content_hash: hash,
+            vector,
+          })),
+        ),
+    });
+    // Errors come second so a large error backlog never delays turn recall.
+    const errorsOk =
+      turnsOk &&
+      (await drainQueue<PendingError>(maxBatches, stats, "errorsEmbedded", {
+        next: () => getPendingErrors(sql, EMBEDDING_MODEL, EMBED_BATCH_SIZE),
+        prepare: (e) => prepareErrorText(e.tool, e.message),
+        reject: (e) => recordErrorEmbeddingFailure(sql, EMBEDDING_MODEL, e.event_id),
+        save: (done) =>
+          upsertErrorEmbeddings(
+            sql,
+            EMBEDDING_MODEL,
+            done.map(({ item, hash, vector }) => ({ event_id: item.event_id, content_hash: hash, vector })),
+          ),
+      }));
+    stats.embedderUnavailable = !errorsOk;
 
     stats.sessionsRefreshed = await refreshSessionEmbeddings(
       sql,
@@ -154,9 +202,9 @@ export function startSemanticIndexing(sql: SQL) {
     running = true;
     try {
       const s = await indexOnce(sql);
-      if (s.turnsBuilt || s.embedded || s.sessionsRefreshed || s.rejected) {
+      if (s.turnsBuilt || s.embedded || s.errorsEmbedded || s.sessionsRefreshed || s.rejected) {
         console.log(
-          `[semantic] turns +${s.turnsBuilt}, embeddings +${s.embedded}, sessions +${s.sessionsRefreshed}` +
+          `[semantic] turns +${s.turnsBuilt}, embeddings +${s.embedded}, errors +${s.errorsEmbedded}, sessions +${s.sessionsRefreshed}` +
             (s.rejected ? `, rejected ${s.rejected}` : "") +
             (s.embedderUnavailable ? " (embedder unavailable, will retry)" : ""),
         );

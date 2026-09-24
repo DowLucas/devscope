@@ -50,6 +50,23 @@ export function prepareResponseText(text: string): string {
   return `${t.slice(0, RESPONSE_HEAD_CHARS)}\n…\n${t.slice(-RESPONSE_TAIL_CHARS)}`;
 }
 
+const MAX_ERROR_CHARS = 800;
+
+/**
+ * Tool errors: "Tool: message", with the parts that differ between otherwise
+ * identical failures masked (directories, long hex ids, long numbers), so the
+ * same failure in another file or run embeds close by. The file name is kept.
+ */
+export function prepareErrorText(tool: string, message: string): string {
+  const masked = message
+    .replace(/(?:[A-Za-z]:)?(?:[\\/][\w.@+-]+){2,}[\\/]([\w.@+-]+)/g, "…/$1")
+    .replace(/\b(?:0x)?[0-9a-f]{8,}\b/gi, "<hex>")
+    .replace(/\b\d{4,}\b/g, "<n>")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `${tool}: ${masked}`.slice(0, MAX_ERROR_CHARS);
+}
+
 export function contentHash(prepared: string): string {
   return createHash("sha256").update(prepared).digest("hex");
 }
