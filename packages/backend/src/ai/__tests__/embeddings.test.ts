@@ -59,6 +59,16 @@ describe("embeddings client", () => {
 });
 
 describe("text preparation", () => {
+  test("errors mask directories, ids and long numbers but keep the file name", () => {
+    const a = emb.prepareErrorText("Bash", "Error: ENOENT /home/lucas/dev/app/src/index.ts at 0x7ffdeadbeef1 pid 48213");
+    const b = emb.prepareErrorText("Bash", "Error: ENOENT /Users/x/work/other/src/index.ts at 0x7ffcafebabe2 pid 99120");
+    expect(a).toBe("Bash: Error: ENOENT …/index.ts at <hex> pid <n>");
+    expect(a).toBe(b);
+    expect(a).toContain("index.ts");
+    expect(a).not.toContain("lucas");
+    expect(emb.prepareErrorText("Read", "x".repeat(2_000))).toHaveLength(800);
+  });
+
   test("prompts keep the head, capped at 8k chars", () => {
     expect(emb.preparePromptText("  hi  ")).toBe("hi");
     expect(emb.preparePromptText("x".repeat(10_000))).toHaveLength(8_000);

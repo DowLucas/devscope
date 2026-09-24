@@ -5,12 +5,16 @@ import { dbStubs, developerLinkStubs } from "../../__test_helpers__/mockStubs";
 const mockSearchTurns = mock(() => Promise.resolve([] as any[]));
 const mockSearchSessions = mock(() => Promise.resolve([] as any[] | null));
 const mockInOrg = mock(() => Promise.resolve(true));
+const mockSearchErrors = mock(() => Promise.resolve([] as any[]));
+const mockChains = mock(() => Promise.resolve([] as any[]));
 
 mock.module("../../db", () =>
   dbStubs({
     searchSimilarTurns: mockSearchTurns,
     searchSimilarSessions: mockSearchSessions,
     isSessionInOrg: mockInOrg,
+    searchSimilarErrors: mockSearchErrors,
+    getSkillChains: mockChains,
   }),
 );
 
@@ -28,6 +32,7 @@ mock.module("../../ai/embeddings", () => ({
   embedQuery: mockEmbedQuery,
   embedDocuments: mockEmbedDocs,
   preparePromptText: (t: string) => t,
+  prepareErrorText: (tool: string, msg: string) => `${tool}: ${msg}`,
   prepareResponseText: (t: string) => t,
   contentHash: () => "h",
   toVectorLiteral: (v: number[]) => `[${v.join(",")}]`,
@@ -212,5 +217,71 @@ describe("POST /similar/preflight", () => {
 
   test("invalid body is rejected", async () => {
     expect((await post({ session_id: "cur" })).status).toBe(400);
+  });
+});
+
+describe("POST /similar/error", () => {
+  const post = (body: unknown, devIds?: string[]) =>
+    buildApp(devIds).request("/similar/error", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const errRow = {
+    event_id: "e1",
+    session_id: "old",
+    created_at: "2026-07-01T10:00:00Z",
+    tool: "Bash",
+    message: "bun: command not found: tsc",
+    similarity: 0.95,
+    resolved: true,
+    response_tail: "Installed typescript as a dev dependency.",
+    session_title: "Build fix",
+  };
+
+  beforeEach(() => {
+    mockSearchErrors.mockClear();
+    mockEmbedDocs.mockClear();
+    mockEmbedDocs.mockImplementation(() => Promise.resolve([[0.5, 0.5]]));
+    mockOwn.mockImplementation(() => Promise.resolve(["dev-a"]));
+  });
+
+  test("searches own history, excluding this session, and returns a note", async () => {
+    mockSearchErrors.mockImplementation(() => Promise.resolve([errRow]));
+    const res = await post({ tool: "Bash", error: "bun: command not found: tsc", session_id: "cur" }, ["dev-a", "dev-b"]);
+    const body = await res.json();
+    expect((mockEmbedDocs.mock.calls[0] as any[])[0]).toEqual(["Bash: bun: command not found: tsc"]);
+    expect((mockSearchErrors.mock.calls[0] as any[])[1]).toMatchObject({ devIds: ["dev-a"], excludeSessionId: "cur" });
+    expect(body.matches).toHaveLength(1);
+    expect(body.context).toContain("Installed typescript");
+  });
+
+  test("fails open when the embedder is down or nothing is close", async () => {
+    mockEmbedDocs.mockImplementation(() => Promise.resolve(null));
+    expect(await (await post({ tool: "Bash", error: "boom boom", session_id: "s" })).json()).toEqual({ matches: [], context: null });
+    mockEmbedDocs.mockImplementation(() => Promise.resolve([[1]]));
+    mockSearchErrors.mockImplementation(() => Promise.resolve([{ ...errRow, similarity: 0.5 }]));
+    expect((await (await post({ tool: "Bash", error: "boom boom", session_id: "s" })).json()).context).toBeNull();
+  });
+
+  test("returns nothing for a caller with no developer in the org", async () => {
+    mockOwn.mockImplementation(() => Promise.resolve(["dev-x"]));
+    const body = await (await post({ tool: "Bash", error: "boom boom", session_id: "s" })).json();
+    expect(body.context).toBeNull();
+    expect(mockSearchErrors).not.toHaveBeenCalled();
+  });
+
+  test("rejects a malformed body", async () => {
+    expect((await post({ tool: "Bash" })).status).toBe(400);
+  });
+});
+
+describe("GET /similar/skill-chains", () => {
+  test("returns the caller's own chains", async () => {
+    mockOwn.mockImplementation(() => Promise.resolve(["dev-a"]));
+    mockChains.mockImplementation(() => Promise.resolve([{ from: "ship", to: "code-review", count: 5, share: 0.5 }]));
+    const res = await buildApp(["dev-a", "dev-b"]).request("/similar/skill-chains");
+    expect(await res.json()).toEqual({ chains: [{ from: "ship", to: "code-review", count: 5, share: 0.5 }] });
+    expect((mockChains.mock.calls[0] as any[])[1]).toEqual(["dev-a"]);
   });
 });

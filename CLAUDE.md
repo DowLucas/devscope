@@ -76,6 +76,8 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/sessions/:id` | GET | Events for a session |
 | `/api/similar/prompts?q=&kind=prompt\|response&limit=` | GET | Semantically similar past turns in the org, with outcomes |
 | `/api/similar/sessions/:id?limit=` | GET | Sessions similar to a given session |
+| `/api/similar/error` | POST | "This error came up before" recall for the plugin's PostToolUseFailure hook: caller's own earlier sessions, whether the same tool succeeded within 30 min, and how that turn's reply ended; fails open |
+| `/api/similar/skill-chains` | GET | Caller's learned skill sequences, cached by the plugin at session start for next-skill hints |
 | `/api/similar/preflight` | POST | "You've asked this before" recall for the plugin's prompt hook: caller's own sessions only, similarity ≥ 0.9, earlier than 2 h ago, fails open to an empty result |
 | `/api/health` | GET | Health check + WS client count |
 | `/ws` | WS | Real-time event stream |
@@ -186,6 +188,8 @@ Every prompt and response is embedded so similar past work can be found by meani
 - **Indexing** runs in `jobs/semanticIndexing.ts` every 60 s off the hook path; `scripts/semantic-backfill.ts --write` runs the same idempotent pass in a loop for history. Both take one Postgres advisory lock, so they never index concurrently. A text the embedder rejects on its own is recorded in `turn_embedding_failures` and skipped. The embed client never throws: when Ollama is down the job retries next tick and the API answers 503.
 - **Env:** `EMBEDDING_URL` (unset disables the feature), `EMBEDDING_MODEL`, `DISABLE_SEMANTIC_INDEXING=1`.
 - **Postgres image:** pgvector needs `docker/postgres.Dockerfile` (`postgres:17.9-alpine` + pgvector), published as `ghcr.io/dowlucas/devscope-postgres` by `.github/workflows/postgres-image.yml`. It must stay on Alpine: the prod data directory has `en_US.utf8` collation under musl, and a Debian/glibc image (e.g. `pgvector/pgvector`) sorts text differently and silently invalidates existing text indexes. Migration 045 is a guarded no-op when pgvector is missing, so an out-of-order deploy boots fine but the feature stays off; roll out the database image first, then set `EMBEDDING_URL`.
+- **Error recall** (`error_embeddings`, migration 047): every non-private `tool.fail` with an `errorMessage` of 20+ chars is embedded by the same job, after turns. `prepareErrorText` masks directories (keeps the file name), hex ids and long numbers so the same failure in another file or run lands close by. Rejected messages go to `error_embedding_failures`.
+- **Skill chains:** `getSkillChains` learns "after skill A the user next runs B" from the order of `Skill` tool calls per session (count ≥ 3, share ≥ 0.25, top 2 per skill). Computed on request; no table.
 - **Pairing caveat:** turns are paired by order within a session, not by `promptId` (only newer plugin versions send it). `response.complete` is main-thread only, so this is reliable.
 
 ## Ethics & Design Principles

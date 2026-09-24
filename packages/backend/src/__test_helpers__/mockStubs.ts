@@ -116,6 +116,13 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     purgePrivateTurns: noop,
     recordEmbeddingFailure: noop,
     withSemanticIndexLock: mock((_sql: unknown, fn: () => Promise<unknown>) => fn()),
+    // errorRecallQueries.ts
+    MIN_ERROR_CHARS: 20,
+    getPendingErrors: noopArr,
+    upsertErrorEmbeddings: noop,
+    recordErrorEmbeddingFailure: noop,
+    searchSimilarErrors: noopArr,
+    getSkillChains: noopArr,
     // Used by the validator.test.ts cleanup hook — kept here for the same
     // reason: any partial dbStubs mock must not silently drop this name
     // when the consuming test imports it via `../../utils/ethicsAudit`.

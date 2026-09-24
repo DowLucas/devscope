@@ -27,6 +27,7 @@
 import { SQL } from "bun";
 import { indexOnce } from "../src/jobs/semanticIndexing";
 import { EMBEDDING_MODEL, isEmbeddingAvailable } from "../src/ai/embeddings";
+import { MIN_ERROR_CHARS } from "../src/db";
 
 const BATCHES_PER_PASS = 50;
 const TURNS_PER_PASS = 2_000;
@@ -57,7 +58,13 @@ async function report(sql: SQL) {
       (SELECT COUNT(*)::INT FROM prompt_turns WHERE response_text IS NOT NULL) AS turns_with_response,
       (SELECT COUNT(*)::INT FROM turn_embeddings WHERE model = ${EMBEDDING_MODEL}) AS embeddings,
       (SELECT COUNT(*)::INT FROM turn_embedding_failures WHERE model = ${EMBEDDING_MODEL}) AS rejected,
-      (SELECT COUNT(*)::INT FROM session_embeddings WHERE model = ${EMBEDDING_MODEL}) AS session_vectors`;
+      (SELECT COUNT(*)::INT FROM session_embeddings WHERE model = ${EMBEDDING_MODEL}) AS session_vectors,
+      (SELECT COUNT(*)::INT FROM events e JOIN sessions s ON s.id = e.session_id
+        WHERE e.event_type = 'tool.fail'
+          AND COALESCE(s.privacy_mode, 'standard') <> 'private'
+          AND length(COALESCE(e.payload->>'errorMessage', '')) >= ${MIN_ERROR_CHARS}) AS eligible_errors,
+      (SELECT COUNT(*)::INT FROM error_embeddings WHERE model = ${EMBEDDING_MODEL}) AS error_embeddings,
+      (SELECT COUNT(*)::INT FROM error_embedding_failures WHERE model = ${EMBEDDING_MODEL}) AS errors_rejected`;
   return r as {
     eligible_prompts: number;
     turns: number;
@@ -65,6 +72,9 @@ async function report(sql: SQL) {
     embeddings: number;
     rejected: number;
     session_vectors: number;
+    eligible_errors: number;
+    error_embeddings: number;
+    errors_rejected: number;
   };
 }
 
@@ -74,7 +84,8 @@ function printReport(label: string, r: Awaited<ReturnType<typeof report>>) {
   console.log(`  eligible prompts: ${r.eligible_prompts}`);
   console.log(`  turns built:      ${r.turns} (${r.turns_with_response} with a response)`);
   console.log(`  embeddings:       ${r.embeddings} / ${expectedEmbeddings} for built turns (${r.rejected} rejected)`);
-  console.log(`  session vectors:  ${r.session_vectors}\n`);
+  console.log(`  session vectors:  ${r.session_vectors}`);
+  console.log(`  error embeddings: ${r.error_embeddings} / ${r.eligible_errors} tool failures (${r.errors_rejected} rejected)\n`);
 }
 
 async function main() {
@@ -114,11 +125,11 @@ async function main() {
       await Bun.sleep(LOCK_WAIT_MS);
       continue;
     }
-    totalEmbedded += s.embedded;
+    totalEmbedded += s.embedded + s.errorsEmbedded;
 
     const elapsedMin = (Date.now() - started) / 60_000;
     console.log(
-      `turns +${s.turnsBuilt}, embeddings +${s.embedded} (total ${totalEmbedded}, ` +
+      `turns +${s.turnsBuilt}, embeddings +${s.embedded}, errors +${s.errorsEmbedded} (total ${totalEmbedded}, ` +
         `${Math.round(totalEmbedded / Math.max(elapsedMin, 0.01))}/min), sessions +${s.sessionsRefreshed}` +
         (s.rejected ? `, rejected ${s.rejected}` : ""),
     );
@@ -134,7 +145,7 @@ async function main() {
     }
     failures = 0;
 
-    if (s.turnsBuilt === 0 && s.embedded === 0 && s.rejected === 0 && s.sessionsRefreshed === 0) break;
+    if (!s.turnsBuilt && !s.embedded && !s.errorsEmbedded && !s.rejected && !s.sessionsRefreshed) break;
   }
 
   printReport("after", await report(sql));

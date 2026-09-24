@@ -7,6 +7,8 @@ import {
   searchSimilarTurns,
   searchSimilarSessions,
   isSessionInOrg,
+  searchSimilarErrors,
+  getSkillChains,
   type SimilarTurnRow,
   type SimilarSessionRow,
 } from "../db";
@@ -16,10 +18,12 @@ import {
   embedQuery,
   embedDocuments,
   preparePromptText,
+  prepareErrorText,
   toVectorLiteral,
 } from "../ai/embeddings";
 import { getAllDeveloperIdsForUser } from "../services/developerLink";
 import { RECALL, formatRecall, selectMatches, wordCount } from "../services/promptRecall";
+import { ERROR_RECALL, formatErrorRecall, selectErrorMatches } from "../services/errorRecall";
 
 // Semantic retrieval over the org's prompt/response turns and sessions.
 //
@@ -39,6 +43,15 @@ const preflightBody = z.object({
   prompt: z.string().trim().min(1).max(8000),
   session_id: z.string().min(1).max(200),
 });
+
+const errorBody = z.object({
+  tool: z.string().trim().min(1).max(200),
+  error: z.string().trim().min(1).max(20_000),
+  session_id: z.string().min(1).max(200),
+});
+
+/** "After skill A you usually run B": thresholds for a learned chain. */
+const SKILL_CHAINS = { minCount: 3, minShare: 0.25, perSkill: 2 } as const;
 
 const sessionsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(10),
@@ -87,6 +100,14 @@ function orgDevIds(c: { get: (k: never) => unknown }): string[] {
 export function similarRoutes(sql: SQL) {
   const app = new Hono();
 
+  // Hook endpoints only look at the caller's own history, never teammates'.
+  async function ownDevIds(c: { get: (k: never) => unknown }): Promise<string[]> {
+    const user = c.get("user" as never) as { id?: string } | undefined;
+    const own = user?.id ? await getAllDeveloperIdsForUser(sql, user.id) : [];
+    const org = new Set(orgDevIds(c));
+    return own.filter((d) => org.has(d));
+  }
+
   app.get("/prompts", zValidator("query", promptsQuery), async (c) => {
     if (!isEmbeddingAvailable()) {
       return c.json({ available: false, error: "Semantic retrieval is not configured" }, 503);
@@ -118,10 +139,7 @@ export function similarRoutes(sql: SQL) {
       const { prompt, session_id } = c.req.valid("json");
       if (wordCount(prompt) < RECALL.minWords) return c.json(empty);
 
-      const user = c.get("user" as never) as { id?: string } | undefined;
-      const own = user?.id ? await getAllDeveloperIdsForUser(sql, user.id) : [];
-      const org = new Set(orgDevIds(c));
-      const devIds = own.filter((d) => org.has(d));
+      const devIds = await ownDevIds(c);
       if (devIds.length === 0) return c.json(empty);
 
       // Document-side embedding: the same space and scale as stored prompts.
@@ -143,6 +161,41 @@ export function similarRoutes(sql: SQL) {
       console.warn("[similar] preflight failed:", err instanceof Error ? err.message : err);
       return c.json(empty);
     }
+  });
+
+  // "This error came up before" for the plugin's PostToolUseFailure hook.
+  // Fails open like /preflight.
+  app.post("/error", zValidator("json", errorBody), async (c) => {
+    const empty = { matches: [], context: null };
+    try {
+      if (!isEmbeddingAvailable()) return c.json(empty);
+      const { tool, error, session_id } = c.req.valid("json");
+      const devIds = await ownDevIds(c);
+      if (devIds.length === 0) return c.json(empty);
+
+      const vectors = await embedDocuments([prepareErrorText(tool, error)], ERROR_RECALL.embedTimeoutMs);
+      if (!vectors) return c.json(empty);
+
+      const rows = await searchSimilarErrors(sql, {
+        vector: toVectorLiteral(vectors[0]!),
+        model: EMBEDDING_MODEL,
+        devIds,
+        limit: ERROR_RECALL.lookback,
+        excludeSessionId: session_id,
+      });
+      const matches = selectErrorMatches(rows);
+      return c.json({ matches, context: formatErrorRecall(matches) });
+    } catch (err) {
+      console.warn("[similar] error recall failed:", err instanceof Error ? err.message : err);
+      return c.json(empty);
+    }
+  });
+
+  // The caller's learned skill sequences; the plugin caches these at session
+  // start and hints the usual next skill after a Skill tool call.
+  app.get("/skill-chains", async (c) => {
+    const devIds = await ownDevIds(c);
+    return c.json({ chains: await getSkillChains(sql, devIds, SKILL_CHAINS) });
   });
 
   app.get("/sessions/:id", zValidator("query", sessionsQuery), async (c) => {

@@ -141,7 +141,8 @@ export async function buildTurns(sql: SQL, limit: number): Promise<number> {
 
 /**
  * Drop stored turns (and, by cascade, their embeddings) for sessions that
- * switched to private after they were indexed, plus their session vectors.
+ * switched to private after they were indexed, plus their session and error
+ * vectors.
  */
 export async function purgePrivateTurns(sql: SQL): Promise<void> {
   await sql`
@@ -152,6 +153,10 @@ export async function purgePrivateTurns(sql: SQL): Promise<void> {
     DELETE FROM prompt_turns t
     USING sessions s
     WHERE s.id = t.session_id AND s.privacy_mode = 'private'`;
+  await sql`
+    DELETE FROM error_embeddings x
+    USING events e, sessions s
+    WHERE e.id = x.event_id AND s.id = e.session_id AND s.privacy_mode = 'private'`;
 }
 
 export interface PendingEmbedding {

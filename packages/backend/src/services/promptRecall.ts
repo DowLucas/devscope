@@ -33,12 +33,12 @@ export interface RecallMatch {
   ended: string | null;
 }
 
-const clip = (s: string, n: number) => {
+export const clip = (s: string, n: number) => {
   const t = s.replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 };
 
-const dayOf = (iso: string) => new Date(iso).toISOString().slice(0, 10);
+export const dayOf = (iso: string) => new Date(iso).toISOString().slice(0, 10);
 
 export function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
@@ -88,10 +88,17 @@ export function formatRecall(matches: RecallMatch[], repeatDays: number): string
       : []),
     "Reuse what worked and avoid what failed. Mention this only if it helps.",
   ].join("\n");
-  // Drop the weakest matches until it fits; clip as a last resort.
-  for (let n = matches.length; n >= 1; n--) {
+  return fitToCap(compose, matches.length, RECALL.maxChars);
+}
+
+/**
+ * Compose with the first `count` matches (best first), dropping the weakest
+ * until the note fits `maxChars`; clip as a last resort.
+ */
+export function fitToCap(compose: (n: number) => string, count: number, maxChars: number): string {
+  for (let n = count; n >= 1; n--) {
     const out = compose(n);
-    if (out.length <= RECALL.maxChars) return out;
+    if (out.length <= maxChars) return out;
   }
-  return `${compose(1).slice(0, RECALL.maxChars - 1)}…`;
+  return `${compose(1).slice(0, maxChars - 1)}…`;
 }
