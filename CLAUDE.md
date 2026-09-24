@@ -76,6 +76,7 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/sessions/:id` | GET | Events for a session |
 | `/api/similar/prompts?q=&kind=prompt\|response&limit=` | GET | Semantically similar past turns in the org, with outcomes |
 | `/api/similar/sessions/:id?limit=` | GET | Sessions similar to a given session |
+| `/api/similar/preflight` | POST | "You've asked this before" recall for the plugin's prompt hook: caller's own sessions only, similarity ≥ 0.9, earlier than 2 h ago, fails open to an empty result |
 | `/api/health` | GET | Health check + WS client count |
 | `/ws` | WS | Real-time event stream |
 
