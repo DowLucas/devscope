@@ -9,7 +9,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   message: "tsc: command not found",
   similarity: 0.95,
   resolved: false,
-  response_tail: null,
+  fix_input: null,
   session_title: null,
   ...over,
 });
@@ -17,7 +17,7 @@ const row = (over: Record<string, unknown> = {}) => ({
 describe("selectErrorMatches", () => {
   test("drops weak matches and keeps the best one per session", () => {
     const out = selectErrorMatches([
-      row({ similarity: 0.91 }),
+      row({ similarity: 0.93 }),
       row({ similarity: 0.97 }),
       row({ session_id: "s2", similarity: ERROR_RECALL.minSimilarity - 0.01 }),
     ] as any);
@@ -28,11 +28,11 @@ describe("selectErrorMatches", () => {
   test("puts resolved matches first, then by similarity, capped", () => {
     const out = selectErrorMatches([
       row({ session_id: "a", similarity: 0.99 }),
-      row({ session_id: "b", similarity: 0.9, resolved: true }),
+      row({ session_id: "b", similarity: 0.925, resolved: true }),
       row({ session_id: "c", similarity: 0.95 }),
       row({ session_id: "d", similarity: 0.93 }),
     ] as any);
-    expect(out.map((m) => m.similarity)).toEqual([0.9, 0.99, 0.95]);
+    expect(out.map((m) => m.similarity)).toEqual([0.93, 0.99, 0.95]);
   });
 });
 
@@ -41,12 +41,13 @@ describe("formatErrorRecall", () => {
     expect(formatErrorRecall([])).toBeNull();
   });
 
-  test("names outcome and how the turn ended, within the cap", () => {
-    const [m] = selectErrorMatches([row({ resolved: true, response_tail: "Added it to devDependencies." })] as any);
+  test("shows the call that worked next, or that none did, within the cap", () => {
+    const [m] = selectErrorMatches([row({ resolved: true, fix_input: "bunx tsc --noEmit" })] as any);
     const note = formatErrorRecall([m!])!;
-    expect(note).toContain("resolved shortly after");
-    expect(note).toContain("Added it to devDependencies.");
-    const many = Array.from({ length: 3 }, () => ({ ...m!, ended: "x".repeat(400) }));
+    expect(note).toContain("the next Bash call that worked: `bunx tsc --noEmit`");
+    const [none] = selectErrorMatches([row()] as any);
+    expect(formatErrorRecall([none!])).toContain("no successful retry within 30 min");
+    const many = Array.from({ length: 3 }, () => ({ ...m!, fix: "x".repeat(400) }));
     expect(formatErrorRecall(many)!.length).toBeLessThanOrEqual(ERROR_RECALL.maxChars);
   });
 });

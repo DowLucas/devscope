@@ -62,8 +62,11 @@ export interface SimilarErrorRow {
   similarity: number;
   /** The same tool succeeded later in that session within 30 minutes. */
   resolved: boolean;
-  /** End of the reply that closed the turn the failure happened in. */
-  response_tail: string | null;
+  /**
+   * Input of that first successful call (command, file path, or raw input),
+   * usually the fix itself: the quoted glob, the corrected command.
+   */
+  fix_input: string | null;
   session_title: string | null;
 }
 
@@ -95,26 +98,27 @@ export async function searchSimilarErrors(
         e.payload->>'toolName' AS tool,
         left(e.payload->>'errorMessage', 300) AS message,
         n.similarity,
-        EXISTS (
-          SELECT 1 FROM events ok
-          WHERE ok.session_id = e.session_id
-            AND ok.event_type = 'tool.complete'
-            AND ok.payload->>'toolName' = e.payload->>'toolName'
-            AND ok.created_at > e.created_at
-            AND ok.created_at <= e.created_at + INTERVAL '30 minutes'
-        ) AS resolved,
-        turn.response_tail,
+        ok.id IS NOT NULL AS resolved,
+        left(COALESCE(
+          ok.payload->'toolInput'->>'command',
+          ok.payload->'toolInput'->>'file_path',
+          (ok.payload->'toolInput')::TEXT
+        ), 300) AS fix_input,
         s.current_title AS session_title
       FROM nearest n
       JOIN events e ON e.id = n.event_id
       JOIN sessions s ON s.id = e.session_id
       LEFT JOIN LATERAL (
-        SELECT right(t.response_text, 400) AS response_tail
-        FROM prompt_turns t
-        WHERE t.session_id = e.session_id AND t.prompt_at <= e.created_at
-        ORDER BY t.prompt_at DESC
+        SELECT o.id, o.payload
+        FROM events o
+        WHERE o.session_id = e.session_id
+          AND o.event_type = 'tool.complete'
+          AND o.payload->>'toolName' = e.payload->>'toolName'
+          AND o.created_at > e.created_at
+          AND o.created_at <= e.created_at + INTERVAL '30 minutes'
+        ORDER BY o.created_at
         LIMIT 1
-      ) turn ON true`;
+      ) ok ON true`;
   });
   return (rows as SimilarErrorRow[]).sort((a, b) => b.similarity - a.similarity);
 }

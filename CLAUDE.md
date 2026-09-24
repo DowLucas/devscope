@@ -76,7 +76,7 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/sessions/:id` | GET | Events for a session |
 | `/api/similar/prompts?q=&kind=prompt\|response&limit=` | GET | Semantically similar past turns in the org, with outcomes |
 | `/api/similar/sessions/:id?limit=` | GET | Sessions similar to a given session |
-| `/api/similar/error` | POST | "This error came up before" recall for the plugin's PostToolUseFailure hook: caller's own earlier sessions, whether the same tool succeeded within 30 min, and how that turn's reply ended; fails open |
+| `/api/similar/error` | POST | "This error came up before" recall for the plugin's PostToolUseFailure hook: caller's own earlier sessions, similarity ≥ 0.92, and the input of the first same-tool call that succeeded within 30 min (often the fix); fails open |
 | `/api/similar/skill-chains` | GET | Caller's learned skill sequences, cached by the plugin at session start for next-skill hints |
 | `/api/similar/preflight` | POST | "You've asked this before" recall for the plugin's prompt hook: caller's own sessions only, similarity ≥ 0.9, earlier than 2 h ago, fails open to an empty result |
 | `/api/health` | GET | Health check + WS client count |
