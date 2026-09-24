@@ -4,13 +4,14 @@ import { clip, dayOf, fitToCap } from "./promptRecall";
 /**
  * "This error came up before": recall for the plugin's PostToolUseFailure
  * hook. Nearest past failures from the caller's own earlier sessions, with
- * whether the same tool went on to succeed and how Claude's reply ended, so
+ * the call that succeeded next with the same tool (often the fix itself), so
  * Claude can reuse the fix instead of rediscovering it.
  */
 export const ERROR_RECALL = {
-  // Provisional: to be calibrated on prod error embeddings after the backfill.
-  // Too low and matches share only a tool and a vague shape, not the cause.
-  minSimilarity: 0.88,
+  // Calibrated on prod nearest-neighbour pairs: from 0.92 up they shared the
+  // cause; 0.88-0.92 mixed same-cause pairs with ones sharing only a shape
+  // ("Exit code 1" plus a listing).
+  minSimilarity: 0.92,
   lookback: 10,
   maxShown: 3,
   /** The hook blocks Claude's next step, so embedding gets a tight budget. */
@@ -23,8 +24,9 @@ export interface ErrorMatch {
   similarity: number;
   error: string;
   sessionTitle: string | null;
+  tool: string;
   resolved: boolean;
-  ended: string | null;
+  fix: string | null;
 }
 
 /**
@@ -46,8 +48,9 @@ export function selectErrorMatches(rows: SimilarErrorRow[]): ErrorMatch[] {
       similarity: Math.round(r.similarity * 100) / 100,
       error: clip(r.message, 140),
       sessionTitle: r.session_title ? clip(r.session_title, 60) : null,
+      tool: r.tool,
       resolved: r.resolved,
-      ended: r.response_tail ? clip(r.response_tail, 180) : null,
+      fix: r.fix_input ? clip(r.fix_input, 180) : null,
     }));
 }
 
@@ -56,15 +59,16 @@ export function formatErrorRecall(matches: ErrorMatch[]): string | null {
   if (matches.length === 0) return null;
   const line = (m: ErrorMatch) => {
     const where = m.sessionTitle ? ` in "${m.sessionTitle}"` : "";
-    const outcome = m.resolved ? "resolved shortly after" : "not resolved soon after";
-    const ended = m.ended ? ` That turn ended: "${m.ended}"` : "";
-    return `• ${m.day}${where} (${m.similarity.toFixed(2)}): "${m.error}", ${outcome}.${ended}`;
+    const outcome = m.fix
+      ? `the next ${m.tool} call that worked: \`${m.fix}\``
+      : "no successful retry within 30 min";
+    return `• ${m.day}${where} (${m.similarity.toFixed(2)}): "${m.error}"; ${outcome}.`;
   };
   const compose = (n: number) =>
     [
       "DevScope: the user has hit a very similar error before:",
       ...matches.slice(0, n).map(line),
-      "If one of these was resolved, try that fix first. Mention this only if it helps.",
+      "A call that worked right after the same error is often the fix; consider it first. Mention this only if it helps.",
     ].join("\n");
   return fitToCap(compose, matches.length, ERROR_RECALL.maxChars);
 }

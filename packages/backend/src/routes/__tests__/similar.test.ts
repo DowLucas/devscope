@@ -235,7 +235,7 @@ describe("POST /similar/error", () => {
     message: "bun: command not found: tsc",
     similarity: 0.95,
     resolved: true,
-    response_tail: "Installed typescript as a dev dependency.",
+    fix_input: "bun add -d typescript",
     session_title: "Build fix",
   };
 
@@ -253,7 +253,7 @@ describe("POST /similar/error", () => {
     expect((mockEmbedDocs.mock.calls[0] as any[])[0]).toEqual(["Bash: bun: command not found: tsc"]);
     expect((mockSearchErrors.mock.calls[0] as any[])[1]).toMatchObject({ devIds: ["dev-a"], excludeSessionId: "cur" });
     expect(body.matches).toHaveLength(1);
-    expect(body.context).toContain("Installed typescript");
+    expect(body.context).toContain("bun add -d typescript");
   });
 
   test("fails open when the embedder is down or nothing is close", async () => {

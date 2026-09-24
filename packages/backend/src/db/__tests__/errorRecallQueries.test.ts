@@ -43,7 +43,6 @@ d("errorRecallQueries", () => {
     if (!sqlPromise) return;
     const sql = await sqlPromise;
     for (const id of sessionIds) {
-      await sql`DELETE FROM prompt_turns WHERE session_id = ${id}`;
       await sql`DELETE FROM events WHERE session_id = ${id}`;
       await sql`DELETE FROM sessions WHERE id = ${id}`;
     }
@@ -71,11 +70,10 @@ d("errorRecallQueries", () => {
     }
     const skill = (name: string) => ({ toolName: "Skill", toolInput: { skill: name } });
     const events: Array<[string, string, string, string, object]> = [
-      // fixed: fails, then Bash succeeds 5 minutes later; a turn wraps it
-      ["p1", s("fixed"), "prompt.submit", t(1), { promptText: "build it" }],
+      // fixed: fails, then Bash succeeds 5 minutes later (the fix), then again
       ["f1", s("fixed"), "tool.fail", t(2), { toolName: "Bash", errorMessage: tsc }],
-      ["ok1", s("fixed"), "tool.complete", t(7), { toolName: "Bash" }],
-      ["r1", s("fixed"), "response.complete", t(8), { responseText: "Installed typescript as a dev dependency." }],
+      ["ok1", s("fixed"), "tool.complete", t(7), { toolName: "Bash", toolInput: { command: "bun add -d typescript" } }],
+      ["ok1b", s("fixed"), "tool.complete", t(9), { toolName: "Bash", toolInput: { command: "later, unrelated" } }],
       // stuck: same failure, Bash never succeeds within 30 min
       ["f2", s("stuck"), "tool.fail", t(2), { toolName: "Bash", errorMessage: tsc }],
       ["ok2", s("stuck"), "tool.complete", t(90), { toolName: "Bash" }],
@@ -100,9 +98,6 @@ d("errorRecallQueries", () => {
         INSERT INTO events (id, session_id, event_type, payload, created_at)
         VALUES (${ev(id)}, ${session}, ${type}, ${payload}::jsonb, ${at}::timestamptz)`;
     }
-    await sql`
-      INSERT INTO prompt_turns (session_id, prompt_event_id, response_event_id, prompt_at, prompt_text, response_text)
-      VALUES (${s("fixed")}, ${ev("p1")}, ${ev("r1")}, ${t(1)}, 'build it', 'Installed typescript as a dev dependency.')`;
   });
 
   const mine = async () => {
@@ -128,7 +123,7 @@ d("errorRecallQueries", () => {
     expect(await mine()).toEqual([]);
   });
 
-  test("search: own sessions only, excludes the current one, reports resolution and the turn's ending", async () => {
+  test("search: own sessions only, excludes the current one, reports the first call that worked", async () => {
     const sql = await getSql();
     const rows = await searchSimilarErrors(sql, {
       vector: oneHot(0),
@@ -141,9 +136,9 @@ d("errorRecallQueries", () => {
     expect(got.map((r) => r.event_id)).toEqual([ev("f2"), ev("f1")]);
     const [stuck, fixed] = got;
     expect(stuck!.resolved).toBe(false);
-    expect(stuck!.response_tail).toBeNull();
+    expect(stuck!.fix_input).toBeNull();
     expect(fixed!.resolved).toBe(true);
-    expect(fixed!.response_tail).toBe("Installed typescript as a dev dependency.");
+    expect(fixed!.fix_input).toBe("bun add -d typescript");
     expect(fixed!.session_title).toBe(`title ${s("fixed")}`);
     expect(fixed!.similarity).toBeLessThan(stuck!.similarity);
     expect(await searchSimilarErrors(sql, { vector: oneHot(0), model: MODEL, devIds: [], limit: 5 })).toEqual([]);
