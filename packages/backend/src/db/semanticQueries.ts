@@ -19,6 +19,8 @@ const KIND_PREDICATE: Record<TurnKind, ReturnType<typeof Sql.unsafe>> = {
 
 /** Max characters of prompt/response text returned per search hit. */
 const EXCERPT_CHARS = 4_000;
+/** End of the response, where Claude usually states how it went. */
+const TAIL_CHARS = 400;
 
 /**
  * A turn whose only closing signal is its last response waits this long, so
@@ -310,6 +312,7 @@ export interface SimilarTurnRow {
   prompt_at: string;
   prompt_text: string;
   response_text: string | null;
+  response_tail: string | null;
   tool_calls: number;
   tool_failures: number;
   tools_used: string[];
@@ -331,10 +334,13 @@ export async function searchSimilarTurns(
     devIds: string[];
     limit: number;
     excludeSessionId?: string | null;
+    /** Only turns prompted strictly before this ISO timestamp. */
+    before?: string | null;
   },
 ): Promise<SimilarTurnRow[]> {
   if (opts.devIds.length === 0) return [];
   const exclude = opts.excludeSessionId ?? null;
+  const before = opts.before ?? null;
   const rows = await sql.begin(async (tx) => {
     await setScanOptions(tx);
     return tx`
@@ -344,6 +350,7 @@ export async function searchSimilarTurns(
         t.prompt_at,
         left(t.prompt_text, ${EXCERPT_CHARS}) AS prompt_text,
         left(t.response_text, ${EXCERPT_CHARS}) AS response_text,
+        right(t.response_text, ${TAIL_CHARS}) AS response_tail,
         t.tool_calls,
         t.tool_failures,
         t.tools_used,
@@ -360,6 +367,7 @@ export async function searchSimilarTurns(
         AND s.developer_id IN (${inList(opts.devIds)})
         AND COALESCE(s.privacy_mode, 'standard') <> 'private'
         AND (${exclude}::TEXT IS NULL OR t.session_id <> ${exclude}::TEXT)
+        AND (${before}::TIMESTAMPTZ IS NULL OR t.prompt_at < ${before}::TIMESTAMPTZ)
       ORDER BY te.embedding <=> ${opts.vector}::vector
       LIMIT ${opts.limit}`;
   });

@@ -14,8 +14,12 @@ import {
   EMBEDDING_MODEL,
   isEmbeddingAvailable,
   embedQuery,
+  embedDocuments,
+  preparePromptText,
   toVectorLiteral,
 } from "../ai/embeddings";
+import { getAllDeveloperIdsForUser } from "../services/developerLink";
+import { RECALL, formatRecall, selectMatches, wordCount } from "../services/promptRecall";
 
 // Semantic retrieval over the org's prompt/response turns and sessions.
 //
@@ -29,6 +33,11 @@ const promptsQuery = z.object({
   kind: z.enum(["prompt", "response"]).default("prompt"),
   limit: z.coerce.number().int().min(1).max(50).default(10),
   exclude_session_id: z.string().min(1).max(200).optional(),
+});
+
+const preflightBody = z.object({
+  prompt: z.string().trim().min(1).max(8000),
+  session_id: z.string().min(1).max(200),
 });
 
 const sessionsQuery = z.object({
@@ -96,6 +105,44 @@ export function similarRoutes(sql: SQL) {
       excludeSessionId: q.exclude_session_id ?? null,
     });
     return c.json({ available: true, results: rows.map(mapTurn) });
+  });
+
+  // "You've asked this before" for the plugin's UserPromptSubmit hook. Only
+  // the caller's own sessions, only strong matches from an earlier stretch of
+  // work. The hook blocks the prompt, so this fails open to an empty result
+  // on any problem rather than erroring.
+  app.post("/preflight", zValidator("json", preflightBody), async (c) => {
+    const empty = { matches: [], repeat_days: 0, context: null };
+    try {
+      if (!isEmbeddingAvailable()) return c.json(empty);
+      const { prompt, session_id } = c.req.valid("json");
+      if (wordCount(prompt) < RECALL.minWords) return c.json(empty);
+
+      const user = c.get("user" as never) as { id?: string } | undefined;
+      const own = user?.id ? await getAllDeveloperIdsForUser(sql, user.id) : [];
+      const org = new Set(orgDevIds(c));
+      const devIds = own.filter((d) => org.has(d));
+      if (devIds.length === 0) return c.json(empty);
+
+      // Document-side embedding: the same space and scale as stored prompts.
+      const vectors = await embedDocuments([preparePromptText(prompt)], RECALL.embedTimeoutMs);
+      if (!vectors) return c.json(empty);
+
+      const rows = await searchSimilarTurns(sql, {
+        vector: toVectorLiteral(vectors[0]!),
+        model: EMBEDDING_MODEL,
+        kind: "prompt",
+        devIds,
+        limit: RECALL.lookback,
+        excludeSessionId: session_id,
+        before: new Date(Date.now() - RECALL.recentHours * 3_600_000).toISOString(),
+      });
+      const { matches, repeatDays } = selectMatches(rows);
+      return c.json({ matches, repeat_days: repeatDays, context: formatRecall(matches, repeatDays) });
+    } catch (err) {
+      console.warn("[similar] preflight failed:", err instanceof Error ? err.message : err);
+      return c.json(empty);
+    }
   });
 
   app.get("/sessions/:id", zValidator("query", sessionsQuery), async (c) => {

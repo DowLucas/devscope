@@ -228,6 +228,17 @@ d("semanticQueries — turns, embeddings, org-scoped search", () => {
     expect(ids).not.toContain(s("private"));
     expect(Object.keys(hits[0]!)).not.toContain("developer_id");
 
+    const tooEarly = await searchSimilarTurns(sql, {
+      vector: oneHot(0), model: MODEL, kind: "prompt", devIds: [devA], limit: 10,
+      before: "2025-01-01T00:00:00Z",
+    });
+    expect(tooEarly).toEqual([]);
+    const withTail = await searchSimilarTurns(sql, {
+      vector: oneHot(0), model: MODEL, kind: "prompt", devIds: [devA], limit: 10,
+      before: new Date().toISOString(),
+    });
+    expect(withTail[0]!.response_tail).toBe("Also added a regression test.");
+
     const excluded = await searchSimilarTurns(sql, {
       vector: oneHot(0),
       model: MODEL,

@@ -87,8 +87,11 @@ async function embed(input: string[], timeoutMs: number): Promise<number[][] | n
 }
 
 /** Embed already-prepared document texts. */
-export function embedDocuments(texts: string[]): Promise<number[][] | null> {
-  return embed(texts, DEFAULT_TIMEOUT_MS);
+export function embedDocuments(
+  texts: string[],
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<number[][] | null> {
+  return embed(texts, timeoutMs);
 }
 
 /** Embed a search query (instruction-prefixed, short timeout for the API path). */

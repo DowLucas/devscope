@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { Hono } from "hono";
-import { dbStubs } from "../../__test_helpers__/mockStubs";
+import { dbStubs, developerLinkStubs } from "../../__test_helpers__/mockStubs";
 
 const mockSearchTurns = mock(() => Promise.resolve([] as any[]));
 const mockSearchSessions = mock(() => Promise.resolve([] as any[] | null));
@@ -14,7 +14,11 @@ mock.module("../../db", () =>
   }),
 );
 
+const mockOwn = mock(() => Promise.resolve(["dev-a"] as string[]));
+mock.module("../../services/developerLink", () => developerLinkStubs({ getAllDeveloperIdsForUser: mockOwn }));
+
 let available = true;
+const mockEmbedDocs = mock(() => Promise.resolve([[0.5, 0.5]] as number[][] | null));
 const mockEmbedQuery = mock(() => Promise.resolve([0.1, 0.2] as number[] | null));
 
 mock.module("../../ai/embeddings", () => ({
@@ -22,7 +26,7 @@ mock.module("../../ai/embeddings", () => ({
   EMBEDDING_DIM: 1024,
   isEmbeddingAvailable: () => available,
   embedQuery: mockEmbedQuery,
-  embedDocuments: mock(() => Promise.resolve(null)),
+  embedDocuments: mockEmbedDocs,
   preparePromptText: (t: string) => t,
   prepareResponseText: (t: string) => t,
   contentHash: () => "h",
@@ -35,6 +39,7 @@ function buildApp(devIds: string[] = ["dev-a"]) {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("orgDeveloperIds" as never, devIds as never);
+    c.set("user" as never, { id: "user-1" } as never);
     await next();
   });
   app.route("/similar", similarRoutes({} as any));
@@ -147,5 +152,65 @@ describe("GET /similar/sessions/:id", () => {
     const body = await res.json();
     expect(body.indexed).toBe(true);
     expect(body.results[0]).toMatchObject({ sessionId: "s2", estimatedCostUsd: 1.25, turnCount: 4 });
+  });
+});
+
+
+describe("POST /similar/preflight", () => {
+  const post = (body: unknown, devIds?: string[]) =>
+    buildApp(devIds).request("/similar/preflight", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+  const hit = (over: Record<string, unknown> = {}) => ({
+    ...turnRow, prompt_at: "2026-09-12T10:00:00Z", response_tail: "Done, it deployed.", similarity: 0.94, ...over,
+  });
+  beforeEach(() => {
+    mockEmbedDocs.mockImplementation(() => Promise.resolve([[0.5, 0.5]]));
+    mockOwn.mockImplementation(() => Promise.resolve(["dev-a"]));
+    mockSearchTurns.mockImplementation(() => Promise.resolve([hit()]));
+  });
+
+  test("returns a note for a strong match from the user's own sessions", async () => {
+    const res = await post({ prompt: "deploy the android build to play", session_id: "cur" }, ["dev-a", "dev-b"]);
+    const body = await res.json();
+    expect(body.context).toContain("asked something very similar before");
+    expect(body.repeat_days).toBe(1);
+    const opts = (mockSearchTurns.mock.calls.at(-1) as any[])[1];
+    expect(opts.devIds).toEqual(["dev-a"]);            // own sessions only, not teammates
+    expect(opts.excludeSessionId).toBe("cur");
+    expect(Date.parse(opts.before)).toBeLessThan(Date.now() - 3_500_000);
+  });
+
+  test("short prompts never trigger", async () => {
+    mockSearchTurns.mockClear();
+    const body = await (await post({ prompt: "yes go on", session_id: "cur" })).json();
+    expect(body.context).toBeNull();
+    expect(mockSearchTurns).not.toHaveBeenCalled();
+  });
+
+  test("weak matches give no note", async () => {
+    mockSearchTurns.mockImplementation(() => Promise.resolve([hit({ similarity: 0.8 })]));
+    expect((await (await post({ prompt: "deploy the android build to play", session_id: "cur" })).json()).context).toBeNull();
+  });
+
+  test("no own developer ids in the org gives nothing", async () => {
+    mockOwn.mockImplementation(() => Promise.resolve(["someone-else"]));
+    expect((await (await post({ prompt: "deploy the android build to play", session_id: "cur" })).json()).context).toBeNull();
+  });
+
+  test("fails open when the embedder or search fails", async () => {
+    mockEmbedDocs.mockImplementation(() => Promise.resolve(null));
+    const a = await post({ prompt: "deploy the android build to play", session_id: "cur" });
+    expect(a.status).toBe(200);
+    expect((await a.json()).context).toBeNull();
+    mockEmbedDocs.mockImplementation(() => Promise.resolve([[0.5, 0.5]]));
+    mockSearchTurns.mockImplementation(() => Promise.reject(new Error("db down")));
+    const b = await post({ prompt: "deploy the android build to play", session_id: "cur" });
+    expect(b.status).toBe(200);
+    expect((await b.json()).context).toBeNull();
+  });
+
+  test("invalid body is rejected", async () => {
+    expect((await post({ session_id: "cur" })).status).toBe(400);
   });
 });
