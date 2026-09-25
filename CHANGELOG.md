@@ -22,6 +22,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     clusters, and what the AI chat assistant and team reports can quote (file paths,
     commands, error text).
   - Session API responses carry `visibility: "self" | "shared" | "activity"`.
+  - Existing opt-ins are reset (migration 049): the old toggle promised details were
+    never shared with teammates, so everyone opts in again under the new wording.
+  - The toggle applies to every developer identity you have linked (several emails or
+    machines), and shows "on" only when all of them share.
+  - Tokens and cost of shared sessions show on the session's own page only, never in
+    session lists or exports.
 - **Semantic search over past prompts and sessions.** Every prompt and Claude's
   response is embedded by a local model on the homelab (`qwen3-embedding:0.6b` via
   Ollama, nothing leaves the box), so you can find earlier work by meaning rather than

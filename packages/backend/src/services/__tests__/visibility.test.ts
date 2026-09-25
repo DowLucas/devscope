@@ -16,6 +16,7 @@ const {
   redactSessionRow,
   redactEvent,
   filterVisibleReports,
+  redactSessionListRow,
 } = await import("../visibility");
 
 const owner = "dev-owner";
@@ -194,5 +195,18 @@ describe("filterVisibleReports", () => {
     ];
     const visible = await filterVisibleReports(fakeSql, reports, [viewer]);
     expect(visible.map((r) => r.id)).toEqual(["weekly", "shared", "mine"]);
+  });
+});
+
+describe("redactSessionListRow", () => {
+  test("keeps the viewer's own usage", () => {
+    expect(redactSessionListRow(fullRow, "self").estimated_cost_usd).toBe(1.5);
+  });
+
+  test("drops tokens and cost from teammates' shared sessions in lists", () => {
+    const r = redactSessionListRow(fullRow, "shared");
+    expect(r.project_name).toBe("secret");
+    expect("estimated_cost_usd" in r).toBe(false);
+    expect("total_input_tokens" in r).toBe(false);
   });
 });

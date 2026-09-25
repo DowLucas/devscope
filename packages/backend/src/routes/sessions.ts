@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
 import { getActiveSessions, getActiveAgents, getAllSessions, getSessionDetail, getSessionTitleHistory } from "../db";
-import { getViewerDevIds, redactEvent, redactSessionRow, visibilityForRow } from "../services/visibility";
+import { getViewerDevIds, redactEvent, redactSessionListRow, redactSessionRow, visibilityForRow } from "../services/visibility";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
   if (!val) return def;
@@ -34,10 +34,14 @@ function mapSession(row: any) {
   };
 }
 
-/** Map a session row after redacting it for this viewer; carries `visibility`. */
-function mapSessionFor(row: any, viewerDevIds: string[]) {
+/**
+ * Map a session row after redacting it for this viewer; carries `visibility`.
+ * Lists also drop other people's tokens and cost.
+ */
+function mapSessionFor(row: any, viewerDevIds: string[], opts: { list: boolean }) {
   const visibility = visibilityForRow(row, viewerDevIds);
-  return { ...mapSession(redactSessionRow(row, visibility)), visibility };
+  const redact = opts.list ? redactSessionListRow : redactSessionRow;
+  return { ...mapSession(redact(row, visibility)), visibility };
 }
 
 export function sessionsRoutes(sql: SQL) {
@@ -48,14 +52,14 @@ export function sessionsRoutes(sql: SQL) {
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     const rows = await getAllSessions(sql, limit, devIds);
     const viewerDevIds = await getViewerDevIds(sql, c);
-    return c.json((rows as any[]).map((row) => mapSessionFor(row, viewerDevIds)));
+    return c.json((rows as any[]).map((row) => mapSessionFor(row, viewerDevIds, { list: true })));
   });
 
   app.get("/active", async (c) => {
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     const sessionsRaw = await getActiveSessions(sql, devIds);
     const viewerDevIds = await getViewerDevIds(sql, c);
-    const sessions = (sessionsRaw as any[]).map((row) => mapSessionFor(row, viewerDevIds));
+    const sessions = (sessionsRaw as any[]).map((row) => mapSessionFor(row, viewerDevIds, { list: true }));
     const agentsRaw = await getActiveAgents(sql);
     const agents = (agentsRaw as any[]).map((row) => ({
       agentId: row.agent_id,
@@ -96,7 +100,7 @@ export function sessionsRoutes(sql: SQL) {
     const visibility = visibilityForRow(detail.session, viewerDevIds);
 
     return c.json({
-      session: mapSessionFor(detail.session, viewerDevIds),
+      session: mapSessionFor(detail.session, viewerDevIds, { list: false }),
       visibility,
       isSelfView: visibility === "self",
       events: (detail.events as any[]).map((e) => redactEvent({

@@ -59,6 +59,23 @@ function pick(obj: Record<string, unknown>, keys: readonly string[]): Record<str
   return out;
 }
 
+// Per-session tokens and cost: only on a session's own page, never in lists
+// or exports of other people's sessions (no per-developer comparisons).
+const USAGE_SESSION_KEYS = [
+  "total_input_tokens", "total_output_tokens", "total_cache_creation_tokens",
+  "total_cache_read_tokens", "estimated_cost_usd", "peak_context_tokens",
+  "segment_peak_input", "segment_peak_output", "segment_peak_cache_creation", "segment_peak_cache_read",
+] as const;
+
+/** Redact a session row for a list or export: also drops usage unless it is the viewer's own. */
+export function redactSessionListRow(row: Record<string, unknown>, v: Visibility): Record<string, unknown> {
+  const redacted = redactSessionRow(row, v);
+  if (v === "self") return redacted;
+  const out = { ...redacted };
+  for (const k of USAGE_SESSION_KEYS) delete out[k];
+  return out;
+}
+
 /** Redact a snake_case session row from the DB. */
 export function redactSessionRow(row: Record<string, unknown>, v: Visibility): Record<string, unknown> {
   if (v !== "activity") return row;

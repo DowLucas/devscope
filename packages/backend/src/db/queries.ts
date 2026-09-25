@@ -1430,13 +1430,14 @@ export async function getTeamHealth(sql: SQL, developerIds?: string[]): Promise<
 
   // Sessions needing attention — high tool failure rates indicate tooling issues.
   // No developer names — this surfaces problem sessions, not problem people.
+  // Feeds org-wide reports, so only projects teammates may see are named.
   // No idle time tracking — thinking/reading/whiteboarding is not "stuck".
   let sessionsNeedingAttention;
   if (developerIds !== undefined) {
     sessionsNeedingAttention = await sql`
       SELECT
         s.id as session_id,
-        s.project_name,
+        CASE WHEN ${visibleSessionSql([])} THEN s.project_name END as project_name,
         ROUND(
           (SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC /
           GREATEST(SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END), 1)), 2
@@ -1455,7 +1456,7 @@ export async function getTeamHealth(sql: SQL, developerIds?: string[]): Promise<
     sessionsNeedingAttention = await sql`
       SELECT
         s.id as session_id,
-        s.project_name,
+        CASE WHEN ${visibleSessionSql([])} THEN s.project_name END as project_name,
         ROUND(
           (SUM(CASE WHEN e.event_type = 'tool.fail' THEN 1 ELSE 0 END)::NUMERIC /
           GREATEST(SUM(CASE WHEN e.event_type IN ('tool.complete', 'tool.fail') THEN 1 ELSE 0 END), 1)), 2
@@ -2244,14 +2245,32 @@ export async function getSessionVisibilityRows(sql: SQL, sessionIds: string[]) {
     WHERE s.id IN (${inList(sessionIds)})`;
 }
 
+/**
+ * Set "Share my sessions with my team" for every developer identity a user
+ * has linked. Turning it on records consent under the current wording
+ * (see migration 049).
+ */
 export async function updateDeveloperPrivacy(
   sql: SQL,
-  developerId: string,
+  developerIds: string[],
   shareDetails: boolean
 ) {
+  if (developerIds.length === 0) return;
   await sql`
-    UPDATE developers SET share_details = ${shareDetails}, share_details_updated_at = NOW()
-    WHERE id = ${developerId}`;
+    UPDATE developers SET
+      share_details = ${shareDetails},
+      share_details_updated_at = NOW(),
+      team_sharing_consented_at = CASE WHEN ${shareDetails} THEN NOW() ELSE team_sharing_consented_at END
+    WHERE id IN (${inList(developerIds)})`;
+}
+
+/** True only when every one of these developer identities shares with the team. */
+export async function getDevelopersSharing(sql: SQL, developerIds: string[]): Promise<boolean> {
+  if (developerIds.length === 0) return false;
+  const [row] = await sql`
+    SELECT BOOL_AND(share_details) AS sharing FROM developers
+    WHERE id IN (${inList(developerIds)})` as any[];
+  return row?.sharing === true;
 }
 
 export async function createDataRequest(

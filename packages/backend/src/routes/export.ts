@@ -4,7 +4,7 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { getExportData, getDigests, generateDigest } from "../db";
 import { gateSelfDeveloperId } from "../middleware/selfDeveloperGate";
-import { getViewerDevIds, redactSessionRow, visibilityForRow } from "../services/visibility";
+import { getViewerDevIds, redactSessionListRow, visibilityForRow } from "../services/visibility";
 
 const digestGenerateSchema = z.object({
   period_start: z.string().min(1).max(50),
@@ -55,7 +55,7 @@ export function exportRoutes(sql: SQL) {
     const viewerDevIds = await getViewerDevIds(sql, c);
     return {
       data: (data as Record<string, unknown>[]).map((row) => {
-        const { owner_share_details: _consent, ...redacted } = redactSessionRow(row, visibilityForRow(row, viewerDevIds));
+        const { owner_share_details: _consent, ...redacted } = redactSessionListRow(row, visibilityForRow(row, viewerDevIds));
         return redacted;
       }),
     };

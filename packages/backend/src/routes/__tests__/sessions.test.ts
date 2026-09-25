@@ -484,6 +484,21 @@ describe("GET /sessions list visibility", () => {
       ["shared", "shared", "my-project"],
     ]);
   });
+
+  test("lists never carry other people's tokens or cost, even when shared", async () => {
+    mockGetAllSessions.mockImplementation(() => Promise.resolve([
+      makeSessionRow({ id: "mine", developer_id: "dev-bbb", estimated_cost_usd: 2, total_input_tokens: 10 }),
+      makeSessionRow({ id: "shared", developer_id: "dev-ccc", owner_share_details: true, estimated_cost_usd: 3, total_input_tokens: 20 }),
+    ]));
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-bbb"]));
+
+    const body = await (await buildApp({ user: { id: "user-2" } }).request("/sessions")).json();
+
+    expect(body.map((s: any) => [s.id, s.estimatedCostUsd, s.totalInputTokens])).toEqual([
+      ["mine", 2, 10],
+      ["shared", 0, 0],
+    ]);
+  });
 });
 
 // ---------------------------------------------------------------------------
