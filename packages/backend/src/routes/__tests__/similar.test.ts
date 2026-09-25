@@ -7,6 +7,7 @@ const mockSearchSessions = mock(() => Promise.resolve([] as any[] | null));
 const mockInOrg = mock(() => Promise.resolve(true));
 const mockSearchErrors = mock(() => Promise.resolve([] as any[]));
 const mockChains = mock(() => Promise.resolve([] as any[]));
+const mockSharing = mock(() => Promise.resolve([] as string[]));
 
 mock.module("../../db", () =>
   dbStubs({
@@ -15,6 +16,7 @@ mock.module("../../db", () =>
     isSessionInOrg: mockInOrg,
     searchSimilarErrors: mockSearchErrors,
     getSkillChains: mockChains,
+    getSharingDeveloperIds: mockSharing,
   }),
 );
 
@@ -74,11 +76,13 @@ beforeEach(() => {
   mockEmbedQuery.mockClear();
   mockEmbedQuery.mockImplementation(() => Promise.resolve([0.1, 0.2]));
   mockInOrg.mockImplementation(() => Promise.resolve(true));
+  mockSharing.mockImplementation(() => Promise.resolve([]));
 });
 
 describe("GET /similar/prompts", () => {
   test("embeds the query and returns org-scoped, attribution-free results", async () => {
     mockSearchTurns.mockImplementation(() => Promise.resolve([turnRow]));
+    mockSharing.mockImplementation(() => Promise.resolve(["dev-b"]));
     const res = await buildApp(["dev-a", "dev-b"]).request("/similar/prompts?q=auth%20test&limit=5");
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -93,6 +97,12 @@ describe("GET /similar/prompts", () => {
     expect(JSON.stringify(body)).not.toContain("developer");
     const call = (mockSearchTurns.mock.calls[0] as any[])[1];
     expect(call).toMatchObject({ devIds: ["dev-a", "dev-b"], kind: "prompt", limit: 5, vector: "[0.1,0.2]" });
+  });
+
+  test("searches only the caller and teammates who opted in to sharing", async () => {
+    const res = await buildApp(["dev-a", "dev-b", "dev-c"]).request("/similar/prompts?q=auth");
+    expect(res.status).toBe(200);
+    expect((mockSearchTurns.mock.calls.at(-1) as any[])[1].devIds).toEqual(["dev-a"]);
   });
 
   test.each([

@@ -1,6 +1,6 @@
 import { describe, expect, test, mock, beforeEach } from "bun:test";
 import { Hono } from "hono";
-import { dbStubs, wsHandlerStubs, developerLinkStubs, stripSensitiveFieldsStubs } from "../../__test_helpers__/mockStubs";
+import { dbStubs, wsHandlerStubs, developerLinkStubs } from "../../__test_helpers__/mockStubs";
 
 // ---------------------------------------------------------------------------
 // Mocks -- must be set up BEFORE importing the module under test
@@ -32,18 +32,6 @@ const mockAutoLinkDeveloperToOrg = mock(() => Promise.resolve());
 
 mock.module("../../services/developerLink", () => developerLinkStubs({
   autoLinkDeveloperToOrg: mockAutoLinkDeveloperToOrg,
-}));
-
-const mockStripSensitivePayload = mock((payload: Record<string, unknown>) => {
-  const stripped = { ...payload };
-  delete stripped.promptText;
-  delete stripped.toolInput;
-  delete stripped.responseText;
-  return stripped;
-});
-
-mock.module("../../utils/stripSensitiveFields", () => stripSensitiveFieldsStubs({
-  stripSensitivePayload: mockStripSensitivePayload,
 }));
 
 mock.module("../../services/frictionDetector", () => ({
@@ -204,16 +192,6 @@ describe("POST /events", () => {
     mockBroadcastToOrg.mockReset();
     mockAutoLinkDeveloperToOrg.mockReset();
     mockAutoLinkDeveloperToOrg.mockImplementation(() => Promise.resolve());
-    mockStripSensitivePayload.mockReset();
-    mockStripSensitivePayload.mockImplementation(
-      (payload: Record<string, unknown>) => {
-        const stripped = { ...payload };
-        delete stripped.promptText;
-        delete stripped.toolInput;
-        delete stripped.responseText;
-        return stripped;
-      },
-    );
   });
 
   // -----------------------------------------------------------------------
@@ -873,26 +851,42 @@ describe("POST /events", () => {
     expect(sessionUpdate.data.status).toBe("ended");
   });
 
-  test("strips sensitive payload from event.new broadcast", async () => {
-    const sql = makeMockSql(
-      [{ status: "active" }],
-      [{ organization_id: "org-1" }],
-    );
+  async function broadcastPrompt(ownerRow: Record<string, unknown>) {
+    mockBroadcastToOrg.mockClear();
+    const sql = makeMockSql([{ status: "active", ...ownerRow }], [{ organization_id: "org-1" }]);
     const app = buildApp(sql);
-
     await app.request("/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
         validEvent({
           eventType: "prompt.submit",
-          payload: { promptText: "secret", promptLength: 6 },
+          payload: { promptText: "secret", promptLength: 6, transcriptPath: "/home/a/t.jsonl" },
         }),
       ),
     });
+    return mockBroadcastToOrg.mock.calls
+      .map((c: any) => c[1])
+      .find((m: any) => m.type === "event.new");
+  }
 
-    // stripSensitivePayload should have been called
-    expect(mockStripSensitivePayload).toHaveBeenCalled();
+  test("event.new broadcast is activity-only when the owner has not opted in", async () => {
+    const msg = await broadcastPrompt({ share_details: false, privacy_mode: "standard" });
+    expect(msg.data.payload).toEqual({});
+    expect(msg.data.projectName).toBeNull();
+    expect(msg.data.projectPath).toBeNull();
+    expect(msg.data.eventType).toBe("prompt.submit");
+  });
+
+  test("event.new broadcast carries content when the owner opted in", async () => {
+    const msg = await broadcastPrompt({ share_details: true, privacy_mode: "standard" });
+    expect(msg.data.payload).toEqual({ promptText: "secret", promptLength: 6 });
+    expect(msg.data.projectName).not.toBeNull();
+  });
+
+  test("event.new broadcast is activity-only for private sessions even when opted in", async () => {
+    const msg = await broadcastPrompt({ share_details: true, privacy_mode: "private" });
+    expect(msg.data.payload).toEqual({});
   });
 
   // -----------------------------------------------------------------------
@@ -1202,16 +1196,6 @@ describe("GET /events/recent", () => {
   beforeEach(() => {
     mockGetRecentEvents.mockReset();
     mockGetRecentEvents.mockImplementation(() => Promise.resolve([]));
-    mockStripSensitivePayload.mockReset();
-    mockStripSensitivePayload.mockImplementation(
-      (payload: Record<string, unknown>) => {
-        const stripped = { ...payload };
-        delete stripped.promptText;
-        delete stripped.toolInput;
-        delete stripped.responseText;
-        return stripped;
-      },
-    );
   });
 
   test("returns mapped events with camelCase fields", async () => {
@@ -1225,6 +1209,7 @@ describe("GET /events/recent", () => {
         developer_email: "alice@example.com",
         project_path: "/home/user/project",
         project_name: "my-project",
+        owner_share_details: true,
         event_type: "session.start",
         payload: {},
       },
@@ -1303,7 +1288,7 @@ describe("GET /events/recent", () => {
     expect(body).toEqual([]);
   });
 
-  test("strips sensitive payload from returned events", async () => {
+  test("returns activity-only events for owners who have not opted in", async () => {
     const dbRows = [
       {
         id: "evt-1",
@@ -1327,9 +1312,32 @@ describe("GET /events/recent", () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    // stripSensitivePayload removes promptText
-    expect(body[0].payload).toEqual({ promptLength: 6 });
-    expect(body[0].payload.promptText).toBeUndefined();
+    expect(body[0].payload).toEqual({});
+    expect(body[0].projectName).toBeNull();
+    expect(body[0].developerName).toBe("Alice");
+  });
+
+  test("returns full events for owners who opted in", async () => {
+    mockGetRecentEvents.mockImplementation(() => Promise.resolve([{
+      id: "evt-1",
+      created_at: "2026-03-03T12:00:00Z",
+      session_id: "sess-1",
+      developer_id: "dev-aaa",
+      developer_name: "Alice",
+      developer_email: "alice@example.com",
+      project_path: "/home/user/project",
+      project_name: "my-project",
+      privacy_mode: "standard",
+      owner_share_details: true,
+      event_type: "prompt.submit",
+      payload: { promptText: "shared", promptLength: 6 },
+    }]));
+
+    const res = await buildApp(makeMockSql()).request("/recent");
+    const body = await res.json();
+
+    expect(body[0].payload).toEqual({ promptText: "shared", promptLength: 6 });
+    expect(body[0].projectName).toBe("my-project");
   });
 
   test("parses string payload from DB row", async () => {
@@ -1343,6 +1351,7 @@ describe("GET /events/recent", () => {
         developer_email: "bob@example.com",
         project_path: "/home/bob/project",
         project_name: "other-project",
+        owner_share_details: true,
         event_type: "tool.complete",
         payload: JSON.stringify({ toolName: "Bash", duration: 1200 }),
       },
@@ -1370,6 +1379,7 @@ describe("GET /events/recent", () => {
         developer_email: null,
         project_path: null,
         project_name: "orphan-project",
+        owner_share_details: true,
         event_type: "notification",
         payload: {},
       },

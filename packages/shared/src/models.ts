@@ -8,11 +8,18 @@ export interface Developer {
   lastSeen: string;
 }
 
+/**
+ * What the viewer may see of a session: their own (self), a teammate's who
+ * opted in to sharing (shared), or only that it happened (activity — project,
+ * title, content and tokens are null/empty).
+ */
+export type SessionVisibility = "self" | "shared" | "activity";
+
 export interface Session {
   id: string;
   developerId: string;
-  projectPath: string;
-  projectName: string;
+  projectPath: string | null;
+  projectName: string | null;
   startedAt: string;
   endedAt: string | null;
   status: "active" | "ended";
@@ -24,6 +31,7 @@ export interface Session {
   totalCacheCreationTokens?: number;
   totalCacheReadTokens?: number;
   estimatedCostUsd?: number;
+  visibility?: SessionVisibility;
 }
 
 export type WsMessageType =
@@ -50,8 +58,9 @@ export interface SessionDetail {
     developerId: string;
     developerName: string;
     developerEmail: string;
-    projectPath: string;
-    projectName: string;
+    projectPath: string | null;
+    projectName: string | null;
+    currentTitle?: string | null;
     startedAt: string;
     endedAt: string | null;
     status: string;
@@ -70,6 +79,8 @@ export interface SessionDetail {
     payload: Record<string, unknown>;
     created_at: string;
   }>;
+  visibility: SessionVisibility;
+  isSelfView: boolean;
 }
 
 export interface ToolCallEntry {

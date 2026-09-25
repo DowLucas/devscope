@@ -39,7 +39,6 @@ import {
   dbStubs,
   wsHandlerStubs,
   developerLinkStubs,
-  stripSensitiveFieldsStubs,
 } from "../../__test_helpers__/mockStubs";
 
 // ---------------------------------------------------------------------------
@@ -79,10 +78,6 @@ mock.module("../../services/developerLink", () =>
     autoLinkDeveloperToOrg: mockAutoLinkDeveloperToOrg,
     autoLinkUserToDeveloper: mockAutoLinkUserToDeveloper,
   }),
-);
-
-mock.module("../../utils/stripSensitiveFields", () =>
-  stripSensitiveFieldsStubs(),
 );
 
 mock.module("../../services/frictionDetector", () => ({

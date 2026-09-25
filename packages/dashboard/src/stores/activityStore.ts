@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { DevscopeEvent, Developer, Session, AlertEvent, FrictionAlert } from "@devscope/shared";
+import type { FeedEvent, Developer, Session, AlertEvent, FrictionAlert } from "@devscope/shared";
 
 export interface ActiveAgent {
   agentId: string;
@@ -15,7 +15,7 @@ export interface StoppedAgent extends ActiveAgent {
 const MAX_STOPPED_AGENTS = 100;
 
 export interface ActivityState {
-  events: DevscopeEvent[];
+  events: FeedEvent[];
   developers: (Developer & { activeSessions?: number })[];
   activeSessions: Session[];
   activeAgents: ActiveAgent[];
@@ -26,7 +26,7 @@ export interface ActivityState {
   alerts: AlertEvent[];
   frictionAlerts: FrictionAlert[];
 
-  addEvent: (event: DevscopeEvent) => void;
+  addEvent: (event: FeedEvent) => void;
   setDevelopers: (devs: Developer[]) => void;
   setActiveSessions: (sessions: Session[]) => void;
   setActiveAgents: (agents: ActiveAgent[]) => void;
@@ -34,7 +34,7 @@ export interface ActivityState {
   removeActiveAgent: (agentId: string) => void;
   setConnected: (connected: boolean) => void;
   bumpFetchGeneration: () => void;
-  setEvents: (events: DevscopeEvent[]) => void;
+  setEvents: (events: FeedEvent[]) => void;
   updateSession: (sessionId: string, status: string) => void;
   updateSessionTitle: (sessionId: string, title: string) => void;
   addAlert: (alert: AlertEvent) => void;

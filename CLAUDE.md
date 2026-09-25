@@ -203,7 +203,15 @@ DevScope exists to improve **team workflow and tooling** — not to monitor, ran
 - **AI guardrails**: LLM prompts must explicitly instruct against including individual developer names, rankings, or performance comparisons in generated insights and reports.
 - **Consent-first**: Developers opt in via plugin installation. Privacy mode (`DEVSCOPE_PRIVACY=standard`) is the default. Data collection should be minimal and transparent.
 
-**Semantic retrieval exception:** `/api/similar/*` returns prompt and response text from every non-private session in the org, including teammates'. This is a deliberate decision (team knowledge reuse: "what worked last time"), and a documented exception to `stripSensitivePayload`. Results carry session, project and outcome only, never developer identity. `private` sessions are never indexed.
+**Team visibility (`developers.share_details`):** what a viewer sees of a session is decided in one place, `services/visibility.ts` (`resolveVisibility`, `redactSessionRow`, `redactEvent`):
+
+- `self` — the viewer owns the session: everything.
+- `shared` — the owner turned on "Share my sessions with my team" and the session is not plugin-`private`: everything the owner sees (projects, titles, prompts, tool inputs/results, responses, AI debriefs, tokens/cost), minus the local `transcriptPath`.
+- `activity` — anything else (the default): name, status, event count and timing only. Session rows go through an allowlist, event payloads are emptied, project/title are null.
+
+It is evaluated at read time with the owner's current setting, so turning sharing off hides history immediately. Every route or broadcast that returns data about another developer's session must go through these helpers; the org-wide WebSocket feed and `session.title.update` / `ai.report.completed` broadcasts use `teammateVisibility`. Aggregates that name projects pool sessions the viewer may not see under a `NULL` project ("Private projects") via `visibleSessionSql`. Tokens and cost may show on a shared session's own page but never in lists, leaderboards or rankings.
+
+**Semantic retrieval:** `/api/similar/prompts` and `/api/similar/sessions/:id` search the caller's own sessions plus those of teammates who opted in (`getSearchableDevIds`). Results carry session, project and outcome only, never developer identity. `private` sessions are never indexed.
 
 When in doubt, ask: "Does this feature help the team improve their tools and workflow, or does it enable monitoring individuals?" Only build the former.
 

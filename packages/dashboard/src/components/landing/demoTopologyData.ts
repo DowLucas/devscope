@@ -1,7 +1,7 @@
 import dagre from "@dagrejs/dagre";
 import type { Node, Edge } from "@xyflow/react";
 import type { DeveloperNodeData, SessionNodeData, AgentNodeData, SessionActivityState } from "../flow/flowTypes";
-import type { Developer, Session, DevscopeEvent, ToolEventPayload, PromptEventPayload } from "@devscope/shared";
+import type { Developer, Session, FeedEvent, ToolEventPayload, PromptEventPayload } from "@devscope/shared";
 import type { Persona } from "./PersonaContext";
 
 const NODE_WIDTH_DEVELOPER = 200;
@@ -59,17 +59,17 @@ function makeEvent(
   sessionId: string,
   developerId: string,
   developerName: string,
-  projectName: string,
-  eventType: DevscopeEvent["eventType"],
-  payload: DevscopeEvent["payload"],
-): DevscopeEvent {
+  projectName: string | null,
+  eventType: FeedEvent["eventType"],
+  payload: FeedEvent["payload"],
+): FeedEvent {
   return {
     id: `demo-${++eventCounter}`,
     timestamp: new Date().toISOString(),
     sessionId,
     developerId,
     developerName,
-    projectPath: `/app/${projectName}`,
+    projectPath: projectName && `/app/${projectName}`,
     projectName,
     eventType,
     payload,
@@ -113,7 +113,7 @@ type SimPhase = "idle" | "prompt" | "tool_start" | "tool_complete" | "thinking";
 interface SessionSimState {
   phase: SimPhase;
   toolName: string | null;
-  event: DevscopeEvent | null;
+  event: FeedEvent | null;
 }
 
 // --- Build layout (runs once) ---

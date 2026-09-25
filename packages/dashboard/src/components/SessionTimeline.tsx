@@ -5,11 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { ExportButton } from "@/components/ui/export-button";
 import { parseUTC } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
+import { ProjectLabel } from "@/components/ProjectLabel";
 
 interface SessionRow {
   id: string;
   developerName: string;
-  projectName: string;
+  projectName: string | null;
   startedAt: string;
   endedAt: string | null;
   status: string;
@@ -76,9 +77,7 @@ export function SessionTimeline() {
                       {session.developerName}
                     </span>
                     <span className="text-muted-foreground mx-2">in</span>
-                    <span className="font-mono text-sm text-muted-foreground">
-                      {session.projectName}
-                    </span>
+                    <ProjectLabel name={session.projectName} className="font-mono text-sm text-muted-foreground" />
                   </div>
                   <div className="flex items-center gap-3 text-sm">
                     <span className="text-muted-foreground">

@@ -58,6 +58,8 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     getProjectContributors: noopArr,
     getProjectToolUsage: noopArr,
     getProjectActivityOverTime: noopArr,
+    getSharingDeveloperIds: noopArr,
+    getSessionVisibilityRows: noopArr,
     generateDigest: noop,
     getDigests: noopArr,
     getExportData: noop,
@@ -138,29 +140,6 @@ export function wsHandlerStubs(overrides: Record<string, unknown> = {}) {
     broadcastToOrg: mock(() => {}),
     broadcast: mock(() => {}),
     getClientCount: mock(() => 0),
-    ...overrides,
-  };
-}
-
-/** All exports from `../../utils/stripSensitiveFields`. */
-export function stripSensitiveFieldsStubs(overrides: Record<string, unknown> = {}) {
-  return {
-    stripSensitivePayload: mock((payload: Record<string, unknown>) => {
-      const stripped = { ...payload };
-      delete stripped.promptText;
-      delete stripped.toolInput;
-      delete stripped.responseText;
-      return stripped;
-    }),
-    stripSensitiveEvent: mock((event: Record<string, unknown>) => {
-      if (!event.payload || typeof event.payload !== "object") return event;
-      const payload = event.payload as Record<string, unknown>;
-      const stripped = { ...payload };
-      delete stripped.promptText;
-      delete stripped.toolInput;
-      delete stripped.responseText;
-      return { ...event, payload: stripped };
-    }),
     ...overrides,
   };
 }

@@ -18,7 +18,7 @@ import {
 } from "../db";
 import { broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg, autoLinkUserToDeveloper, computeDeveloperId } from "../services/developerLink";
-import { stripSensitivePayload } from "../utils/stripSensitiveFields";
+import { getViewerDevIds, redactEvent, teammateVisibility, visibilityForRow } from "../services/visibility";
 import { logEthicsEvent } from "../utils/ethicsAudit";
 import { evaluateFriction, cleanupFrictionSession } from "../services/frictionDetector";
 import { CURRENT_SALT_VERSION, deriveOrgSalt } from "../utils/orgSalt";
@@ -120,14 +120,16 @@ export function eventsRoutes(sql: SQL) {
       broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
     }
 
-    // Broadcast the event (strip sensitive fields for team-visible WebSocket feed)
-    const rawPayload = event.payload as Record<string, unknown>;
+    // The WebSocket feed goes to the whole org, so it carries what a teammate
+    // may see. The owner's own views refetch full detail over REST.
+    const [owner] = await sql`
+      SELECT d.share_details, s.privacy_mode
+      FROM developers d LEFT JOIN sessions s ON s.id = ${event.sessionId}
+      WHERE d.id = ${event.developerId}` as any[];
+    const visibility = teammateVisibility(owner?.share_details, owner?.privacy_mode);
     broadcastToDevOrgs({
       type: "event.new",
-      data: {
-        ...event,
-        payload: stripSensitivePayload(rawPayload),
-      },
+      data: redactEvent(event as unknown as Record<string, unknown>, visibility) as any,
     });
 
     // Increment compaction count on compact.complete, track peak context usage, and finalize token segment
@@ -489,23 +491,19 @@ export function eventsRoutes(sql: SQL) {
     const limit = clampInt(c.req.query("limit"), 50, 500);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     const rows = await getRecentEvents(sql, limit, devIds);
-    // Strip opt-in sensitive fields from the team-visible recent events feed.
-    // Prompt text and tool inputs are only visible in the self-view session detail.
-    const events = (rows as any[]).map((row: any) => {
-      const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
-      return {
-        id: row.id,
-        timestamp: row.created_at,
-        sessionId: row.session_id,
-        developerId: row.developer_id ?? "",
-        developerName: row.developer_name,
-        developerEmail: row.developer_email,
-        projectPath: row.project_path ?? "",
-        projectName: row.project_name,
-        eventType: row.event_type,
-        payload: stripSensitivePayload(payload),
-      };
-    });
+    const viewerDevIds = await getViewerDevIds(sql, c);
+    const events = (rows as any[]).map((row: any) => redactEvent({
+      id: row.id,
+      timestamp: row.created_at,
+      sessionId: row.session_id,
+      developerId: row.developer_id ?? "",
+      developerName: row.developer_name,
+      developerEmail: row.developer_email,
+      projectPath: row.project_path ?? "",
+      projectName: row.project_name,
+      eventType: row.event_type,
+      payload: typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload,
+    }, visibilityForRow(row, viewerDevIds)));
     return c.json(events);
   });
 

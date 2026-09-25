@@ -11,7 +11,7 @@ export function PrivacyPage() {
         <div className="max-w-3xl mx-auto px-4 py-16">
           <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
           <p className="text-sm text-muted-foreground mb-8">
-            Last updated: March 4, 2026
+            Last updated: September 25, 2026
           </p>
 
           <div className="prose prose-sm prose-invert max-w-none space-y-6 text-muted-foreground [&_h2]:text-foreground [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-8 [&_h2]:mb-3 [&_strong]:text-foreground">
@@ -101,16 +101,33 @@ export function PrivacyPage() {
             </p>
 
             <p className="font-medium text-foreground mt-4">
-              Opt-in: Dashboard "Share session details" toggle
+              Opt-in: Dashboard "Share my sessions with my team" toggle
             </p>
             <p>
-              In Settings → Data Sharing, you can enable a toggle that controls
-              whether detailed content (prompt text, tool inputs, response text) is
-              retained in your personal session views. This data is{" "}
-              <strong>never</strong> visible to other team members regardless of
-              this setting — it is only accessible to you in your own session views.
-              Both the plugin <code>open</code> mode and this toggle must be enabled
-              for detailed content to be stored.
+              In Settings → Data Sharing, you decide what the other members of
+              your organization can see about your sessions. The toggle controls
+              who can <em>see</em> your data, not what the plugin sends — that is
+              set by the plugin privacy mode above.
+            </p>
+            <ul className="list-disc pl-6 space-y-1">
+              <li>
+                <strong>Off (default)</strong> — teammates only see that you are
+                active: your name, session status, session count and timing. They
+                do not see your projects, session titles, prompt text, tool inputs,
+                responses, AI summaries or token usage.
+              </li>
+              <li>
+                <strong>On</strong> — teammates can see everything you see about
+                your sessions, including past sessions: projects, session titles,
+                prompt text, tool inputs and results, responses, AI debriefs and
+                token usage. Your prompts can also appear in your team's similar-prompt
+                search. Sessions run in plugin <code>private</code> mode stay hidden
+                either way.
+              </li>
+            </ul>
+            <p>
+              You always see all of your own data. Turning the toggle off hides
+              your sessions from teammates again immediately, including past ones.
             </p>
 
             <h2>3. How We Use Your Data</h2>
@@ -135,23 +152,24 @@ export function PrivacyPage() {
               </li>
               <li>
                 <strong>Consent</strong> — for the plugin's{" "}
-                <code>DEVSCOPE_PRIVACY=open</code> mode and the dashboard
-                "Share session details" toggle. Both are opt-in. You can
-                withdraw consent at any time by switching back to{" "}
-                <code>standard</code> or <code>private</code> mode, or
-                disabling the toggle in Settings.
+                <code>DEVSCOPE_PRIVACY=open</code> mode and for sharing your
+                sessions with your team through the dashboard "Share my sessions
+                with my team" toggle. Both are opt-in. You can withdraw consent at
+                any time by switching back to <code>standard</code> or{" "}
+                <code>private</code> mode, or by turning the toggle off in
+                Settings, which hides your sessions from teammates immediately.
               </li>
             </ul>
 
             <h2>5. Data Sharing</h2>
             <p>
-              We do not sell your personal data. Data visible to your organization
-              is <strong>limited to aggregate metadata only</strong> — event types,
-              tool names, session timing, and activity counts. Prompt text, tool
-              inputs, and response text are <strong>never</strong> visible to other
-              team members, even when you opt in to storing them. When you opt in,
-              that detailed content is visible only to you in your personal session
-              views.
+              We do not sell your personal data. Unless you turn on "Share my
+              sessions with my team", other members of your organization only see
+              that you are active (name, session status, count and timing) and
+              anonymous team totals in which your projects are grouped as "Private
+              projects". Your projects, session titles, prompt text, tool inputs,
+              responses and token usage become visible to them only if you turn
+              the toggle on, and are hidden again as soon as you turn it off.
             </p>
             <p>We may share data with:</p>
             <ul className="list-disc pl-6 space-y-1">

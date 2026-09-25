@@ -4,7 +4,7 @@ import dagre from "@dagrejs/dagre";
 import type { Node, Edge } from "@xyflow/react";
 import { useActivityStore, type ActiveAgent } from "../../stores/activityStore";
 import type { DeveloperNodeData, SessionNodeData, AgentNodeData, SessionActivityState } from "./flowTypes";
-import type { DevscopeEvent, ToolEventPayload, AgentEventPayload } from "@devscope/shared";
+import type { FeedEvent, ToolEventPayload, AgentEventPayload } from "@devscope/shared";
 
 const NODE_WIDTH_DEVELOPER = 200;
 const NODE_HEIGHT_DEVELOPER = 90;
@@ -63,11 +63,11 @@ function getLayoutedElements(
  * to temporal correlation based on agent start times.
  */
 function attributeEventsToAgents(
-  sessionEvents: DevscopeEvent[],
+  sessionEvents: FeedEvent[],
   sessionAgents: ActiveAgent[],
-  allEvents: DevscopeEvent[],
-): { sessionEvents: DevscopeEvent[]; agentEvents: Map<string, DevscopeEvent[]> } {
-  const agentEvents = new Map<string, DevscopeEvent[]>();
+  allEvents: FeedEvent[],
+): { sessionEvents: FeedEvent[]; agentEvents: Map<string, FeedEvent[]> } {
+  const agentEvents = new Map<string, FeedEvent[]>();
   for (const agent of sessionAgents) {
     agentEvents.set(agent.agentId, []);
   }
@@ -90,7 +90,7 @@ function attributeEventsToAgents(
     };
   });
 
-  const remaining: DevscopeEvent[] = [];
+  const remaining: FeedEvent[] = [];
 
   for (const event of sessionEvents) {
     // Only attribute tool events to agents
@@ -132,7 +132,7 @@ function attributeEventsToAgents(
 
 function deriveSessionState(
   session: { status: string },
-  latestEvent: DevscopeEvent | null,
+  latestEvent: FeedEvent | null,
 ): SessionActivityState {
   if (session.status === "ended") return "ended";
   if (!latestEvent) return "idle";

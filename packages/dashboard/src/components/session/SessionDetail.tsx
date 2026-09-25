@@ -6,10 +6,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SessionTurnCard } from "./SessionTurnCard";
 import { SessionFeedbackPanel } from "./SessionFeedbackPanel";
 import { buildTurns } from "@/lib/buildTurns";
-import type { SessionDetail as SessionDetailType, SessionTitle } from "@devscope/shared";
+import type { SessionDetail as SessionDetailType, SessionTitle, SessionVisibility } from "@devscope/shared";
 import type { SessionTurn } from "@devscope/shared";
 import { parseUTC, formatTokenCount, formatCost } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
+import { ProjectLabel } from "@/components/ProjectLabel";
 
 interface SessionDetailProps {
   sessionId: string;
@@ -19,7 +20,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   const [data, setData] = useState<SessionDetailType | null>(null);
   const [turns, setTurns] = useState<SessionTurn[]>([]);
   const [titles, setTitles] = useState<SessionTitle[]>([]);
-  const [isSelfView, setIsSelfView] = useState(false);
+  const [visibility, setVisibility] = useState<SessionVisibility>("activity");
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
   const loading = loadedSessionId !== sessionId;
   const [now, setNow] = useState(() => Date.now());
@@ -28,10 +29,10 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
     const currentId = sessionId;
     apiFetch(`/api/sessions/${sessionId}`)
       .then((r) => r.json())
-      .then((d: SessionDetailType & { isSelfView?: boolean }) => {
+      .then((d: SessionDetailType) => {
         setData(d);
         setTurns(buildTurns(d.events));
-        setIsSelfView(d.isSelfView ?? false);
+        setVisibility(d.visibility ?? "activity");
         setLoadedSessionId(currentId);
       })
       .catch(() => setLoadedSessionId(currentId));
@@ -74,6 +75,10 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   const totalTools = turns.reduce((sum, t) => sum + t.toolCalls.length, 0);
   const totalFails = turns.reduce((sum, t) => sum + t.toolCalls.filter((tc) => tc.success === false).length, 0);
 
+  const isSelfView = visibility === "self";
+  // Owner, or a teammate the owner opted in to sharing with.
+  const showDetails = visibility !== "activity";
+
   const sessionTokens = (session.totalInputTokens ?? 0) + (session.totalOutputTokens ?? 0);
   const sessionCost = session.estimatedCostUsd ?? 0;
 
@@ -94,7 +99,9 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h2 className="text-lg font-semibold">{session.projectName}</h2>
+                <h2 className="text-lg font-semibold">
+                  <ProjectLabel name={session.projectName} fallback="Private session" />
+                </h2>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <User className="h-3.5 w-3.5" />
                   {session.developerName}
@@ -121,6 +128,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                 <span>{durationMin}m</span>
               </div>
+              {showDetails && (<>
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
                 <span>{turns.length} turns</span>
@@ -133,25 +141,24 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
                 {totalFails > 0 && <span>{totalFails} failures</span>}
               </div>
               {/*
-                Mission constraint (DEV-98): per-session token totals and cost
-                are self-view only. Org viewers can load another teammate's
-                session card to see project/duration/tool counts (team workflow
-                visibility), but token + cost figures stay private to the
-                session owner — they are an individual productivity proxy and
-                belong on aggregate-only surfaces (TokenUsageCards) instead.
+                Mission constraint (DEV-98): per-session tokens and cost show
+                only to the owner and to teammates the owner opted in to
+                sharing with (developers.share_details). They never appear in
+                lists or rankings — aggregate surfaces (TokenUsageCards) only.
               */}
-              {isSelfView && sessionTokens > 0 && (
+              {sessionTokens > 0 && (
                 <div className="flex items-center gap-2">
                   <Zap className="h-3.5 w-3.5 text-muted-foreground" />
                   <span>{formatTokenCount(sessionTokens)} tokens</span>
                 </div>
               )}
-              {isSelfView && sessionCost > 0 && (
+              {sessionCost > 0 && (
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
                   <span>{formatCost(sessionCost)}</span>
                 </div>
               )}
+              </>)}
             </div>
 
             <p className="text-xs text-muted-foreground mt-2">
@@ -183,13 +190,21 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
         </Card>
       )}
 
-      {titles.length === 0 && data && data.session?.status === "active" && (
+      {!showDetails && (
+        <div className="flex items-center gap-2 rounded-lg bg-muted/30 border border-border px-3 py-2 text-sm text-muted-foreground">
+          <Lock className="h-4 w-4 shrink-0" />
+          {session.developerName} hasn't enabled sharing with the team, so you can see
+          that this session happened but not what it was about.
+        </div>
+      )}
+
+      {showDetails && titles.length === 0 && session.status === "active" && (
         <div className="flex items-center gap-2 rounded-lg bg-muted/30 border border-border px-3 py-2 text-xs text-muted-foreground">
           Session title generating...
         </div>
       )}
 
-      {(session.status === "ended" || durationMin >= 5) && (
+      {showDetails && (session.status === "ended" || durationMin >= 5) && (
         <Card>
           <CardContent className="p-4">
             <SessionFeedbackPanel
@@ -201,25 +216,19 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
         </Card>
       )}
 
-      <div className="space-y-3">
+      {showDetails && <div className="space-y-3">
         <h3 className="text-sm font-medium text-muted-foreground">
           Conversation ({turns.length} turns)
         </h3>
-        {!isSelfView && turns.length > 0 && (
-          <div className="rounded-lg bg-muted/30 border border-border px-3 py-2 text-xs text-muted-foreground">
-            Prompt text and tool inputs are only visible to the session owner.
-            Developers can opt in to detailed sharing via DEVSCOPE_SHARE_DETAILS.
-          </div>
-        )}
         {[...turns].reverse().map((turn, i) => (
-          <SessionTurnCard key={i} turn={turn} index={i} isSelfView={isSelfView} />
+          <SessionTurnCard key={i} turn={turn} index={i} showContent={showDetails} />
         ))}
         {turns.length === 0 && (
           <div className="text-muted-foreground text-center py-8 text-sm">
             No conversation turns recorded.
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

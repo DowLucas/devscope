@@ -40,10 +40,11 @@ function ResponseTextBlock({ text }: { text: string }) {
 interface SessionTurnCardProps {
   turn: SessionTurn;
   index: number;
-  isSelfView?: boolean;
+  /** Owner, or a teammate the owner opted in to sharing with. */
+  showContent?: boolean;
 }
 
-export function SessionTurnCard({ turn, index, isSelfView = false }: SessionTurnCardProps) {
+export function SessionTurnCard({ turn, index, showContent = false }: SessionTurnCardProps) {
   const [expanded, setExpanded] = useState(index === 0);
 
   const successCount = turn.toolCalls.filter((t) => t.success === true).length;
@@ -113,7 +114,7 @@ export function SessionTurnCard({ turn, index, isSelfView = false }: SessionTurn
               <p className="text-xs text-muted-foreground mb-1 font-medium">
                 Tool Chain ({successCount} ok, {failCount} fail)
               </p>
-              <ToolChainTimeline toolCalls={turn.toolCalls} isSelfView={isSelfView} />
+              <ToolChainTimeline toolCalls={turn.toolCalls} showContent={showContent} />
             </div>
           )}
 
@@ -140,7 +141,7 @@ export function SessionTurnCard({ turn, index, isSelfView = false }: SessionTurn
                 )}
                 <span className="ml-auto">{parseUTC(turn.response.timestamp).toLocaleTimeString()}</span>
               </div>
-              {isSelfView && turn.response.responseText && (
+              {showContent && turn.response.responseText && (
                 <ResponseTextBlock text={turn.response.responseText} />
               )}
             </div>

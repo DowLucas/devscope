@@ -21,15 +21,15 @@ import {
   prepareErrorText,
   toVectorLiteral,
 } from "../ai/embeddings";
-import { getAllDeveloperIdsForUser } from "../services/developerLink";
+import { getSearchableDevIds, getViewerDevIds } from "../services/visibility";
 import { RECALL, formatRecall, selectMatches, wordCount } from "../services/promptRecall";
 import { ERROR_RECALL, formatErrorRecall, selectErrorMatches } from "../services/errorRecall";
 
 // Semantic retrieval over the org's prompt/response turns and sessions.
 //
 // Ethics: results are attributed to sessions and projects, never developers.
-// Text from every non-private session in the org is returned, including
-// teammates' — a deliberate, documented exception to stripSensitivePayload
+// Searches the caller's own sessions plus those of teammates who opted in to
+// sharing (developers.share_details); private sessions are never indexed
 // (see CLAUDE.md "Semantic retrieval").
 
 const promptsQuery = z.object({
@@ -102,10 +102,14 @@ export function similarRoutes(sql: SQL) {
 
   // Hook endpoints only look at the caller's own history, never teammates'.
   async function ownDevIds(c: { get: (k: never) => unknown }): Promise<string[]> {
-    const user = c.get("user" as never) as { id?: string } | undefined;
-    const own = user?.id ? await getAllDeveloperIdsForUser(sql, user.id) : [];
+    const own = await getViewerDevIds(sql, c);
     const org = new Set(orgDevIds(c));
     return own.filter((d) => org.has(d));
+  }
+
+  // Dashboard search: own sessions plus teammates who opted in to sharing.
+  async function searchableDevIds(c: { get: (k: never) => unknown }): Promise<string[]> {
+    return getSearchableDevIds(sql, orgDevIds(c), await getViewerDevIds(sql, c));
   }
 
   app.get("/prompts", zValidator("query", promptsQuery), async (c) => {
@@ -121,7 +125,7 @@ export function similarRoutes(sql: SQL) {
       vector: toVectorLiteral(vector),
       model: EMBEDDING_MODEL,
       kind: q.kind,
-      devIds: orgDevIds(c),
+      devIds: await searchableDevIds(c),
       limit: q.limit,
       excludeSessionId: q.exclude_session_id ?? null,
     });
@@ -203,8 +207,9 @@ export function similarRoutes(sql: SQL) {
       return c.json({ available: false, error: "Semantic retrieval is not configured" }, 503);
     }
     const id = c.req.param("id");
-    const devIds = orgDevIds(c);
-    // Same 404 for "missing" and "other org" so ids can't be probed.
+    const devIds = await searchableDevIds(c);
+    // Same 404 for "missing", "other org" and "not shared with you" so ids
+    // can't be probed.
     if (id.length > 200 || !(await isSessionInOrg(sql, id, devIds))) {
       return c.json({ error: "Session not found" }, 404);
     }

@@ -1,9 +1,10 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import type { SQL } from "bun";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { getExportData, getDigests, generateDigest } from "../db";
 import { gateSelfDeveloperId } from "../middleware/selfDeveloperGate";
+import { getViewerDevIds, redactSessionRow, visibilityForRow } from "../services/visibility";
 
 const digestGenerateSchema = z.object({
   period_start: z.string().min(1).max(50),
@@ -39,17 +40,32 @@ const VALID_EXPORT_TYPES = ["team-activity", "sessions", "activity", "failures",
 export function exportRoutes(sql: SQL) {
   const app = new Hono();
 
-  app.get("/:dataType/csv", async (c) => {
+  /** Validate, gate and load export rows; session rows are redacted per viewer. */
+  async function loadExport(c: Context): Promise<{ data: unknown[] } | { response: Response }> {
     const dataType = c.req.param("dataType");
     if (!VALID_EXPORT_TYPES.includes(dataType)) {
-      return c.json({ error: `Invalid data type. Must be one of: ${VALID_EXPORT_TYPES.join(", ")}` }, 400);
+      return { response: c.json({ error: `Invalid data type. Must be one of: ${VALID_EXPORT_TYPES.join(", ")}` }, 400) };
     }
     const gate = await gateSelfDeveloperId(c, sql);
-    if (!gate.allow) return gate.response;
+    if (!gate.allow) return { response: gate.response };
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     const data = await getExportData(sql, dataType, days, gate.developerId, devIds);
-    const csv = toCsv(data as Record<string, unknown>[]);
+    if (dataType !== "sessions") return { data };
+    const viewerDevIds = await getViewerDevIds(sql, c);
+    return {
+      data: (data as Record<string, unknown>[]).map((row) => {
+        const { owner_share_details: _consent, ...redacted } = redactSessionRow(row, visibilityForRow(row, viewerDevIds));
+        return redacted;
+      }),
+    };
+  }
+
+  app.get("/:dataType/csv", async (c) => {
+    const dataType = c.req.param("dataType");
+    const result = await loadExport(c);
+    if ("response" in result) return result.response;
+    const csv = toCsv(result.data as Record<string, unknown>[]);
     c.header("Content-Type", "text/csv");
     c.header("Content-Disposition", `attachment; filename="${dataType}-export.csv"`);
     return c.body(csv);
@@ -57,16 +73,10 @@ export function exportRoutes(sql: SQL) {
 
   app.get("/:dataType/json", async (c) => {
     const dataType = c.req.param("dataType");
-    if (!VALID_EXPORT_TYPES.includes(dataType)) {
-      return c.json({ error: `Invalid data type. Must be one of: ${VALID_EXPORT_TYPES.join(", ")}` }, 400);
-    }
-    const gate = await gateSelfDeveloperId(c, sql);
-    if (!gate.allow) return gate.response;
-    const days = clampInt(c.req.query("days"), 30, 365);
-    const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    const data = await getExportData(sql, dataType, days, gate.developerId, devIds);
+    const result = await loadExport(c);
+    if ("response" in result) return result.response;
     c.header("Content-Disposition", `attachment; filename="${dataType}-export.json"`);
-    return c.json(data);
+    return c.json(result.data);
   });
 
   app.get("/digests", async (c) => {

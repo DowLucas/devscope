@@ -28,8 +28,9 @@ export interface SessionStatsSummary {
 }
 
 export interface ProjectActivityDataPoint {
-  project_name: string;
-  project_path: string;
+  /** null pools sessions the viewer may not see ("Private projects"). */
+  project_name: string | null;
+  project_path: string | null;
   session_count: number;
   event_count: number;
   total_minutes: number;
@@ -142,8 +143,9 @@ export interface SessionNeedingAttention {
 }
 
 export interface ProjectDetail {
-  name: string;
-  path: string;
+  /** null pools sessions the viewer may not see ("Private projects"). */
+  name: string | null;
+  path: string | null;
   active_sessions: number;
   total_sessions: number;
   total_events: number;

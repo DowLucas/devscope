@@ -1,8 +1,7 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
 import { getActiveSessions, getActiveAgents, getAllSessions, getSessionDetail, getSessionTitleHistory } from "../db";
-import { getAllDeveloperIdsForUser } from "../services/developerLink";
-import { stripSensitivePayload } from "../utils/stripSensitiveFields";
+import { getViewerDevIds, redactEvent, redactSessionRow, visibilityForRow } from "../services/visibility";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
   if (!val) return def;
@@ -14,17 +13,17 @@ function mapSession(row: any) {
   return {
     id: row.id,
     developerId: row.developer_id,
-    projectPath: row.project_path,
-    projectName: row.project_name,
+    projectPath: row.project_path ?? null,
+    projectName: row.project_name ?? null,
     startedAt: row.started_at,
     endedAt: row.ended_at,
     status: row.status,
-    permissionMode: row.permission_mode,
+    permissionMode: row.permission_mode ?? null,
     privacyMode: row.privacy_mode ?? null,
     model: row.model ?? null,
     developerName: row.developer_name,
     developerEmail: row.developer_email,
-    eventCount: row.event_count,
+    eventCount: row.event_count ?? 0,
     contextClearCount: row.context_clear_count ?? 0,
     currentTitle: row.current_title ?? null,
     totalInputTokens: Number(row.total_input_tokens ?? 0),
@@ -35,6 +34,12 @@ function mapSession(row: any) {
   };
 }
 
+/** Map a session row after redacting it for this viewer; carries `visibility`. */
+function mapSessionFor(row: any, viewerDevIds: string[]) {
+  const visibility = visibilityForRow(row, viewerDevIds);
+  return { ...mapSession(redactSessionRow(row, visibility)), visibility };
+}
+
 export function sessionsRoutes(sql: SQL) {
   const app = new Hono();
 
@@ -42,13 +47,15 @@ export function sessionsRoutes(sql: SQL) {
     const limit = clampInt(c.req.query("limit"), 50, 500);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     const rows = await getAllSessions(sql, limit, devIds);
-    return c.json((rows as any[]).map(mapSession));
+    const viewerDevIds = await getViewerDevIds(sql, c);
+    return c.json((rows as any[]).map((row) => mapSessionFor(row, viewerDevIds)));
   });
 
   app.get("/active", async (c) => {
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     const sessionsRaw = await getActiveSessions(sql, devIds);
-    const sessions = (sessionsRaw as any[]).map(mapSession);
+    const viewerDevIds = await getViewerDevIds(sql, c);
+    const sessions = (sessionsRaw as any[]).map((row) => mapSessionFor(row, viewerDevIds));
     const agentsRaw = await getActiveAgents(sql);
     const agents = (agentsRaw as any[]).map((row) => ({
       agentId: row.agent_id,
@@ -84,25 +91,19 @@ export function sessionsRoutes(sql: SQL) {
       return c.json({ error: "Session not found" }, 404);
     }
 
-    // Determine if the viewer is the session's developer (self-view).
-    // Only the developer themselves can see their own prompt text and tool inputs.
-    const user = c.get("user" as never) as any;
-    const viewerDevIds = user?.id ? await getAllDeveloperIdsForUser(sql, user.id) : [];
-    const sessionDevId = (detail.session as any).developer_id;
-    const isSelfView = viewerDevIds.length > 0 && viewerDevIds.includes(sessionDevId);
+    const viewerDevIds = await getViewerDevIds(sql, c);
+    const visibility = visibilityForRow(detail.session, viewerDevIds);
 
     return c.json({
-      session: mapSession(detail.session),
-      isSelfView,
-      events: (detail.events as any[]).map((e) => {
-        const payload = typeof e.payload === "string" ? JSON.parse(e.payload) : e.payload;
-        return {
-          id: e.id,
-          event_type: e.event_type,
-          payload: isSelfView ? payload : stripSensitivePayload(payload),
-          created_at: e.created_at,
-        };
-      }),
+      session: mapSessionFor(detail.session, viewerDevIds),
+      visibility,
+      isSelfView: visibility === "self",
+      events: (detail.events as any[]).map((e) => redactEvent({
+        id: e.id,
+        event_type: e.event_type,
+        payload: typeof e.payload === "string" ? JSON.parse(e.payload) : e.payload,
+        created_at: e.created_at,
+      }, visibility)),
     });
   });
 
@@ -117,6 +118,11 @@ export function sessionsRoutes(sql: SQL) {
     }
     if (devIds && devIds.length > 0 && !devIds.includes((detail.session as any).developer_id)) {
       return c.json({ error: "Session not found" }, 404);
+    }
+
+    // Titles summarise what the session was about — hidden from activity-only viewers.
+    if (visibilityForRow(detail.session, await getViewerDevIds(sql, c)) === "activity") {
+      return c.json([]);
     }
 
     const titles = await getSessionTitleHistory(sql, id);

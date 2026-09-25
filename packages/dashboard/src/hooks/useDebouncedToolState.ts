@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import type { DevscopeEvent } from "@devscope/shared";
+import type { FeedEvent } from "@devscope/shared";
 
 const MIN_DISPLAY_MS = 600;
 
 interface DebouncedToolState {
   isToolRunning: boolean;
   currentToolName: string | null;
-  displayEvent: DevscopeEvent | null;
+  displayEvent: FeedEvent | null;
 }
 
 /**
@@ -16,7 +16,7 @@ interface DebouncedToolState {
 export function useDebouncedToolState(
   isToolRunning: boolean,
   currentToolName: string | null,
-  latestEvent: DevscopeEvent | null,
+  latestEvent: FeedEvent | null,
 ): DebouncedToolState {
   const [prevRunning, setPrevRunning] = useState(isToolRunning);
   const [debouncedStopped, setDebouncedStopped] = useState(!isToolRunning);

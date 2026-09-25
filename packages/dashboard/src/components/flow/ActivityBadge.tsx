@@ -1,11 +1,11 @@
 import { motion, AnimatePresence } from "motion/react";
-import type { DevscopeEvent, ToolEventPayload } from "@devscope/shared";
+import type { FeedEvent, ToolEventPayload } from "@devscope/shared";
 
 interface ActivityBadgeProps {
   isToolRunning: boolean;
   activityLabel: string;
   activityColor: string;
-  displayEvent: DevscopeEvent | null;
+  displayEvent: FeedEvent | null;
 }
 
 function AnimatedCheck() {

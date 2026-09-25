@@ -32,14 +32,15 @@ import { useActivityStore } from "@/stores/activityStore";
 import { useListApiKeys } from "@/hooks/useListApiKeys";
 import { timeAgo } from "@/lib/utils";
 import { EVENT_LABELS, getEventSummary } from "@/lib/eventDisplay";
-import type { DevscopeEvent } from "@devscope/shared";
+import type { FeedEvent } from "@devscope/shared";
+import { ProjectLabel } from "@/components/ProjectLabel";
 
 // ---------------------------------------------------------------------------
 // Feed item types
 // ---------------------------------------------------------------------------
 
 type FeedItem =
-  | { kind: "prompt"; key: string; event: DevscopeEvent }
+  | { kind: "prompt"; key: string; event: FeedEvent }
   | {
       kind: "tool-summary";
       key: string;
@@ -47,30 +48,30 @@ type FeedItem =
       callCount: number;
       timestamp: string;
     }
-  | { kind: "lifecycle"; key: string; event: DevscopeEvent }
-  | { kind: "tool-fail"; key: string; event: DevscopeEvent }
-  | { kind: "tool-interrupt"; key: string; event: DevscopeEvent }
-  | { kind: "agent"; key: string; event: DevscopeEvent }
-  | { kind: "notification"; key: string; event: DevscopeEvent }
-  | { kind: "compact"; key: string; event: DevscopeEvent }
-  | { kind: "task"; key: string; event: DevscopeEvent }
-  | { kind: "permission"; key: string; event: DevscopeEvent }
-  | { kind: "worktree"; key: string; event: DevscopeEvent }
-  | { kind: "config"; key: string; event: DevscopeEvent }
-  | { kind: "context-boundary"; key: string; event: DevscopeEvent }
-  | { kind: "compact-complete"; key: string; event: DevscopeEvent }
-  | { kind: "elicitation"; key: string; event: DevscopeEvent }
-  | { kind: "instructions"; key: string; event: DevscopeEvent }
-  | { kind: "teammate-idle"; key: string; event: DevscopeEvent }
-  | { kind: "event"; key: string; event: DevscopeEvent };
+  | { kind: "lifecycle"; key: string; event: FeedEvent }
+  | { kind: "tool-fail"; key: string; event: FeedEvent }
+  | { kind: "tool-interrupt"; key: string; event: FeedEvent }
+  | { kind: "agent"; key: string; event: FeedEvent }
+  | { kind: "notification"; key: string; event: FeedEvent }
+  | { kind: "compact"; key: string; event: FeedEvent }
+  | { kind: "task"; key: string; event: FeedEvent }
+  | { kind: "permission"; key: string; event: FeedEvent }
+  | { kind: "worktree"; key: string; event: FeedEvent }
+  | { kind: "config"; key: string; event: FeedEvent }
+  | { kind: "context-boundary"; key: string; event: FeedEvent }
+  | { kind: "compact-complete"; key: string; event: FeedEvent }
+  | { kind: "elicitation"; key: string; event: FeedEvent }
+  | { kind: "instructions"; key: string; event: FeedEvent }
+  | { kind: "teammate-idle"; key: string; event: FeedEvent }
+  | { kind: "event"; key: string; event: FeedEvent };
 
 // ---------------------------------------------------------------------------
 // Build compacted feed from raw events
 // ---------------------------------------------------------------------------
 
-function buildFeedItems(events: DevscopeEvent[]): FeedItem[] {
+function buildFeedItems(events: FeedEvent[]): FeedItem[] {
   const items: FeedItem[] = [];
-  let toolBatch: DevscopeEvent[] = [];
+  let toolBatch: FeedEvent[] = [];
 
   function flushTools() {
     if (toolBatch.length === 0) return;
@@ -268,7 +269,7 @@ function PromptItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -291,7 +292,7 @@ function PromptItem({
           {event.developerName}
         </span>
         <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-          {event.projectName}
+          <ProjectLabel name={event.projectName} />
         </Badge>
         <button
           onClick={() => { navigate(`/dashboard/sessions/${event.sessionId}`); }}
@@ -346,7 +347,7 @@ function LifecycleItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const isStart = event.eventType === "session.start";
@@ -368,9 +369,7 @@ function LifecycleItem({
             {event.developerName}
           </span>
           {isStart ? " started working on " : " ended session in "}
-          <span className="font-mono text-xs text-muted-foreground">
-            {event.projectName}
-          </span>
+          <ProjectLabel name={event.projectName} className="font-mono text-xs text-muted-foreground" />
         </span>
         <span className="ml-auto text-xs text-muted-foreground">
           {timeAgo(event.timestamp)}
@@ -384,7 +383,7 @@ function ToolFailItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -414,7 +413,7 @@ function ToolInterruptItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -444,7 +443,7 @@ function AgentItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -486,7 +485,7 @@ function ContextBoundaryItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -513,7 +512,7 @@ function ContextBoundaryItem({
           variant="outline"
           className="text-[10px] px-1.5 py-0 border-amber-500/30 text-amber-400"
         >
-          {event.projectName}
+          <ProjectLabel name={event.projectName} />
         </Badge>
         <span className="ml-auto text-xs text-muted-foreground">
           {timeAgo(event.timestamp)}
@@ -527,7 +526,7 @@ function NotificationItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -558,7 +557,7 @@ function CompactItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -593,7 +592,7 @@ function TaskItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -625,7 +624,7 @@ function PermissionItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -657,7 +656,7 @@ function WorktreeItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -690,7 +689,7 @@ function ConfigItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -719,7 +718,7 @@ function CompactCompleteItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -759,7 +758,7 @@ function ElicitationItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -800,7 +799,7 @@ function InstructionsItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -836,7 +835,7 @@ function TeammateIdleItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const p = event.payload as unknown as Record<string, unknown>;
@@ -876,7 +875,7 @@ function GenericEventItem({
   event,
   isLast,
 }: {
-  event: DevscopeEvent;
+  event: FeedEvent;
   isLast: boolean;
 }) {
   const label = EVENT_LABELS[event.eventType] ?? event.eventType;
