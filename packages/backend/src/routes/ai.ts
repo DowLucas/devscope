@@ -58,7 +58,9 @@ export function aiRoutes(sql: SQL) {
         );
       }
       const session = c.get("session" as never) as any;
-      const clientKey = session?.user?.id ?? c.req.header("x-forwarded-for") ?? "default";
+      // API-key requests carry the key owner in `user`, not `session.user`.
+      const user = c.get("user" as never) as any;
+      const clientKey = session?.user?.id ?? user?.id ?? c.req.header("x-forwarded-for") ?? "default";
       if (!checkRateLimit(clientKey)) {
         return c.json({ error: "Rate limit exceeded. Max 20 AI requests/minute." }, 429);
       }
