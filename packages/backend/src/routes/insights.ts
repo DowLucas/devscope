@@ -22,6 +22,7 @@ import {
 } from "../db";
 import { gateSelfDeveloperId } from "../middleware/selfDeveloperGate";
 import { getTeamContributionPillars } from "../db/patternQueries";
+import { getSearchableDevIds, getViewerDevIds } from "../services/visibility";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
   if (!val) return def;
@@ -75,7 +76,7 @@ export function insightsRoutes(sql: SQL) {
     if (!gate.allow) return gate.response;
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     const days = clampInt(c.req.query("days"), 30, 365);
-    return c.json(await getProjectActivity(sql, gate.developerId, days, devIds));
+    return c.json(await getProjectActivity(sql, gate.developerId, days, devIds, await getViewerDevIds(sql, c)));
   });
 
   app.get("/skills", async (c) => {
@@ -121,35 +122,37 @@ export function insightsRoutes(sql: SQL) {
   app.get("/failure-clusters", async (c) => {
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    return c.json(await getFailureClusters(sql, days, devIds));
+    // Error text and session ids: only the viewer's own and opted-in teammates'.
+    const searchable = await getSearchableDevIds(sql, devIds ?? [], await getViewerDevIds(sql, c));
+    return c.json(await getFailureClusters(sql, days, searchable));
   });
 
   // --- Project Board ---
   app.get("/projects/overview", async (c) => {
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    return c.json(await getProjectsOverview(sql, days, devIds));
+    return c.json(await getProjectsOverview(sql, days, devIds, await getViewerDevIds(sql, c)));
   });
 
   app.get("/projects/:name/contributors", async (c) => {
     const name = c.req.param("name");
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    return c.json(await getProjectContributors(sql, name, days, devIds));
+    return c.json(await getProjectContributors(sql, name, days, devIds, await getViewerDevIds(sql, c)));
   });
 
   app.get("/projects/:name/tools", async (c) => {
     const name = c.req.param("name");
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    return c.json(await getProjectToolUsage(sql, name, days, devIds));
+    return c.json(await getProjectToolUsage(sql, name, days, devIds, await getViewerDevIds(sql, c)));
   });
 
   app.get("/projects/:name/activity", async (c) => {
     const name = c.req.param("name");
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    return c.json(await getProjectActivityOverTime(sql, name, days, devIds));
+    return c.json(await getProjectActivityOverTime(sql, name, days, devIds, await getViewerDevIds(sql, c)));
   });
 
   // --- Token Usage ---

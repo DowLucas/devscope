@@ -6,11 +6,13 @@ import { requireOrgMember, requireOrgAdmin } from "../middleware/orgScope";
 import {
   getConsentOverview,
   updateDeveloperPrivacy,
+  getDevelopersSharing,
   createDataRequest,
   getDataRequests,
   updateDataRequestStatus,
 } from "../db";
 import { logEthicsEvent } from "../utils/ethicsAudit";
+import { getViewerDevIds } from "../services/visibility";
 
 const preferencesSchema = z.object({
   share_details: z.boolean(),
@@ -40,13 +42,12 @@ export function privacyRoutes(sql: SQL) {
 
   // GET /api/privacy/consent/preferences — own share_details status
   app.get("/consent/preferences", async (c) => {
-    const user = c.get("user" as never) as any;
-    const developerId = await getUserDeveloperId(sql, user.id);
-    if (!developerId) {
+    const developerIds = await getViewerDevIds(sql, c);
+    if (developerIds.length === 0) {
       return c.json({ linked: false, share_details: false });
     }
-    const [row] = await sql`SELECT share_details FROM developers WHERE id = ${developerId} LIMIT 1`;
-    return c.json({ linked: true, share_details: (row as any)?.share_details ?? false });
+    // On only when every linked identity shares, so the switch never hides one that does not.
+    return c.json({ linked: true, share_details: await getDevelopersSharing(sql, developerIds) });
   });
 
   // GET /api/privacy/consent/overview
@@ -60,19 +61,18 @@ export function privacyRoutes(sql: SQL) {
   // PUT /api/privacy/consent/preferences — update own share_details
   app.put("/consent/preferences", zValidator("json", preferencesSchema), async (c) => {
     const orgId = c.get("orgId" as never) as string;
-    const user = c.get("user" as never) as any;
-
-    const developerId = await getUserDeveloperId(sql, user.id);
-    if (!developerId) {
+    // Every identity the user has linked (several emails or machines) changes together.
+    const developerIds = await getViewerDevIds(sql, c);
+    if (developerIds.length === 0) {
       return c.json({ error: "No developer identity linked. Use the plugin first." }, 400);
     }
 
     const body = c.req.valid("json");
-    await updateDeveloperPrivacy(sql, developerId, body.share_details);
+    await updateDeveloperPrivacy(sql, developerIds, body.share_details);
 
     logEthicsEvent(sql, orgId, "data_request_processed", {
       action: "preferences_updated",
-      developer_id: developerId,
+      developer_ids: developerIds,
       share_details: body.share_details,
     });
 

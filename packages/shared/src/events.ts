@@ -47,6 +47,15 @@ export interface DevscopeEvent {
   payload: EventPayload;
 }
 
+/**
+ * An event as served to the dashboard (feed, WebSocket). Project fields are
+ * null and the payload empty when the viewer only sees activity for the session.
+ */
+export type FeedEvent = Omit<DevscopeEvent, "projectPath" | "projectName"> & {
+  projectPath: string | null;
+  projectName: string | null;
+};
+
 export type EventPayload =
   | SessionStartPayload
   | SessionEndPayload

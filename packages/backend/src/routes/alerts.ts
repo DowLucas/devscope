@@ -12,6 +12,7 @@ import {
   getToolingHealthSummary,
   getToolingHealthTrends,
 } from "../db";
+import { getViewerDevIds } from "../services/visibility";
 
 const alertRuleCreateSchema = z.object({
   rule_type: z.enum(["failure_threshold"]).default("failure_threshold"),
@@ -88,7 +89,7 @@ export function alertsRoutes(sql: SQL) {
   app.get("/tooling-health", async (c) => {
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     const days = clampInt(c.req.query("days"), 7, 90);
-    return c.json(await getToolingHealthSummary(sql, devIds ?? [], days));
+    return c.json(await getToolingHealthSummary(sql, devIds ?? [], days, await getViewerDevIds(sql, c)));
   });
 
   // GET /api/alerts/tooling-health/trends — historical trend data

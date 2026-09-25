@@ -13,7 +13,8 @@ interface SessionFeedbackPanelProps {
 }
 
 function PrivacyBadge({ privacyMode, isSelfView }: { privacyMode: string | null; isSelfView: boolean }) {
-  const isOpen = privacyMode === "open" && isSelfView;
+  // Only rendered for viewers allowed to see the content (owner or opted-in teammate).
+  const isOpen = privacyMode === "open";
   const isPrivate = privacyMode === "private";
 
   if (isPrivate) {
@@ -29,16 +30,7 @@ function PrivacyBadge({ privacyMode, isSelfView }: { privacyMode: string | null;
     return (
       <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
         <Eye className="h-3 w-3" />
-        Full debrief — includes your prompts &amp; responses
-      </span>
-    );
-  }
-
-  if (privacyMode === "open" && !isSelfView) {
-    return (
-      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-        <EyeOff className="h-3 w-3" />
-        Metadata debrief — content only visible to the session owner
+        Full debrief — includes {isSelfView ? "your" : "the owner's"} prompts &amp; responses
       </span>
     );
   }

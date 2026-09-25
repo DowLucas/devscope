@@ -12,6 +12,7 @@ import {
   getAntiPatternTrends,
   recordTokenUsage,
   createInsight,
+  getSharingDeveloperIds,
 } from "../../db";
 import type { AiInsight, InsightType, InsightSeverity } from "@devscope/shared";
 
@@ -49,12 +50,14 @@ async function gatherData(
 ): Promise<Partial<InsightStateType>> {
   const days = state.days;
   const devIds = state.developerIds;
+  // Insights go to the whole org: error text only from developers who share.
+  const sharingIds = await getSharingDeveloperIds(sql, devIds ?? []);
 
   const [periodComparison, teamHealth, failureClusters, teamActivity, projects, patternStats, antiPatternTrends] =
     await Promise.all([
       getPeriodComparison(sql, days, undefined, devIds),
       getTeamHealth(sql, devIds),
-      getFailureClusters(sql, days, devIds),
+      getFailureClusters(sql, days, sharingIds),
       getTeamActivitySummary(sql, days, devIds),
       getProjectsOverview(sql, days, devIds),
       getPatternStats(sql, days),

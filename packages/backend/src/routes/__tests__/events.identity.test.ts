@@ -39,7 +39,6 @@ import {
   dbStubs,
   wsHandlerStubs,
   developerLinkStubs,
-  stripSensitiveFieldsStubs,
 } from "../../__test_helpers__/mockStubs";
 
 // ---------------------------------------------------------------------------
@@ -68,7 +67,13 @@ mock.module("../../db", () =>
 
 const mockBroadcastToOrg = mock(() => {});
 mock.module("../../ws/handler", () =>
-  wsHandlerStubs({ broadcastToOrg: mockBroadcastToOrg }),
+  wsHandlerStubs({
+    broadcastToOrg: mockBroadcastToOrg,
+    // Record the teammate copy of per-viewer broadcasts as a plain org broadcast.
+    broadcastToOrgByViewer: (orgId: string, _o: string[], _m: unknown, teammateMsg: unknown) => {
+      if (teammateMsg) (mockBroadcastToOrg as any)(orgId, teammateMsg);
+    },
+  }),
 );
 
 const mockAutoLinkDeveloperToOrg = mock(() => Promise.resolve());
@@ -79,10 +84,6 @@ mock.module("../../services/developerLink", () =>
     autoLinkDeveloperToOrg: mockAutoLinkDeveloperToOrg,
     autoLinkUserToDeveloper: mockAutoLinkUserToDeveloper,
   }),
-);
-
-mock.module("../../utils/stripSensitiveFields", () =>
-  stripSensitiveFieldsStubs(),
 );
 
 mock.module("../../services/frictionDetector", () => ({

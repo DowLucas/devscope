@@ -24,7 +24,10 @@ export function ProjectActivityChart({
   return (
     <ChartCard title="Project Activity" loading={loading}>
       <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data ?? []} layout="vertical">
+        <BarChart
+          data={(data ?? []).map((d) => ({ ...d, project_name: d.project_name ?? "Private projects" }))}
+          layout="vertical"
+        >
           <CartesianGrid {...GRID_STYLE} />
           <XAxis type="number" {...AXIS_STYLE} />
           <YAxis

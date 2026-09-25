@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Choose whether your team sees your sessions.** Settings → Data Sharing → "Share my
+  sessions with my team" now controls what teammates see. Off (the default): they only
+  see that you're active: your name, session status, count and timing. On: they see
+  what you see, including projects, session titles, prompts, tool inputs and results,
+  Claude's responses, AI debriefs and token usage. You always see all of your own data,
+  sessions in plugin `private` mode stay hidden from teammates either way, and turning
+  sharing off hides past sessions again immediately.
+  - Applies to the session list and detail, live feed and WebSocket updates, session
+    titles, AI session debriefs and reports, similar-prompt search, exports and project
+    views, where hidden sessions are grouped as "Private projects".
+  - Also covers CLAUDE.md snapshots, friction and tooling-health alerts, digests, failure
+    clusters, and what the AI chat assistant and team reports can quote (file paths,
+    commands, error text).
+  - Session API responses carry `visibility: "self" | "shared" | "activity"`.
+  - Existing opt-ins are reset (migration 049): the old toggle promised details were
+    never shared with teammates, so everyone opts in again under the new wording.
+  - The toggle applies to every developer identity you have linked (several emails or
+    machines), and shows "on" only when all of them share.
+  - Tokens and cost of shared sessions show on the session's own page only, never in
+    session lists or exports.
 - **Semantic search over past prompts and sessions.** Every prompt and Claude's
   response is embedded by a local model on the homelab (`qwen3-embedding:0.6b` via
   Ollama, nothing leaves the box), so you can find earlier work by meaning rather than
@@ -15,8 +35,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `GET /api/similar/prompts?q=` returns the nearest past turns in your org.
   - `GET /api/similar/sessions/:id` returns sessions similar to a given one.
   - Both are org-scoped, API-key accessible, rate limited to 60/min, and never include
-    developer identity. Private sessions are never indexed. Teammates' prompt text *is*
-    returned for non-private sessions, a documented exception to `stripSensitivePayload`.
+    developer identity. Private sessions are never indexed. Searches cover your own
+    sessions and those of teammates who share their sessions with the team.
 - `jobs/semanticIndexing.ts` keeps the index current every minute;
   `scripts/semantic-backfill.ts --write` indexes all history (dry run by default).
 - `docker/postgres.Dockerfile`: `postgres:17.9-alpine` + pgvector, published to GHCR by
@@ -24,6 +44,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   directory's collation is unchanged.
 
 ### Changed
+
+- Teammates who haven't opted in to sharing now appear as activity only. Previously
+  everyone in the org could see every teammate's project names, session titles and
+  tool activity, and AI session debriefs appeared in the org-wide reports list.
+- Privacy policy and the Data Sharing settings card rewritten to match.
+- The AI chat assistant only gives per-developer breakdowns for your own developer ID,
+  matching the insights API.
+
+### Fixed
+
+- An organization with no linked developers no longer sees every organization's
+  sessions and recent events (an empty developer list was treated as "no filter").
+- `POST /api/prompts/similar` only returns the caller's own prompts; it used to accept
+  any `developer_id`.
 
 - Local `docker compose` builds the pgvector Postgres image. Migration 045 is a no-op
   on an image without pgvector, so an out-of-order deploy still boots.

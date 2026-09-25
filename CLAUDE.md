@@ -69,12 +69,13 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/api/events` | POST | Ingest event from plugin |
-| `/api/events/recent?limit=N` | GET | Recent events (default 50) |
+| `/api/events/recent?limit=N` | GET | Recent events (default 50), redacted per viewer (see Team visibility) |
 | `/api/developers` | GET | All developers + active session counts |
-| `/api/sessions` | GET | All sessions with event counts |
-| `/api/sessions/active` | GET | Active sessions only |
-| `/api/sessions/:id` | GET | Events for a session |
-| `/api/similar/prompts?q=&kind=prompt\|response&limit=` | GET | Semantically similar past turns in the org, with outcomes |
+| `/api/sessions` | GET | All sessions with event counts; each carries `visibility` and is redacted for the viewer |
+| `/api/sessions/active` | GET | Active sessions only (same redaction) |
+| `/api/sessions/:id` | GET | Session + events, with `visibility`; `activity` viewers get empty payloads |
+| `/api/privacy/consent/preferences` | GET/PUT | The caller's own `share_details` ("Share my sessions with my team") |
+| `/api/similar/prompts?q=&kind=prompt\|response&limit=` | GET | Semantically similar past turns from the caller's and opted-in teammates' sessions, with outcomes |
 | `/api/similar/sessions/:id?limit=` | GET | Sessions similar to a given session |
 | `/api/similar/error` | POST | "This error came up before" recall for the plugin's PostToolUseFailure hook: caller's own earlier sessions, similarity ≥ 0.92, and the input of the first same-tool call that succeeded within 30 min (often the fix); fails open |
 | `/api/similar/skill-chains` | GET | Caller's learned skill sequences, cached by the plugin at session start for next-skill hints |
@@ -198,12 +199,27 @@ DevScope exists to improve **team workflow and tooling** — not to monitor, ran
 
 **Core principles:**
 - **No individual surveillance**: Never build features that track, rank, or compare individual developer activity, productivity, or output. Activity data is for understanding team-wide patterns and tooling health.
-- **No developer comparisons**: Dashboards and reports must present aggregate team metrics only. Leaderboards, individual heatmaps, per-developer workload charts, and "status" indicators (active/idle/offline) are not acceptable.
+- **No developer comparisons**: Dashboards and reports must present aggregate team metrics only. Leaderboards, individual heatmaps and per-developer workload charts are not acceptable. A teammate's individual sessions may show as active or ended (the `activity` view below), but never roll that up into per-person presence, uptime or availability tracking.
 - **Tooling focus, not people focus**: When surfacing problems (e.g., high failure rates), attribute them to sessions, tools, or projects — never to individuals.
 - **AI guardrails**: LLM prompts must explicitly instruct against including individual developer names, rankings, or performance comparisons in generated insights and reports.
 - **Consent-first**: Developers opt in via plugin installation. Privacy mode (`DEVSCOPE_PRIVACY=standard`) is the default. Data collection should be minimal and transparent.
 
-**Semantic retrieval exception:** `/api/similar/*` returns prompt and response text from every non-private session in the org, including teammates'. This is a deliberate decision (team knowledge reuse: "what worked last time"), and a documented exception to `stripSensitivePayload`. Results carry session, project and outcome only, never developer identity. `private` sessions are never indexed.
+**Team visibility (`developers.share_details`):** what a viewer sees of a session is decided in one place, `services/visibility.ts` (`resolveVisibility`, `redactSessionRow`, `redactEvent`):
+
+- `self` — the viewer owns the session: everything.
+- `shared` — the owner turned on "Share my sessions with my team" and the session is not plugin-`private`: everything the owner sees (projects, titles, prompts, tool inputs/results, responses, AI debriefs, tokens/cost), minus the local `transcriptPath`.
+- `activity` — anything else (the default): name, status, event count and timing only. Session rows go through an allowlist, event payloads are emptied, project/title are null.
+
+It is evaluated at read time with the owner's current setting, so turning sharing off hides history immediately. Every route or broadcast that returns data about another developer's session must go through these helpers:
+
+- **Live updates** about a session (`event.new`, `session.title.update`, `alert.triggered`, `friction.alert`, session `ai.report.completed`) go through `broadcastSessionUpdate`: the owner's own WebSocket connections get the full message, teammates the redacted one or nothing.
+- **Aggregates** that name projects pool sessions the viewer may not see under a `NULL` project ("Private projects") via `visibleSessionSql` / `visibleSessionPredicate` (`db/utils.ts`). Org-wide artifacts (digests, tooling-health snapshots and alerts, team AI reports/insights) use an empty viewer list, i.e. only shared sessions are named.
+- **Content** (file paths, commands, error text) in AI chat tools, team reports/insights and failure clusters comes only from the viewer's own and opted-in developers (`getSearchableDevIds` / `getSharingDeveloperIds`). AI chat per-developer breakdowns are self-only, like `gateSelfDeveloperId`.
+- CLAUDE.md snapshots and friction alerts are filtered by their session's visibility.
+
+`orgDeveloperIds` of `[]` means an org with no developers and matches nothing; only `undefined` (internal jobs) is unscoped. Tokens and cost may show on a shared session's own page but never in lists, leaderboards or rankings.
+
+**Semantic retrieval:** `/api/similar/prompts` and `/api/similar/sessions/:id` search the caller's own sessions plus those of teammates who opted in (`getSearchableDevIds`). Results carry session, project and outcome only, never developer identity. `private` sessions are never indexed.
 
 When in doubt, ask: "Does this feature help the team improve their tools and workflow, or does it enable monitoring individuals?" Only build the former.
 

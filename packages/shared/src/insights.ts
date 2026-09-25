@@ -28,8 +28,9 @@ export interface SessionStatsSummary {
 }
 
 export interface ProjectActivityDataPoint {
-  project_name: string;
-  project_path: string;
+  /** null pools sessions the viewer may not see ("Private projects"). */
+  project_name: string | null;
+  project_path: string | null;
   session_count: number;
   event_count: number;
   total_minutes: number;
@@ -142,8 +143,9 @@ export interface SessionNeedingAttention {
 }
 
 export interface ProjectDetail {
-  name: string;
-  path: string;
+  /** null pools sessions the viewer may not see ("Private projects"). */
+  name: string | null;
+  path: string | null;
   active_sessions: number;
   total_sessions: number;
   total_events: number;
@@ -186,11 +188,11 @@ export interface DigestSummary {
   total_failures: number;
   active_developers: number;
   active_projects: number;
-  top_projects: { name: string; events: number }[];
+  top_projects: { name: string | null; events: number }[];
   notable_failures: { tool_name: string; count: number }[];
   scorecard?: { label: string; value: number; delta_percent: number; status: string }[];
   roi?: { prompts_per_session: number; tool_calls_per_session: number; sessions_per_developer: number };
-  project_allocation?: { project_name: string; percentage: number }[];
+  project_allocation?: { project_name: string | null; percentage: number }[];
 }
 
 // --- Concrete Tool Details ---

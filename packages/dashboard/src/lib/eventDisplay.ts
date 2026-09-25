@@ -1,4 +1,4 @@
-import type { DevscopeEvent } from "@devscope/shared";
+import type { FeedEvent } from "@devscope/shared";
 
 /**
  * Presentation for every event type the backend accepts.
@@ -78,7 +78,7 @@ export const EVENT_LABELS: Record<string, string> = {
   "plugin.setup": "Plugin Setup",
 };
 
-export function getEventSummary(event: DevscopeEvent): string {
+export function getEventSummary(event: FeedEvent): string {
   const p = event.payload as unknown as Record<string, unknown>;
   switch (event.eventType) {
     case "tool.start":

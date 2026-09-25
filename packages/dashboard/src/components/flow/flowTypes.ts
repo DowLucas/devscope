@@ -1,5 +1,5 @@
 import type { Developer, Session } from "@devscope/shared";
-import type { DevscopeEvent } from "@devscope/shared";
+import type { FeedEvent } from "@devscope/shared";
 
 export type SessionActivityState =
   | "running"
@@ -19,8 +19,8 @@ export interface SessionNodeData {
   [key: string]: unknown;
   session: Session;
   developerName: string;
-  recentEvents: DevscopeEvent[];
-  latestEvent: DevscopeEvent | null;
+  recentEvents: FeedEvent[];
+  latestEvent: FeedEvent | null;
   isToolRunning: boolean;
   currentToolName: string | null;
   activityState: SessionActivityState;
@@ -32,7 +32,7 @@ export interface AgentNodeData {
   agentType: string;
   sessionId: string;
   startedAt: string;
-  latestEvent: DevscopeEvent | null;
+  latestEvent: FeedEvent | null;
   isToolRunning: boolean;
   currentToolName: string | null;
   isStopped: boolean;

@@ -1,6 +1,6 @@
 import { describe, expect, test, mock, beforeEach } from "bun:test";
 import { Hono } from "hono";
-import { dbStubs, developerLinkStubs, stripSensitiveFieldsStubs } from "../../__test_helpers__/mockStubs";
+import { dbStubs, developerLinkStubs } from "../../__test_helpers__/mockStubs";
 
 // ---------------------------------------------------------------------------
 // Mocks — must be set up BEFORE importing the module under test
@@ -24,18 +24,6 @@ const mockGetAllDeveloperIdsForUser = mock(() => Promise.resolve([] as string[])
 
 mock.module("../../services/developerLink", () => developerLinkStubs({
   getAllDeveloperIdsForUser: mockGetAllDeveloperIdsForUser,
-}));
-
-const mockStripSensitivePayload = mock((payload: Record<string, unknown>) => {
-  const stripped = { ...payload };
-  delete stripped.promptText;
-  delete stripped.toolInput;
-  delete stripped.responseText;
-  return stripped;
-});
-
-mock.module("../../utils/stripSensitiveFields", () => stripSensitiveFieldsStubs({
-  stripSensitivePayload: mockStripSensitivePayload,
 }));
 
 // Import AFTER mocks are registered
@@ -86,6 +74,8 @@ function makeSessionRow(overrides: Record<string, unknown> = {}) {
     event_count: 5,
     context_clear_count: 1,
     current_title: "Fixing auth bug",
+    privacy_mode: "standard",
+    owner_share_details: true,
     ...overrides,
   };
 }
@@ -112,7 +102,6 @@ beforeEach(() => {
   mockGetSessionDetail.mockReset();
   mockGetSessionTitleHistory.mockReset();
   mockGetAllDeveloperIdsForUser.mockReset();
-  mockStripSensitivePayload.mockReset();
 
   // Restore default implementations
   mockGetAllSessions.mockImplementation(() => Promise.resolve([]));
@@ -121,13 +110,6 @@ beforeEach(() => {
   mockGetSessionDetail.mockImplementation(() => Promise.resolve(null));
   mockGetSessionTitleHistory.mockImplementation(() => Promise.resolve([]));
   mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve([]));
-  mockStripSensitivePayload.mockImplementation((payload: Record<string, unknown>) => {
-    const stripped = { ...payload };
-    delete stripped.promptText;
-    delete stripped.toolInput;
-    delete stripped.responseText;
-    return stripped;
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -162,7 +144,7 @@ describe("GET /sessions", () => {
       endedAt: null,
       status: "active",
       permissionMode: "default",
-      privacyMode: null,
+      privacyMode: "standard",
       model: null,
       developerName: "Alice",
       developerEmail: "alice@example.com",
@@ -174,6 +156,7 @@ describe("GET /sessions", () => {
       totalCacheCreationTokens: 0,
       totalCacheReadTokens: 0,
       estimatedCostUsd: 0,
+      visibility: "shared",
     });
   });
 
@@ -351,7 +334,7 @@ describe("GET /sessions/:id", () => {
     expect(res.status).toBe(200);
   });
 
-  test("allows access when orgDeveloperIds is empty (no org scope filtering)", async () => {
+  test("returns 404 when the org has no developers (empty list is not 'unscoped')", async () => {
     const session = makeSessionRow();
     mockGetSessionDetail.mockImplementation(() =>
       Promise.resolve({ session, events: [] })
@@ -360,7 +343,7 @@ describe("GET /sessions/:id", () => {
     const app = buildApp({ orgDeveloperIds: [], user: { id: "user-1" } });
     const res = await app.request("/sessions/sess-1");
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
   });
 
   test("returns session detail with mapped session when developer is in org", async () => {
@@ -414,132 +397,107 @@ describe("GET /sessions/:id", () => {
   });
 
   // -----------------------------------------------------------------------
-  // Self-view vs non-self-view
+  // Visibility: self / shared (opted in) / activity (opted out or private)
   // -----------------------------------------------------------------------
 
-  test("self-view: payload is NOT stripped when viewer is the session developer", async () => {
-    const session = makeSessionRow({ developer_id: "dev-aaa" });
-    const event = makeEventRow({
-      payload: { toolName: "Read", promptText: "secret prompt", toolInput: "secret input" },
-    });
+  async function viewDetail(sessionOverrides: Record<string, unknown>, viewerDevIds: string[], events?: any[]) {
+    const session = makeSessionRow({ developer_id: "dev-aaa", ...sessionOverrides });
     mockGetSessionDetail.mockImplementation(() =>
-      Promise.resolve({ session, events: [event] })
+      Promise.resolve({ session, events: events ?? [makeEventRow()] })
     );
-    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-aaa"]));
-
-    const app = buildApp({ orgDeveloperIds: ["dev-aaa"], user: { id: "user-1" } });
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(viewerDevIds));
+    const app = buildApp({ orgDeveloperIds: ["dev-aaa", "dev-bbb"], user: { id: "user-1" } });
     const res = await app.request("/sessions/sess-1");
-    const body = await res.json();
-
     expect(res.status).toBe(200);
+    return res.json();
+  }
+
+  test("self: owner sees everything even when opted out and private", async () => {
+    const body = await viewDetail({ owner_share_details: false, privacy_mode: "private" }, ["dev-aaa"]);
+    expect(body.visibility).toBe("self");
     expect(body.isSelfView).toBe(true);
-    // Payload should contain sensitive fields (not stripped)
+    expect(body.session.projectName).toBe("my-project");
+    expect(body.events[0].payload.promptText).toBe("secret prompt");
+  });
+
+  test("shared: teammate of an opted-in owner sees content, project and title", async () => {
+    const body = await viewDetail({ owner_share_details: true, estimated_cost_usd: 1.25 }, ["dev-bbb"]);
+    expect(body.visibility).toBe("shared");
+    expect(body.isSelfView).toBe(false);
+    expect(body.session.projectName).toBe("my-project");
+    expect(body.session.currentTitle).toBe("Fixing auth bug");
+    expect(body.session.estimatedCostUsd).toBe(1.25);
     expect(body.events[0].payload.promptText).toBe("secret prompt");
     expect(body.events[0].payload.toolInput).toBe("secret input");
-    // stripSensitivePayload should NOT have been called
-    expect(mockStripSensitivePayload).not.toHaveBeenCalled();
   });
 
-  test("non-self-view: payload IS stripped when viewer is a different developer", async () => {
-    const session = makeSessionRow({ developer_id: "dev-aaa" });
-    const event = makeEventRow({
-      payload: { toolName: "Read", promptText: "secret prompt", toolInput: "secret input" },
+  test("activity: teammate of an opted-out owner sees identity and timing only", async () => {
+    const body = await viewDetail({ owner_share_details: false, estimated_cost_usd: 1.25 }, ["dev-bbb"]);
+    expect(body.visibility).toBe("activity");
+    expect(body.session.developerName).toBe("Alice");
+    expect(body.session.status).toBe("active");
+    expect(body.session.projectName).toBeNull();
+    expect(body.session.projectPath).toBeNull();
+    expect(body.session.currentTitle).toBeNull();
+    expect(body.session.model).toBeNull();
+    expect(body.session.estimatedCostUsd).toBe(0);
+    expect(body.events[0]).toEqual({
+      id: "evt-1", event_type: "tool.use", created_at: "2026-03-01T10:01:00Z", payload: {},
     });
-    mockGetSessionDetail.mockImplementation(() =>
-      Promise.resolve({ session, events: [event] })
-    );
-    // Viewer is dev-bbb, session belongs to dev-aaa
-    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-bbb"]));
-
-    const app = buildApp({ orgDeveloperIds: ["dev-aaa", "dev-bbb"], user: { id: "user-2" } });
-    const res = await app.request("/sessions/sess-1");
-    const body = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(body.isSelfView).toBe(false);
-    // Payload should have sensitive fields stripped
-    expect(body.events[0].payload.promptText).toBeUndefined();
-    expect(body.events[0].payload.toolInput).toBeUndefined();
-    expect(body.events[0].payload.toolName).toBe("Read");
-    expect(mockStripSensitivePayload).toHaveBeenCalledTimes(1);
   });
 
-  test("non-self-view when viewer has no developer link (getAllDeveloperIdsForUser returns empty array)", async () => {
-    const session = makeSessionRow({ developer_id: "dev-aaa" });
-    const event = makeEventRow({
-      payload: { toolName: "Read", promptText: "secret" },
-    });
-    mockGetSessionDetail.mockImplementation(() =>
-      Promise.resolve({ session, events: [event] })
-    );
-    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve([]));
-
-    const app = buildApp({ orgDeveloperIds: ["dev-aaa"], user: { id: "user-1" } });
-    const res = await app.request("/sessions/sess-1");
-    const body = await res.json();
-
-    expect(body.isSelfView).toBe(false);
-    expect(mockStripSensitivePayload).toHaveBeenCalled();
+  test("activity: private sessions stay hidden from teammates even when opted in", async () => {
+    const body = await viewDetail({ owner_share_details: true, privacy_mode: "private" }, ["dev-bbb"]);
+    expect(body.visibility).toBe("activity");
+    expect(body.session.projectName).toBeNull();
   });
 
-  test("non-self-view when no user in context", async () => {
-    const session = makeSessionRow({ developer_id: "dev-aaa" });
-    const event = makeEventRow({
-      payload: { toolName: "Read", promptText: "secret" },
-    });
-    mockGetSessionDetail.mockImplementation(() =>
-      Promise.resolve({ session, events: [event] })
-    );
-
-    // No user set in context
-    const app = buildApp({ orgDeveloperIds: ["dev-aaa"] });
-    const res = await app.request("/sessions/sess-1");
-    const body = await res.json();
-
-    expect(body.isSelfView).toBe(false);
-    expect(mockStripSensitivePayload).toHaveBeenCalled();
+  test("activity: a viewer with no developer link is treated as a teammate", async () => {
+    const body = await viewDetail({ owner_share_details: false }, []);
+    expect(body.visibility).toBe("activity");
   });
 
   test("parses JSON string payloads", async () => {
-    const session = makeSessionRow({ developer_id: "dev-aaa" });
-    const event = makeEventRow({
-      payload: JSON.stringify({ toolName: "Write", promptText: "hidden" }),
-    });
-    mockGetSessionDetail.mockImplementation(() =>
-      Promise.resolve({ session, events: [event] })
-    );
-    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-aaa"]));
-
-    const app = buildApp({ orgDeveloperIds: ["dev-aaa"], user: { id: "user-1" } });
-    const res = await app.request("/sessions/sess-1");
-    const body = await res.json();
-
-    // Self-view: payload should be parsed and unstripped
+    const body = await viewDetail({}, ["dev-aaa"], [
+      makeEventRow({ payload: JSON.stringify({ toolName: "Write", promptText: "hidden" }) }),
+    ]);
     expect(body.events[0].payload.toolName).toBe("Write");
     expect(body.events[0].payload.promptText).toBe("hidden");
   });
+});
 
-  test("handles multiple events with mixed self/non-self stripping", async () => {
-    const session = makeSessionRow({ developer_id: "dev-aaa" });
-    const events = [
-      makeEventRow({ id: "evt-1", payload: { toolName: "Read", promptText: "p1" } }),
-      makeEventRow({ id: "evt-2", payload: { toolName: "Write", toolInput: "i2" } }),
-    ];
-    mockGetSessionDetail.mockImplementation(() =>
-      Promise.resolve({ session, events })
-    );
-    // Non-self-view
+describe("GET /sessions list visibility", () => {
+  test("redacts opted-out teammates' sessions and keeps the viewer's own", async () => {
+    mockGetAllSessions.mockImplementation(() => Promise.resolve([
+      makeSessionRow({ id: "mine", developer_id: "dev-bbb", owner_share_details: false }),
+      makeSessionRow({ id: "theirs", developer_id: "dev-aaa", owner_share_details: false }),
+      makeSessionRow({ id: "shared", developer_id: "dev-ccc", owner_share_details: true }),
+    ]));
     mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-bbb"]));
 
-    const app = buildApp({ orgDeveloperIds: ["dev-aaa", "dev-bbb"], user: { id: "user-2" } });
-    const res = await app.request("/sessions/sess-1");
+    const res = await buildApp({ user: { id: "user-2" } }).request("/sessions");
     const body = await res.json();
 
-    expect(body.events).toHaveLength(2);
-    // Both events should be stripped
-    expect(mockStripSensitivePayload).toHaveBeenCalledTimes(2);
-    expect(body.events[0].payload.promptText).toBeUndefined();
-    expect(body.events[1].payload.toolInput).toBeUndefined();
+    expect(body.map((s: any) => [s.id, s.visibility, s.projectName])).toEqual([
+      ["mine", "self", "my-project"],
+      ["theirs", "activity", null],
+      ["shared", "shared", "my-project"],
+    ]);
+  });
+
+  test("lists never carry other people's tokens or cost, even when shared", async () => {
+    mockGetAllSessions.mockImplementation(() => Promise.resolve([
+      makeSessionRow({ id: "mine", developer_id: "dev-bbb", estimated_cost_usd: 2, total_input_tokens: 10 }),
+      makeSessionRow({ id: "shared", developer_id: "dev-ccc", owner_share_details: true, estimated_cost_usd: 3, total_input_tokens: 20 }),
+    ]));
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-bbb"]));
+
+    const body = await (await buildApp({ user: { id: "user-2" } }).request("/sessions")).json();
+
+    expect(body.map((s: any) => [s.id, s.estimatedCostUsd, s.totalInputTokens])).toEqual([
+      ["mine", 2, 10],
+      ["shared", 0, 0],
+    ]);
   });
 });
 
@@ -548,6 +506,23 @@ describe("GET /sessions/:id", () => {
 // ---------------------------------------------------------------------------
 
 describe("GET /sessions/:id/titles", () => {
+  test("returns no titles to teammates of an opted-out owner", async () => {
+    mockGetSessionDetail.mockImplementation(() =>
+      Promise.resolve({ session: makeSessionRow({ owner_share_details: false }), events: [] })
+    );
+    mockGetSessionTitleHistory.mockImplementation(() =>
+      Promise.resolve([{ id: 1, session_id: "sess-1", title: "Secret work", generated_at: "2026-03-01T10:05:00Z" }])
+    );
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-bbb"]));
+
+    const res = await buildApp({ orgDeveloperIds: ["dev-aaa", "dev-bbb"], user: { id: "user-2" } })
+      .request("/sessions/sess-1/titles");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+    expect(mockGetSessionTitleHistory).not.toHaveBeenCalled();
+  });
+
   test("returns 404 when session not found", async () => {
     mockGetSessionDetail.mockImplementation(() => Promise.resolve(null));
 
@@ -618,7 +593,7 @@ describe("GET /sessions/:id/titles", () => {
     });
   });
 
-  test("allows access when orgDeveloperIds is empty", async () => {
+  test("returns 404 when the org has no developers", async () => {
     const session = makeSessionRow({ developer_id: "dev-aaa" });
     mockGetSessionDetail.mockImplementation(() =>
       Promise.resolve({ session, events: [] })
@@ -628,7 +603,7 @@ describe("GET /sessions/:id/titles", () => {
     const app = buildApp({ orgDeveloperIds: [] });
     const res = await app.request("/sessions/sess-1/titles");
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
   });
 
   test("passes correct session ID to getSessionTitleHistory", async () => {

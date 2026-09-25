@@ -3,11 +3,13 @@ import { FolderOpen, Users, Activity } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { ProjectDetail } from "@devscope/shared";
+import { ProjectLabel } from "@/components/ProjectLabel";
 
 interface ProjectCardProps {
   project: ProjectDetail;
   index: number;
-  onClick: () => void;
+  /** Omitted for the "Private projects" pool, which has no drill-down. */
+  onClick?: () => void;
 }
 
 export function ProjectCard({ project, index, onClick }: ProjectCardProps) {
@@ -25,14 +27,14 @@ export function ProjectCard({ project, index, onClick }: ProjectCardProps) {
       transition={{ delay: index * 0.05 }}
     >
       <Card
-        className="cursor-pointer hover:border-accent transition-colors"
+        className={onClick ? "cursor-pointer hover:border-accent transition-colors" : ""}
         onClick={onClick}
       >
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 min-w-0">
               <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="font-medium truncate">{project.name}</span>
+              <ProjectLabel name={project.name} fallback="Private projects" className="font-medium truncate" />
             </div>
             {project.active_sessions > 0 && (
               <Badge className="bg-emerald-600 text-[10px]">

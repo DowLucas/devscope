@@ -12,7 +12,6 @@ import type { AiReport } from "@devscope/shared";
 const FeedbackState = Annotation.Root({
   sessionId: Annotation<string>,
   privacyMode: Annotation<string | null>,
-  isSelfView: Annotation<boolean>,
   includeContent: Annotation<boolean>,
   orgId: Annotation<string>,
   data: Annotation<Record<string, unknown>>,
@@ -28,7 +27,8 @@ async function gatherData(
   state: FeedbackStateType,
   sql: SQL
 ): Promise<Partial<FeedbackStateType>> {
-  const includeContent = state.isSelfView && state.privacyMode === "open";
+  // Callers only run this for viewers allowed to see the session's content.
+  const includeContent = state.privacyMode === "open";
   const feedbackData = await getSessionFeedbackData(sql, state.sessionId, includeContent);
 
   if (!feedbackData) {
@@ -203,7 +203,6 @@ export async function runSessionFeedbackWorkflow(
   sql: SQL,
   sessionId: string,
   privacyMode: string | null,
-  isSelfView: boolean,
   orgId: string
 ): Promise<AiReport> {
   const app = createSessionFeedbackWorkflow(sql);
@@ -211,7 +210,6 @@ export async function runSessionFeedbackWorkflow(
   const result = await app.invoke({
     sessionId,
     privacyMode,
-    isSelfView,
     includeContent: false,
     orgId,
     data: {},

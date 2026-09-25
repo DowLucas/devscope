@@ -58,6 +58,15 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     getProjectContributors: noopArr,
     getProjectToolUsage: noopArr,
     getProjectActivityOverTime: noopArr,
+    getSharingDeveloperIds: noopArr,
+    getSessionVisibilityRows: noopArr,
+    getDevelopersSharing: mock(() => Promise.resolve(false)),
+    getConsentOverview: noop,
+    updateDeveloperPrivacy: noop,
+    createDataRequest: noop,
+    getDataRequests: noopArr,
+    updateDataRequestStatus: noop,
+    getSessionAudience: mock(() => Promise.resolve({ shareDetails: false, privacyMode: null, ownerUserIds: [] })),
     generateDigest: noop,
     getDigests: noopArr,
     getExportData: noop,
@@ -100,6 +109,8 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     // unrelated tests that import them via the same module.
     getConcreteToolDetails: noop,
     getPatterns: noopArr,
+    getPatternStats: noop,
+    getAntiPatterns: noopArr,
     getAntiPatternStats: noop,
     createReport: noop,
     updateReport: noop,
@@ -136,31 +147,9 @@ export function wsHandlerStubs(overrides: Record<string, unknown> = {}) {
     addClient: mock(() => {}),
     removeClient: mock(() => {}),
     broadcastToOrg: mock(() => {}),
+    broadcastToOrgByViewer: mock(() => {}),
     broadcast: mock(() => {}),
     getClientCount: mock(() => 0),
-    ...overrides,
-  };
-}
-
-/** All exports from `../../utils/stripSensitiveFields`. */
-export function stripSensitiveFieldsStubs(overrides: Record<string, unknown> = {}) {
-  return {
-    stripSensitivePayload: mock((payload: Record<string, unknown>) => {
-      const stripped = { ...payload };
-      delete stripped.promptText;
-      delete stripped.toolInput;
-      delete stripped.responseText;
-      return stripped;
-    }),
-    stripSensitiveEvent: mock((event: Record<string, unknown>) => {
-      if (!event.payload || typeof event.payload !== "object") return event;
-      const payload = event.payload as Record<string, unknown>;
-      const stripped = { ...payload };
-      delete stripped.promptText;
-      delete stripped.toolInput;
-      delete stripped.responseText;
-      return { ...event, payload: stripped };
-    }),
     ...overrides,
   };
 }

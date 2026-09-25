@@ -8,6 +8,7 @@ import { ShieldOff, Lock } from "lucide-react";
 import { ActivityBadge } from "./ActivityBadge";
 import { useDebouncedToolState } from "@/hooks/useDebouncedToolState";
 import { timeAgo } from "@/lib/utils";
+import { ProjectLabel } from "@/components/ProjectLabel";
 
 const EVENT_LABELS: Record<string, string> = {
   "session.start": "Session started",
@@ -110,7 +111,6 @@ const STATE_PULSE_COLORS: Record<string, string> = {
 
 export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
   const { session, developerName, latestEvent, isToolRunning, currentToolName, activityState } = data;
-  const projectName = session.projectName ?? "";
   const startedAt = session.startedAt ?? "";
   const isDangerousMode = session.permissionMode === "dangerously-skip-permissions";
   const isRedactedMode = session.privacyMode === "private";
@@ -158,7 +158,7 @@ export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1 text-sm font-medium text-gray-100">
-            <span className="truncate">{projectName}</span>
+            <ProjectLabel name={session.projectName} className="truncate" />
             {isDangerousMode && (
               <span title="Permissions skipped">
                 <ShieldOff className="h-3.5 w-3.5 shrink-0 text-red-400" />

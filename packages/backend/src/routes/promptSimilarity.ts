@@ -3,6 +3,7 @@ import type { SQL } from "bun";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { findSimilarPrompts } from "../db/promptSimilarityQueries";
+import { getViewerDevIds } from "../services/visibility";
 
 // Pre-flight similar-prompts lookup for the UserPromptSubmit hook.
 // Returns up to 3 prior prompts from the same developer + project that
@@ -24,6 +25,12 @@ export function promptSimilarityRoutes(sql: SQL) {
     const body = c.req.valid("json");
 
     try {
+      // Only the caller's own history. Anyone else gets the same empty
+      // answer as a miss, so ids can't be probed and the hook fails open.
+      if (!(await getViewerDevIds(sql, c)).includes(body.developer_id)) {
+        return c.json({ matches: [], lines: [] });
+      }
+
       const matches = await findSimilarPrompts(sql, {
         developerId: body.developer_id,
         projectPath: body.project_path,

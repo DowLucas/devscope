@@ -1,7 +1,8 @@
 import { motion } from "motion/react";
-import type { DevscopeEvent } from "@devscope/shared";
+import type { FeedEvent } from "@devscope/shared";
 import { timeAgo } from "@/lib/utils";
 import { EVENT_COLORS, EVENT_LABELS, getEventSummary } from "@/lib/eventDisplay";
+import { ProjectLabel } from "@/components/ProjectLabel";
 
 function getInitials(name: string): string {
   return name
@@ -12,7 +13,7 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-export function EventCard({ event }: { event: DevscopeEvent }) {
+export function EventCard({ event }: { event: FeedEvent }) {
   const p = event.payload as unknown as Record<string, unknown>;
   const isInterrupt = event.eventType === "tool.fail" && p.isInterrupt === true;
   const colorClass = isInterrupt
@@ -39,7 +40,7 @@ export function EventCard({ event }: { event: DevscopeEvent }) {
           <div className="flex items-center gap-2 text-sm">
             <span className="font-medium">{event.developerName}</span>
             <span className="text-gray-500">in</span>
-            <span className="text-gray-300 font-mono text-xs">{event.projectName}</span>
+            <ProjectLabel name={event.projectName} className="text-gray-300 font-mono text-xs" />
           </div>
           <div className="text-sm text-gray-400 truncate">
             <span className="text-gray-500">{label}:</span>{" "}

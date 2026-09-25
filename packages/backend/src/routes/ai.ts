@@ -21,7 +21,7 @@ import {
   getTokenUsageSummary,
   getTodayTokenCount,
 } from "../db";
-import { getAllDeveloperIdsForUser } from "../services/developerLink";
+import { broadcastSessionUpdate, filterVisibleReports, getSearchableDevIds, getViewerDevIds, visibilityForRow } from "../services/visibility";
 import { broadcast, broadcastToOrg } from "../ws/handler";
 import type { Content } from "@google/genai";
 import type { InsightType, InsightSeverity, ReportType } from "@devscope/shared";
@@ -120,7 +120,12 @@ export function aiRoutes(sql: SQL) {
     }
 
     // Run streaming workflow
-    const stream = await runQueryWorkflowStreaming(sql, question, history, devIds);
+    const viewerDevIds = await getViewerDevIds(sql, c);
+    const stream = await runQueryWorkflowStreaming(sql, question, history, {
+      orgDevIds: devIds,
+      viewerDevIds,
+      searchableDevIds: await getSearchableDevIds(sql, devIds ?? [], viewerDevIds),
+    });
 
     // Collect full answer for saving
     const reader = stream.getReader();
@@ -249,15 +254,16 @@ export function aiRoutes(sql: SQL) {
     const limit = Math.min(Number(c.req.query("limit") ?? 20), 50);
     const orgId = c.get("orgId" as never) as string | undefined;
     const reports = await getReports(sql, limit, orgId);
-    return c.json(reports);
+    return c.json(await filterVisibleReports(sql, reports, await getViewerDevIds(sql, c)));
   });
 
   app.get("/reports/:id", async (c) => {
     const id = c.req.param("id");
     const orgId = c.get("orgId" as never) as string | undefined;
     const report = await getReport(sql, id, orgId);
-    if (!report) return c.json({ error: "Report not found" }, 404);
-    return c.json(report);
+    const [visible] = report ? await filterVisibleReports(sql, [report], await getViewerDevIds(sql, c)) : [];
+    if (!visible) return c.json({ error: "Report not found" }, 404);
+    return c.json(visible);
   });
 
   const reportSchema = z.object({
@@ -311,13 +317,13 @@ export function aiRoutes(sql: SQL) {
     const { session_id } = c.req.valid("json");
     const orgId = c.get("orgId" as never) as string | undefined;
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    const user = c.get("user" as never) as any;
 
     // Fetch session to get developer_id and privacy_mode
     const sessionRows = await sql`
-      SELECT id, developer_id, privacy_mode, status, ended_at
-      FROM sessions
-      WHERE id = ${session_id}
+      SELECT s.id, s.developer_id, s.privacy_mode, s.status, s.ended_at,
+             d.share_details AS owner_share_details
+      FROM sessions s JOIN developers d ON d.id = s.developer_id
+      WHERE s.id = ${session_id}
     ` as any[];
 
     if (sessionRows.length === 0) {
@@ -327,7 +333,7 @@ export function aiRoutes(sql: SQL) {
     const sessionRow = sessionRows[0];
 
     // Org-scope validation
-    if (devIds && devIds.length > 0 && !devIds.includes(sessionRow.developer_id)) {
+    if (devIds && !devIds.includes(sessionRow.developer_id)) {
       return c.json({ error: "Session not found" }, 404);
     }
 
@@ -340,10 +346,11 @@ export function aiRoutes(sql: SQL) {
       );
     }
 
-    // Determine if the viewer is the session's own developer (self-view)
-    const viewerDevIds = user?.id ? await getAllDeveloperIdsForUser(sql, user.id) : [];
-    const isSelfView = viewerDevIds.length > 0 && viewerDevIds.includes(sessionRow.developer_id);
-    const contentIncluded = isSelfView && privacyMode === "open";
+    const visibility = visibilityForRow(sessionRow, await getViewerDevIds(sql, c));
+    if (visibility === "activity") {
+      return c.json({ error: "The session owner has not enabled sharing." }, 403);
+    }
+    const contentIncluded = privacyMode === "open";
 
     // Check cache: return existing report if available for same privacy tier.
     //
@@ -376,13 +383,17 @@ export function aiRoutes(sql: SQL) {
     if (!orgId) {
       return c.json({ error: "No active organization" }, 400);
     }
-    const report = await runSessionFeedbackWorkflow(sql, session_id, privacyMode, isSelfView, orgId);
+    const report = await runSessionFeedbackWorkflow(sql, session_id, privacyMode, orgId);
 
-    if (orgId) {
-      broadcastToOrg(orgId, { type: "ai.report.completed", data: report });
-    } else {
-      broadcast({ type: "ai.report.completed", data: report });
-    }
+    // The owner always hears about it; teammates only if the session is shared.
+    const reportMessage = { type: "ai.report.completed" as const, data: report };
+    await broadcastSessionUpdate(
+      sql,
+      [orgId],
+      { developerId: sessionRow.developer_id, sessionId: session_id },
+      reportMessage,
+      (v) => (v === "shared" ? reportMessage : null),
+    );
 
     return c.json(report);
   });

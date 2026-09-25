@@ -47,7 +47,7 @@ export function DataSharingCard() {
         throw new Error(msg);
       }
       setShareDetails(value);
-      toast.success(value ? "Detail sharing enabled" : "Detail sharing disabled");
+      toast.success(value ? "Your sessions are now shared with your team" : "Your sessions are now private to you");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update preference");
     } finally {
@@ -63,8 +63,8 @@ export function DataSharingCard() {
           <CardTitle>Data Sharing</CardTitle>
         </div>
         <CardDescription>
-          Control whether detailed session data (prompt text, tool inputs, response text) is visible
-          in your personal session views.
+          Choose what the other members of your organization can see about your sessions. You
+          always see all of your own data.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -82,15 +82,18 @@ export function DataSharingCard() {
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
               <div className="space-y-1">
-                <p className="text-sm font-medium">Share session details (opt-in)</p>
+                <p className="text-sm font-medium">Share my sessions with my team</p>
                 <p className="text-xs text-muted-foreground max-w-sm">
-                  When enabled, prompt text, tool inputs, and response text are retained in your
-                  session views. This data is never shared with other team members.
+                  When on, everyone in your organization can see your projects, session titles,
+                  prompts, tool inputs and results, Claude&apos;s responses, and token usage —
+                  including past sessions. Sessions run in plugin <code>private</code> mode stay
+                  hidden. When off, teammates only see that you&apos;re active.
                 </p>
               </div>
               <button
                 role="switch"
                 aria-checked={shareDetails}
+                aria-label="Share my sessions with my team"
                 disabled={saving}
                 onClick={() => handleToggle(!shareDetails)}
                 className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50 ${
@@ -107,10 +110,10 @@ export function DataSharingCard() {
 
             <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Always collected (no opt-in required)
+                Teammates always see
               </p>
               <div className="flex flex-wrap gap-2">
-                {["Session metadata", "Event types", "Tool names", "Prompt length", "Developer identity"].map((cat) => (
+                {["Your name", "Active / idle", "Session count", "Session timing"].map((cat) => (
                   <span key={cat} className="rounded-md bg-muted px-2 py-0.5 text-xs">{cat}</span>
                 ))}
               </div>
@@ -118,10 +121,10 @@ export function DataSharingCard() {
 
             <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Opt-in required
+                Teammates see only when sharing is on
               </p>
               <div className="flex flex-wrap gap-2">
-                {["Prompt text", "Tool inputs", "Response text"].map((cat) => (
+                {["Projects", "Session titles", "Prompt text", "Tool inputs & results", "Responses", "AI debriefs", "Token usage"].map((cat) => (
                   <span
                     key={cat}
                     className={`rounded-md px-2 py-0.5 text-xs ${

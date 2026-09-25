@@ -1,6 +1,7 @@
 import type { SQL } from "bun";
 import { Hono } from "hono";
 import { getFrictionAlerts, acknowledgeFrictionAlert, getFrictionRules } from "../db";
+import { getViewerDevIds } from "../services/visibility";
 
 export function frictionRoutes(sql: SQL) {
   const app = new Hono();
@@ -12,7 +13,7 @@ export function frictionRoutes(sql: SQL) {
     const acknowledged = c.req.query("acknowledged");
     const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
 
-    const alerts = await getFrictionAlerts(sql, orgId, {
+    const alerts = await getFrictionAlerts(sql, orgId, await getViewerDevIds(sql, c), {
       sessionId: sessionId || undefined,
       acknowledged: acknowledged !== undefined ? acknowledged === "true" : undefined,
       limit,

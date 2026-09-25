@@ -6,7 +6,8 @@ import type { ToolCallEntry } from "@devscope/shared";
 
 interface ToolChainTimelineProps {
   toolCalls: ToolCallEntry[];
-  isSelfView?: boolean;
+  /** Owner, or a teammate the owner opted in to sharing with. */
+  showContent?: boolean;
 }
 
 function getToolInputSummary(toolName: string, toolInput: Record<string, unknown>): string {
@@ -48,7 +49,7 @@ function getToolInputSummary(toolName: string, toolInput: Record<string, unknown
   }
 }
 
-export function ToolChainTimeline({ toolCalls, isSelfView = false }: ToolChainTimelineProps) {
+export function ToolChainTimeline({ toolCalls, showContent = false }: ToolChainTimelineProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   if (toolCalls.length === 0) return null;
@@ -59,7 +60,7 @@ export function ToolChainTimeline({ toolCalls, isSelfView = false }: ToolChainTi
         const isExpanded = expandedIndex === i;
         // Tool inputs are only available in self-view (when developer opted in).
         // Error messages are always visible — they help identify tooling issues.
-        const hasDetail = tool.errorMessage || (isSelfView && tool.toolInput);
+        const hasDetail = tool.errorMessage || (showContent && tool.toolInput);
 
         return (
           <div key={i}>
@@ -80,7 +81,7 @@ export function ToolChainTimeline({ toolCalls, isSelfView = false }: ToolChainTi
                   <span className="text-muted-foreground font-normal"> · {tool.toolSubcommand}</span>
                 )}
               </span>
-              {isSelfView && tool.toolInput && (() => {
+              {showContent && tool.toolInput && (() => {
                 const summary = getToolInputSummary(tool.toolName, tool.toolInput);
                 return summary ? (
                   <span className="text-muted-foreground font-mono truncate min-w-0" title={summary}>
@@ -113,13 +114,13 @@ export function ToolChainTimeline({ toolCalls, isSelfView = false }: ToolChainTi
                   className="overflow-hidden"
                 >
                   <div className="ml-6 mb-2 px-3 py-2 rounded bg-muted/50 border border-border text-xs">
-                    {isSelfView && tool.toolInput && (
+                    {showContent && tool.toolInput && (
                       <p className="font-mono text-muted-foreground break-all">
                         {getToolInputSummary(tool.toolName, tool.toolInput)}
                       </p>
                     )}
                     {tool.errorMessage && (
-                      <p className={`${tool.isInterrupt ? "text-amber-400" : "text-destructive"} ${isSelfView && tool.toolInput ? "mt-1" : ""}`}>
+                      <p className={`${tool.isInterrupt ? "text-amber-400" : "text-destructive"} ${showContent && tool.toolInput ? "mt-1" : ""}`}>
                         {tool.isInterrupt ? "Interrupted" : "Error"}: {tool.errorMessage}
                       </p>
                     )}

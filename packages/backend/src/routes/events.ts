@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
-import type { DevscopeEvent } from "@devscope/shared";
+import type { DevscopeEvent, WsMessage } from "@devscope/shared";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import {
@@ -18,7 +18,7 @@ import {
 } from "../db";
 import { broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg, autoLinkUserToDeveloper, computeDeveloperId } from "../services/developerLink";
-import { stripSensitivePayload } from "../utils/stripSensitiveFields";
+import { broadcastSessionUpdate, getViewerDevIds, redactEvent, visibilityForRow } from "../services/visibility";
 import { logEthicsEvent } from "../utils/ethicsAudit";
 import { evaluateFriction, cleanupFrictionSession } from "../services/frictionDetector";
 import { CURRENT_SALT_VERSION, deriveOrgSalt } from "../utils/orgSalt";
@@ -111,6 +111,14 @@ export function eventsRoutes(sql: SQL) {
       }
     }
 
+    // Updates that describe what the session is doing: the owner always gets
+    // them, teammates only when the session is shared with them.
+    const orgIds = (devOrgs as any[]).map((r) => r.organization_id);
+    const sessionRef = { developerId: event.developerId, sessionId: event.sessionId };
+    function broadcastSessionDetail(msg: WsMessage) {
+      return broadcastSessionUpdate(sql, orgIds, sessionRef, msg, (v) => (v === "shared" ? msg : null));
+    }
+
     // Session status broadcasts
     if (opts.sessionCreatedOrReactivated) {
       broadcastToDevOrgs({ type: "session.update", data: { sessionId: event.sessionId, status: "active" } });
@@ -120,15 +128,14 @@ export function eventsRoutes(sql: SQL) {
       broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
     }
 
-    // Broadcast the event (strip sensitive fields for team-visible WebSocket feed)
-    const rawPayload = event.payload as Record<string, unknown>;
-    broadcastToDevOrgs({
-      type: "event.new",
-      data: {
-        ...event,
-        payload: stripSensitivePayload(rawPayload),
-      },
-    });
+    // Owners get the full event; teammates what services/visibility.ts allows.
+    await broadcastSessionUpdate(
+      sql,
+      orgIds,
+      sessionRef,
+      { type: "event.new", data: event },
+      (v) => ({ type: "event.new", data: redactEvent(event as unknown as Record<string, unknown>, v) }),
+    );
 
     // Increment compaction count on compact.complete, track peak context usage, and finalize token segment
     if (event.eventType === "compact.complete") {
@@ -202,7 +209,7 @@ export function eventsRoutes(sql: SQL) {
         const toolName = toolPayload.toolName ?? "unknown";
         const alert = await checkAlertThresholds(sql, event.sessionId, toolName);
         if (alert) {
-          broadcastToDevOrgs({ type: "alert.triggered", data: alert });
+          await broadcastSessionDetail({ type: "alert.triggered", data: alert });
         }
       }
     }
@@ -232,7 +239,7 @@ export function eventsRoutes(sql: SQL) {
           const frictionAlert = evaluateFriction(event.sessionId, event, rules);
           if (frictionAlert) {
             const saved = await insertFrictionAlert(sql, { ...frictionAlert, organization_id: orgId });
-            broadcastToDevOrgs({ type: "friction.alert", data: saved });
+            await broadcastSessionDetail({ type: "friction.alert", data: saved });
             if (!firstTrippedAlert) {
               firstTrippedAlert = {
                 rule_type: frictionAlert.rule_type,
@@ -489,23 +496,19 @@ export function eventsRoutes(sql: SQL) {
     const limit = clampInt(c.req.query("limit"), 50, 500);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     const rows = await getRecentEvents(sql, limit, devIds);
-    // Strip opt-in sensitive fields from the team-visible recent events feed.
-    // Prompt text and tool inputs are only visible in the self-view session detail.
-    const events = (rows as any[]).map((row: any) => {
-      const payload = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
-      return {
-        id: row.id,
-        timestamp: row.created_at,
-        sessionId: row.session_id,
-        developerId: row.developer_id ?? "",
-        developerName: row.developer_name,
-        developerEmail: row.developer_email,
-        projectPath: row.project_path ?? "",
-        projectName: row.project_name,
-        eventType: row.event_type,
-        payload: stripSensitivePayload(payload),
-      };
-    });
+    const viewerDevIds = await getViewerDevIds(sql, c);
+    const events = (rows as any[]).map((row: any) => redactEvent({
+      id: row.id,
+      timestamp: row.created_at,
+      sessionId: row.session_id,
+      developerId: row.developer_id ?? "",
+      developerName: row.developer_name,
+      developerEmail: row.developer_email,
+      projectPath: row.project_path ?? "",
+      projectName: row.project_name,
+      eventType: row.event_type,
+      payload: typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload,
+    }, visibilityForRow(row, viewerDevIds)));
     return c.json(events);
   });
 

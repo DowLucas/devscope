@@ -1,6 +1,6 @@
 import { describe, expect, test, mock, beforeEach } from "bun:test";
 import { Hono } from "hono";
-import { dbStubs, wsHandlerStubs, developerLinkStubs, stripSensitiveFieldsStubs } from "../../__test_helpers__/mockStubs";
+import { dbStubs, wsHandlerStubs, developerLinkStubs } from "../../__test_helpers__/mockStubs";
 
 // ---------------------------------------------------------------------------
 // Mocks -- must be set up BEFORE importing the module under test
@@ -12,6 +12,9 @@ const mockEndSession = mock(() => Promise.resolve());
 const mockInsertEvent = mock(() => Promise.resolve({ stored: true }));
 const mockGetRecentEvents = mock(() => Promise.resolve([] as any[]));
 const mockCheckAlertThresholds = mock(() => Promise.resolve(null as any));
+const mockGetSessionAudience = mock(() =>
+  Promise.resolve({ shareDetails: false, privacyMode: null as string | null, ownerUserIds: [] as string[] }),
+);
 
 mock.module("../../db", () => dbStubs({
   upsertDeveloper: mockUpsertDeveloper,
@@ -20,30 +23,27 @@ mock.module("../../db", () => dbStubs({
   insertEvent: mockInsertEvent,
   getRecentEvents: mockGetRecentEvents,
   checkAlertThresholds: mockCheckAlertThresholds,
+  getSessionAudience: mockGetSessionAudience,
 }));
 
 const mockBroadcastToOrg = mock(() => {});
+// Per-viewer broadcasts: record the teammate copy like a plain org broadcast so
+// assertions on what the org receives cover both paths.
+const mockBroadcastByViewer = mock(
+  (orgId: string, _owners: string[], _ownerMsg: unknown, teammateMsg: unknown) => {
+    if (teammateMsg) (mockBroadcastToOrg as any)(orgId, teammateMsg);
+  },
+);
 
 mock.module("../../ws/handler", () => wsHandlerStubs({
   broadcastToOrg: mockBroadcastToOrg,
+  broadcastToOrgByViewer: mockBroadcastByViewer,
 }));
 
 const mockAutoLinkDeveloperToOrg = mock(() => Promise.resolve());
 
 mock.module("../../services/developerLink", () => developerLinkStubs({
   autoLinkDeveloperToOrg: mockAutoLinkDeveloperToOrg,
-}));
-
-const mockStripSensitivePayload = mock((payload: Record<string, unknown>) => {
-  const stripped = { ...payload };
-  delete stripped.promptText;
-  delete stripped.toolInput;
-  delete stripped.responseText;
-  return stripped;
-});
-
-mock.module("../../utils/stripSensitiveFields", () => stripSensitiveFieldsStubs({
-  stripSensitivePayload: mockStripSensitivePayload,
 }));
 
 mock.module("../../services/frictionDetector", () => ({
@@ -202,18 +202,13 @@ describe("POST /events", () => {
     mockCheckAlertThresholds.mockReset();
     mockCheckAlertThresholds.mockImplementation(() => Promise.resolve(null));
     mockBroadcastToOrg.mockReset();
+    mockBroadcastByViewer.mockClear();
+    mockGetSessionAudience.mockClear();
+    mockGetSessionAudience.mockImplementation(() =>
+      Promise.resolve({ shareDetails: false, privacyMode: null, ownerUserIds: [] }),
+    );
     mockAutoLinkDeveloperToOrg.mockReset();
     mockAutoLinkDeveloperToOrg.mockImplementation(() => Promise.resolve());
-    mockStripSensitivePayload.mockReset();
-    mockStripSensitivePayload.mockImplementation(
-      (payload: Record<string, unknown>) => {
-        const stripped = { ...payload };
-        delete stripped.promptText;
-        delete stripped.toolInput;
-        delete stripped.responseText;
-        return stripped;
-      },
-    );
   });
 
   // -----------------------------------------------------------------------
@@ -873,26 +868,63 @@ describe("POST /events", () => {
     expect(sessionUpdate.data.status).toBe("ended");
   });
 
-  test("strips sensitive payload from event.new broadcast", async () => {
-    const sql = makeMockSql(
-      [{ status: "active" }],
-      [{ organization_id: "org-1" }],
-    );
+  async function broadcastPrompt(audience: { shareDetails: boolean; privacyMode: string | null }) {
+    mockBroadcastToOrg.mockClear();
+    mockBroadcastByViewer.mockClear();
+    mockGetSessionAudience.mockImplementation(() => Promise.resolve({ ...audience, ownerUserIds: ["user-owner"] }));
+    const sql = makeMockSql([{ status: "active" }], [{ organization_id: "org-1" }]);
     const app = buildApp(sql);
-
     await app.request("/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
         validEvent({
           eventType: "prompt.submit",
-          payload: { promptText: "secret", promptLength: 6 },
+          payload: { promptText: "secret", promptLength: 6, transcriptPath: "/home/a/t.jsonl" },
         }),
       ),
     });
+    const call = mockBroadcastByViewer.mock.calls.find((c: any) => c[2].type === "event.new") as any[];
+    return { owners: call[1], owner: call[2], teammate: call[3] };
+  }
 
-    // stripSensitivePayload should have been called
-    expect(mockStripSensitivePayload).toHaveBeenCalled();
+  test("event.new: teammates get activity only when the owner has not opted in", async () => {
+    const { teammate } = await broadcastPrompt({ shareDetails: false, privacyMode: "standard" });
+    expect(teammate.data.payload).toEqual({});
+    expect(teammate.data.projectName).toBeNull();
+    expect(teammate.data.projectPath).toBeNull();
+    expect(teammate.data.eventType).toBe("prompt.submit");
+  });
+
+  test("event.new: the owner's own connections always get the full event", async () => {
+    const { owners, owner } = await broadcastPrompt({ shareDetails: false, privacyMode: "private" });
+    expect(owners).toEqual(["user-owner"]);
+    expect(owner.data.payload).toEqual({ promptText: "secret", promptLength: 6, transcriptPath: "/home/a/t.jsonl" });
+    expect(owner.data.projectName).not.toBeNull();
+  });
+
+  test("event.new: teammates get content when the owner opted in", async () => {
+    const { teammate } = await broadcastPrompt({ shareDetails: true, privacyMode: "standard" });
+    expect(teammate.data.payload).toEqual({ promptText: "secret", promptLength: 6 });
+    expect(teammate.data.projectName).not.toBeNull();
+  });
+
+  test("event.new: private sessions stay activity-only for teammates even when opted in", async () => {
+    const { teammate } = await broadcastPrompt({ shareDetails: true, privacyMode: "private" });
+    expect(teammate.data.payload).toEqual({});
+  });
+
+  test("event.new: an audience lookup failure falls back to activity-only and still stores the event", async () => {
+    mockGetSessionAudience.mockImplementation(() => Promise.reject(new Error("db down")));
+    const res = await buildApp(makeMockSql([{ status: "active" }], [{ organization_id: "org-1" }])).request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ eventType: "prompt.submit", payload: { promptText: "secret", promptLength: 6 } })),
+    });
+    expect(res.status).toBe(200);
+    const call = mockBroadcastByViewer.mock.calls.at(-1) as any[];
+    expect(call[1]).toEqual([]);
+    expect(call[3].data.payload).toEqual({});
   });
 
   // -----------------------------------------------------------------------
@@ -950,11 +982,25 @@ describe("POST /events", () => {
       ),
     });
 
-    const calls = mockBroadcastToOrg.mock.calls;
-    const messages = calls.map((c: any) => c[1]);
-    const alertMsg = messages.find((m: any) => m.type === "alert.triggered");
-    expect(alertMsg).toBeDefined();
-    expect(alertMsg.data).toEqual(alertData);
+    // Owner always gets it; opted-out owner → teammates get nothing.
+    const call = mockBroadcastByViewer.mock.calls.find((c: any) => c[2].type === "alert.triggered") as any[];
+    expect(call[0]).toBe("org-alert");
+    expect(call[2].data).toEqual(alertData);
+    expect(call[3]).toBeNull();
+  });
+
+  test("broadcasts alert to teammates when the owner shares the session", async () => {
+    mockCheckAlertThresholds.mockImplementation(() => Promise.resolve({ id: "alert-2" }));
+    mockGetSessionAudience.mockImplementation(() =>
+      Promise.resolve({ shareDetails: true, privacyMode: "standard", ownerUserIds: [] }),
+    );
+    await buildApp(makeMockSql([{ status: "active" }], [{ organization_id: "org-alert" }])).request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ eventType: "tool.fail", payload: { toolName: "Read" } })),
+    });
+    const alertMsg = mockBroadcastToOrg.mock.calls.map((c: any) => c[1]).find((m: any) => m.type === "alert.triggered");
+    expect(alertMsg.data).toEqual({ id: "alert-2" });
   });
 
   test("does NOT check alert thresholds for non tool.fail events", async () => {
@@ -1202,16 +1248,6 @@ describe("GET /events/recent", () => {
   beforeEach(() => {
     mockGetRecentEvents.mockReset();
     mockGetRecentEvents.mockImplementation(() => Promise.resolve([]));
-    mockStripSensitivePayload.mockReset();
-    mockStripSensitivePayload.mockImplementation(
-      (payload: Record<string, unknown>) => {
-        const stripped = { ...payload };
-        delete stripped.promptText;
-        delete stripped.toolInput;
-        delete stripped.responseText;
-        return stripped;
-      },
-    );
   });
 
   test("returns mapped events with camelCase fields", async () => {
@@ -1225,6 +1261,7 @@ describe("GET /events/recent", () => {
         developer_email: "alice@example.com",
         project_path: "/home/user/project",
         project_name: "my-project",
+        owner_share_details: true,
         event_type: "session.start",
         payload: {},
       },
@@ -1303,7 +1340,7 @@ describe("GET /events/recent", () => {
     expect(body).toEqual([]);
   });
 
-  test("strips sensitive payload from returned events", async () => {
+  test("returns activity-only events for owners who have not opted in", async () => {
     const dbRows = [
       {
         id: "evt-1",
@@ -1327,9 +1364,32 @@ describe("GET /events/recent", () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    // stripSensitivePayload removes promptText
-    expect(body[0].payload).toEqual({ promptLength: 6 });
-    expect(body[0].payload.promptText).toBeUndefined();
+    expect(body[0].payload).toEqual({});
+    expect(body[0].projectName).toBeNull();
+    expect(body[0].developerName).toBe("Alice");
+  });
+
+  test("returns full events for owners who opted in", async () => {
+    mockGetRecentEvents.mockImplementation(() => Promise.resolve([{
+      id: "evt-1",
+      created_at: "2026-03-03T12:00:00Z",
+      session_id: "sess-1",
+      developer_id: "dev-aaa",
+      developer_name: "Alice",
+      developer_email: "alice@example.com",
+      project_path: "/home/user/project",
+      project_name: "my-project",
+      privacy_mode: "standard",
+      owner_share_details: true,
+      event_type: "prompt.submit",
+      payload: { promptText: "shared", promptLength: 6 },
+    }]));
+
+    const res = await buildApp(makeMockSql()).request("/recent");
+    const body = await res.json();
+
+    expect(body[0].payload).toEqual({ promptText: "shared", promptLength: 6 });
+    expect(body[0].projectName).toBe("my-project");
   });
 
   test("parses string payload from DB row", async () => {
@@ -1343,6 +1403,7 @@ describe("GET /events/recent", () => {
         developer_email: "bob@example.com",
         project_path: "/home/bob/project",
         project_name: "other-project",
+        owner_share_details: true,
         event_type: "tool.complete",
         payload: JSON.stringify({ toolName: "Bash", duration: 1200 }),
       },
@@ -1370,6 +1431,7 @@ describe("GET /events/recent", () => {
         developer_email: null,
         project_path: null,
         project_name: "orphan-project",
+        owner_share_details: true,
         event_type: "notification",
         payload: {},
       },
