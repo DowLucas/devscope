@@ -210,7 +210,14 @@ DevScope exists to improve **team workflow and tooling** — not to monitor, ran
 - `shared` — the owner turned on "Share my sessions with my team" and the session is not plugin-`private`: everything the owner sees (projects, titles, prompts, tool inputs/results, responses, AI debriefs, tokens/cost), minus the local `transcriptPath`.
 - `activity` — anything else (the default): name, status, event count and timing only. Session rows go through an allowlist, event payloads are emptied, project/title are null.
 
-It is evaluated at read time with the owner's current setting, so turning sharing off hides history immediately. Every route or broadcast that returns data about another developer's session must go through these helpers; the org-wide WebSocket feed and `session.title.update` / `ai.report.completed` broadcasts use `teammateVisibility`. Aggregates that name projects pool sessions the viewer may not see under a `NULL` project ("Private projects") via `visibleSessionSql`. Tokens and cost may show on a shared session's own page but never in lists, leaderboards or rankings.
+It is evaluated at read time with the owner's current setting, so turning sharing off hides history immediately. Every route or broadcast that returns data about another developer's session must go through these helpers:
+
+- **Live updates** about a session (`event.new`, `session.title.update`, `alert.triggered`, `friction.alert`, session `ai.report.completed`) go through `broadcastSessionUpdate`: the owner's own WebSocket connections get the full message, teammates the redacted one or nothing.
+- **Aggregates** that name projects pool sessions the viewer may not see under a `NULL` project ("Private projects") via `visibleSessionSql` / `visibleSessionPredicate` (`db/utils.ts`). Org-wide artifacts (digests, tooling-health snapshots and alerts, team AI reports/insights) use an empty viewer list, i.e. only shared sessions are named.
+- **Content** (file paths, commands, error text) in AI chat tools, team reports/insights and failure clusters comes only from the viewer's own and opted-in developers (`getSearchableDevIds` / `getSharingDeveloperIds`). AI chat per-developer breakdowns are self-only, like `gateSelfDeveloperId`.
+- CLAUDE.md snapshots and friction alerts are filtered by their session's visibility.
+
+`orgDeveloperIds` of `[]` means an org with no developers and matches nothing; only `undefined` (internal jobs) is unscoped. Tokens and cost may show on a shared session's own page but never in lists, leaderboards or rankings.
 
 **Semantic retrieval:** `/api/similar/prompts` and `/api/similar/sessions/:id` search the caller's own sessions plus those of teammates who opted in (`getSearchableDevIds`). Results carry session, project and outcome only, never developer identity. `private` sessions are never indexed.
 

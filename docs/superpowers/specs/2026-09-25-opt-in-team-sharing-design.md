@@ -71,3 +71,15 @@ reports) are unchanged.
 - Token leaderboard guardrail stays green (cost never in lists/rankings).
 - No migration, backend + dashboard only, no plugin change.
 - Rollout note: all teammates appear activity-only until they opt in.
+
+## Additions from pre-landing review
+
+- Empty `orgDeveloperIds` matches nothing (was unscoped across orgs).
+- Owner-aware WebSocket delivery (`broadcastSessionUpdate` / `broadcastToOrgByViewer`):
+  owners keep full live updates; audience lookup failures fall back to activity-only.
+- Also scoped: CLAUDE.md snapshots, friction alerts, tooling-health summary/snapshots/
+  anomaly broadcasts, digests, failure clusters, AI chat tools (per-developer args
+  self-only; content from own + opted-in), team AI reports/insights content,
+  `activeAgents` on activity sessions, `/api/prompts/similar` (caller's own only).
+- Not addressed: in very small orgs, team totals minus your own can reveal a
+  teammate's totals (needs a minimum-group-size design decision).
