@@ -69,12 +69,13 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/api/events` | POST | Ingest event from plugin |
-| `/api/events/recent?limit=N` | GET | Recent events (default 50) |
+| `/api/events/recent?limit=N` | GET | Recent events (default 50), redacted per viewer (see Team visibility) |
 | `/api/developers` | GET | All developers + active session counts |
-| `/api/sessions` | GET | All sessions with event counts |
-| `/api/sessions/active` | GET | Active sessions only |
-| `/api/sessions/:id` | GET | Events for a session |
-| `/api/similar/prompts?q=&kind=prompt\|response&limit=` | GET | Semantically similar past turns in the org, with outcomes |
+| `/api/sessions` | GET | All sessions with event counts; each carries `visibility` and is redacted for the viewer |
+| `/api/sessions/active` | GET | Active sessions only (same redaction) |
+| `/api/sessions/:id` | GET | Session + events, with `visibility`; `activity` viewers get empty payloads |
+| `/api/privacy/consent/preferences` | GET/PUT | The caller's own `share_details` ("Share my sessions with my team") |
+| `/api/similar/prompts?q=&kind=prompt\|response&limit=` | GET | Semantically similar past turns from the caller's and opted-in teammates' sessions, with outcomes |
 | `/api/similar/sessions/:id?limit=` | GET | Sessions similar to a given session |
 | `/api/similar/error` | POST | "This error came up before" recall for the plugin's PostToolUseFailure hook: caller's own earlier sessions, similarity ≥ 0.92, and the input of the first same-tool call that succeeded within 30 min (often the fix); fails open |
 | `/api/similar/skill-chains` | GET | Caller's learned skill sequences, cached by the plugin at session start for next-skill hints |
@@ -198,7 +199,7 @@ DevScope exists to improve **team workflow and tooling** — not to monitor, ran
 
 **Core principles:**
 - **No individual surveillance**: Never build features that track, rank, or compare individual developer activity, productivity, or output. Activity data is for understanding team-wide patterns and tooling health.
-- **No developer comparisons**: Dashboards and reports must present aggregate team metrics only. Leaderboards, individual heatmaps, per-developer workload charts, and "status" indicators (active/idle/offline) are not acceptable.
+- **No developer comparisons**: Dashboards and reports must present aggregate team metrics only. Leaderboards, individual heatmaps and per-developer workload charts are not acceptable. A teammate's individual sessions may show as active or ended (the `activity` view below), but never roll that up into per-person presence, uptime or availability tracking.
 - **Tooling focus, not people focus**: When surfacing problems (e.g., high failure rates), attribute them to sessions, tools, or projects — never to individuals.
 - **AI guardrails**: LLM prompts must explicitly instruct against including individual developer names, rankings, or performance comparisons in generated insights and reports.
 - **Consent-first**: Developers opt in via plugin installation. Privacy mode (`DEVSCOPE_PRIVACY=standard`) is the default. Data collection should be minimal and transparent.
