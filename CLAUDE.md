@@ -80,6 +80,7 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/similar/error` | POST | "This error came up before" recall for the plugin's PostToolUseFailure hook: caller's own earlier sessions, similarity ≥ 0.92, and the input of the first same-tool call that succeeded within 30 min (often the fix); fails open |
 | `/api/similar/skill-chains` | GET | Caller's learned skill sequences, cached by the plugin at session start for next-skill hints |
 | `/api/similar/preflight` | POST | "You've asked this before" recall for the plugin's prompt hook: caller's own sessions only, similarity ≥ 0.9, earlier than 2 h ago, fails open to an empty result |
+| `/api/ai/voice-summary` | POST | One spoken sentence for the plugin's voice announcer (`trigger`, `project`, optional `tool`/`detail`/`last_message`); stateless, only token usage is recorded as `voice_summary`. The plugin never calls it for `private` sessions |
 | `/api/health` | GET | Health check + WS client count |
 | `/ws` | WS | Real-time event stream |
 

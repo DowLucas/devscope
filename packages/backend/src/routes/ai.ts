@@ -2,7 +2,8 @@ import type { SQL } from "bun";
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { isAiAvailable } from "../ai/gemini";
+import { isAiAvailable, callGemini, DEFAULT_MODEL } from "../ai/gemini";
+import { VOICE, buildVoicePrompt, toSpokenText, voiceSummaryBody } from "../services/voiceSummary";
 import { runQueryWorkflowStreaming } from "../ai/workflows/queryWorkflow";
 import { runInsightWorkflow } from "../ai/workflows/insightWorkflow";
 import { runReportWorkflow } from "../ai/workflows/reportWorkflow";
@@ -20,6 +21,7 @@ import {
   getReport,
   getTokenUsageSummary,
   getTodayTokenCount,
+  recordTokenUsage,
 } from "../db";
 import { broadcastSessionUpdate, filterVisibleReports, getSearchableDevIds, getViewerDevIds, visibilityForRow } from "../services/visibility";
 import { broadcast, broadcastToOrg } from "../ws/handler";
@@ -74,6 +76,31 @@ export function aiRoutes(sql: SQL) {
       return next();
     };
   }
+
+  // --- Voice ---
+
+  // One spoken sentence for the plugin's "a session needs you" announcer.
+  // Stateless: nothing is persisted beyond token usage.
+  app.post("/voice-summary", requireAi(), zValidator("json", voiceSummaryBody), async (c) => {
+    const orgId = c.get("orgId" as never) as string | undefined;
+    let result;
+    try {
+      result = await callGemini(buildVoicePrompt(c.req.valid("json")), undefined, {
+        temperature: VOICE.temperature,
+        maxOutputTokens: VOICE.maxOutputTokens,
+      });
+    } catch (err) {
+      console.error("[ai] voice summary failed:", err);
+      return c.json({ error: "Summary unavailable" }, 502);
+    }
+    // Usage accounting must not cost the user their summary.
+    recordTokenUsage(sql, "voice_summary", DEFAULT_MODEL, result.inputTokens, result.outputTokens, orgId).catch(
+      (err) => console.error("[ai] voice usage not recorded:", err),
+    );
+    const text = toSpokenText(result.text);
+    if (!text) return c.json({ error: "Empty summary" }, 502);
+    return c.json({ text });
+  });
 
   // --- Chat ---
 
