@@ -334,7 +334,7 @@ describe("GET /sessions/:id", () => {
     expect(res.status).toBe(200);
   });
 
-  test("allows access when orgDeveloperIds is empty (no org scope filtering)", async () => {
+  test("returns 404 when the org has no developers (empty list is not 'unscoped')", async () => {
     const session = makeSessionRow();
     mockGetSessionDetail.mockImplementation(() =>
       Promise.resolve({ session, events: [] })
@@ -343,7 +343,7 @@ describe("GET /sessions/:id", () => {
     const app = buildApp({ orgDeveloperIds: [], user: { id: "user-1" } });
     const res = await app.request("/sessions/sess-1");
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
   });
 
   test("returns session detail with mapped session when developer is in org", async () => {
@@ -578,7 +578,7 @@ describe("GET /sessions/:id/titles", () => {
     });
   });
 
-  test("allows access when orgDeveloperIds is empty", async () => {
+  test("returns 404 when the org has no developers", async () => {
     const session = makeSessionRow({ developer_id: "dev-aaa" });
     mockGetSessionDetail.mockImplementation(() =>
       Promise.resolve({ session, events: [] })
@@ -588,7 +588,7 @@ describe("GET /sessions/:id/titles", () => {
     const app = buildApp({ orgDeveloperIds: [] });
     const res = await app.request("/sessions/sess-1/titles");
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
   });
 
   test("passes correct session ID to getSessionTitleHistory", async () => {

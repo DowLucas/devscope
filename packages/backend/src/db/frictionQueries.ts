@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import { visibleSessionSql } from "./utils";
 import type { FrictionAlert, FrictionRule } from "@devscope/shared";
 
 // --- Friction Alerts ---
@@ -42,6 +43,7 @@ export async function insertFrictionAlert(
 export async function getFrictionAlerts(
   sql: SQL,
   orgId: string,
+  viewerDevIds: string[],
   opts: {
     sessionId?: string;
     acknowledged?: boolean;
@@ -49,45 +51,20 @@ export async function getFrictionAlerts(
   } = {}
 ): Promise<FrictionAlert[]> {
   const limit = opts.limit ?? 50;
+  const sessionId = opts.sessionId ?? null;
+  const acknowledged = opts.acknowledged ?? null;
 
-  if (opts.sessionId !== undefined && opts.acknowledged !== undefined) {
-    const rows = await sql`
-      SELECT * FROM friction_alerts
-      WHERE organization_id = ${orgId}
-        AND session_id = ${opts.sessionId}
-        AND acknowledged = ${opts.acknowledged}
-      ORDER BY triggered_at DESC
-      LIMIT ${limit}
-    `;
-    return rows as FrictionAlert[];
-  }
-
-  if (opts.sessionId !== undefined) {
-    const rows = await sql`
-      SELECT * FROM friction_alerts
-      WHERE organization_id = ${orgId}
-        AND session_id = ${opts.sessionId}
-      ORDER BY triggered_at DESC
-      LIMIT ${limit}
-    `;
-    return rows as FrictionAlert[];
-  }
-
-  if (opts.acknowledged !== undefined) {
-    const rows = await sql`
-      SELECT * FROM friction_alerts
-      WHERE organization_id = ${orgId}
-        AND acknowledged = ${opts.acknowledged}
-      ORDER BY triggered_at DESC
-      LIMIT ${limit}
-    `;
-    return rows as FrictionAlert[];
-  }
-
+  // Only alerts on sessions the viewer may see (services/visibility.ts).
   const rows = await sql`
-    SELECT * FROM friction_alerts
-    WHERE organization_id = ${orgId}
-    ORDER BY triggered_at DESC
+    SELECT f.* FROM friction_alerts f
+    WHERE f.organization_id = ${orgId}
+      AND (${sessionId}::TEXT IS NULL OR f.session_id = ${sessionId})
+      AND (${acknowledged}::BOOLEAN IS NULL OR f.acknowledged = ${acknowledged})
+      AND EXISTS (
+        SELECT 1 FROM sessions vs
+        WHERE vs.id = f.session_id AND ${visibleSessionSql(viewerDevIds, "vs")}
+      )
+    ORDER BY f.triggered_at DESC
     LIMIT ${limit}
   `;
   return rows as FrictionAlert[];

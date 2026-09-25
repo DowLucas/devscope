@@ -395,15 +395,17 @@ app.get(
       console.log("[ws] Rejected: org", orgId, "has", getOrgClientCount(orgId), "connections (limit:", MAX_WS_CLIENTS_PER_ORG + ")");
       return c.text("Too many connections for this organization", 503);
     }
-    // Store orgId for use in onOpen
+    // Store orgId and user for use in onOpen
     c.set("wsOrgId" as never, orgId as never);
+    c.set("wsUserId" as never, session.user.id as never);
     return next();
   },
   upgradeWebSocket((c) => {
     const orgId = (c as any).get?.("wsOrgId") as string | undefined;
+    const userId = (c as any).get?.("wsUserId") as string | undefined;
     return {
       onOpen(_event, ws) {
-        addClient(ws, orgId);
+        addClient(ws, orgId, userId);
         console.log("[ws] Client connected (" + getClientCount() + " total)");
       },
       onMessage(event, ws) {

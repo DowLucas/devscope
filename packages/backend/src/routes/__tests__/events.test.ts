@@ -12,6 +12,9 @@ const mockEndSession = mock(() => Promise.resolve());
 const mockInsertEvent = mock(() => Promise.resolve({ stored: true }));
 const mockGetRecentEvents = mock(() => Promise.resolve([] as any[]));
 const mockCheckAlertThresholds = mock(() => Promise.resolve(null as any));
+const mockGetSessionAudience = mock(() =>
+  Promise.resolve({ shareDetails: false, privacyMode: null as string | null, ownerUserIds: [] as string[] }),
+);
 
 mock.module("../../db", () => dbStubs({
   upsertDeveloper: mockUpsertDeveloper,
@@ -20,12 +23,21 @@ mock.module("../../db", () => dbStubs({
   insertEvent: mockInsertEvent,
   getRecentEvents: mockGetRecentEvents,
   checkAlertThresholds: mockCheckAlertThresholds,
+  getSessionAudience: mockGetSessionAudience,
 }));
 
 const mockBroadcastToOrg = mock(() => {});
+// Per-viewer broadcasts: record the teammate copy like a plain org broadcast so
+// assertions on what the org receives cover both paths.
+const mockBroadcastByViewer = mock(
+  (orgId: string, _owners: string[], _ownerMsg: unknown, teammateMsg: unknown) => {
+    if (teammateMsg) (mockBroadcastToOrg as any)(orgId, teammateMsg);
+  },
+);
 
 mock.module("../../ws/handler", () => wsHandlerStubs({
   broadcastToOrg: mockBroadcastToOrg,
+  broadcastToOrgByViewer: mockBroadcastByViewer,
 }));
 
 const mockAutoLinkDeveloperToOrg = mock(() => Promise.resolve());
@@ -190,6 +202,11 @@ describe("POST /events", () => {
     mockCheckAlertThresholds.mockReset();
     mockCheckAlertThresholds.mockImplementation(() => Promise.resolve(null));
     mockBroadcastToOrg.mockReset();
+    mockBroadcastByViewer.mockClear();
+    mockGetSessionAudience.mockClear();
+    mockGetSessionAudience.mockImplementation(() =>
+      Promise.resolve({ shareDetails: false, privacyMode: null, ownerUserIds: [] }),
+    );
     mockAutoLinkDeveloperToOrg.mockReset();
     mockAutoLinkDeveloperToOrg.mockImplementation(() => Promise.resolve());
   });
@@ -851,9 +868,11 @@ describe("POST /events", () => {
     expect(sessionUpdate.data.status).toBe("ended");
   });
 
-  async function broadcastPrompt(ownerRow: Record<string, unknown>) {
+  async function broadcastPrompt(audience: { shareDetails: boolean; privacyMode: string | null }) {
     mockBroadcastToOrg.mockClear();
-    const sql = makeMockSql([{ status: "active", ...ownerRow }], [{ organization_id: "org-1" }]);
+    mockBroadcastByViewer.mockClear();
+    mockGetSessionAudience.mockImplementation(() => Promise.resolve({ ...audience, ownerUserIds: ["user-owner"] }));
+    const sql = makeMockSql([{ status: "active" }], [{ organization_id: "org-1" }]);
     const app = buildApp(sql);
     await app.request("/", {
       method: "POST",
@@ -865,28 +884,47 @@ describe("POST /events", () => {
         }),
       ),
     });
-    return mockBroadcastToOrg.mock.calls
-      .map((c: any) => c[1])
-      .find((m: any) => m.type === "event.new");
+    const call = mockBroadcastByViewer.mock.calls.find((c: any) => c[2].type === "event.new") as any[];
+    return { owners: call[1], owner: call[2], teammate: call[3] };
   }
 
-  test("event.new broadcast is activity-only when the owner has not opted in", async () => {
-    const msg = await broadcastPrompt({ share_details: false, privacy_mode: "standard" });
-    expect(msg.data.payload).toEqual({});
-    expect(msg.data.projectName).toBeNull();
-    expect(msg.data.projectPath).toBeNull();
-    expect(msg.data.eventType).toBe("prompt.submit");
+  test("event.new: teammates get activity only when the owner has not opted in", async () => {
+    const { teammate } = await broadcastPrompt({ shareDetails: false, privacyMode: "standard" });
+    expect(teammate.data.payload).toEqual({});
+    expect(teammate.data.projectName).toBeNull();
+    expect(teammate.data.projectPath).toBeNull();
+    expect(teammate.data.eventType).toBe("prompt.submit");
   });
 
-  test("event.new broadcast carries content when the owner opted in", async () => {
-    const msg = await broadcastPrompt({ share_details: true, privacy_mode: "standard" });
-    expect(msg.data.payload).toEqual({ promptText: "secret", promptLength: 6 });
-    expect(msg.data.projectName).not.toBeNull();
+  test("event.new: the owner's own connections always get the full event", async () => {
+    const { owners, owner } = await broadcastPrompt({ shareDetails: false, privacyMode: "private" });
+    expect(owners).toEqual(["user-owner"]);
+    expect(owner.data.payload).toEqual({ promptText: "secret", promptLength: 6, transcriptPath: "/home/a/t.jsonl" });
+    expect(owner.data.projectName).not.toBeNull();
   });
 
-  test("event.new broadcast is activity-only for private sessions even when opted in", async () => {
-    const msg = await broadcastPrompt({ share_details: true, privacy_mode: "private" });
-    expect(msg.data.payload).toEqual({});
+  test("event.new: teammates get content when the owner opted in", async () => {
+    const { teammate } = await broadcastPrompt({ shareDetails: true, privacyMode: "standard" });
+    expect(teammate.data.payload).toEqual({ promptText: "secret", promptLength: 6 });
+    expect(teammate.data.projectName).not.toBeNull();
+  });
+
+  test("event.new: private sessions stay activity-only for teammates even when opted in", async () => {
+    const { teammate } = await broadcastPrompt({ shareDetails: true, privacyMode: "private" });
+    expect(teammate.data.payload).toEqual({});
+  });
+
+  test("event.new: an audience lookup failure falls back to activity-only and still stores the event", async () => {
+    mockGetSessionAudience.mockImplementation(() => Promise.reject(new Error("db down")));
+    const res = await buildApp(makeMockSql([{ status: "active" }], [{ organization_id: "org-1" }])).request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ eventType: "prompt.submit", payload: { promptText: "secret", promptLength: 6 } })),
+    });
+    expect(res.status).toBe(200);
+    const call = mockBroadcastByViewer.mock.calls.at(-1) as any[];
+    expect(call[1]).toEqual([]);
+    expect(call[3].data.payload).toEqual({});
   });
 
   // -----------------------------------------------------------------------
@@ -944,11 +982,25 @@ describe("POST /events", () => {
       ),
     });
 
-    const calls = mockBroadcastToOrg.mock.calls;
-    const messages = calls.map((c: any) => c[1]);
-    const alertMsg = messages.find((m: any) => m.type === "alert.triggered");
-    expect(alertMsg).toBeDefined();
-    expect(alertMsg.data).toEqual(alertData);
+    // Owner always gets it; opted-out owner → teammates get nothing.
+    const call = mockBroadcastByViewer.mock.calls.find((c: any) => c[2].type === "alert.triggered") as any[];
+    expect(call[0]).toBe("org-alert");
+    expect(call[2].data).toEqual(alertData);
+    expect(call[3]).toBeNull();
+  });
+
+  test("broadcasts alert to teammates when the owner shares the session", async () => {
+    mockCheckAlertThresholds.mockImplementation(() => Promise.resolve({ id: "alert-2" }));
+    mockGetSessionAudience.mockImplementation(() =>
+      Promise.resolve({ shareDetails: true, privacyMode: "standard", ownerUserIds: [] }),
+    );
+    await buildApp(makeMockSql([{ status: "active" }], [{ organization_id: "org-alert" }])).request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ eventType: "tool.fail", payload: { toolName: "Read" } })),
+    });
+    const alertMsg = mockBroadcastToOrg.mock.calls.map((c: any) => c[1]).find((m: any) => m.type === "alert.triggered");
+    expect(alertMsg.data).toEqual({ id: "alert-2" });
   });
 
   test("does NOT check alert thresholds for non tool.fail events", async () => {

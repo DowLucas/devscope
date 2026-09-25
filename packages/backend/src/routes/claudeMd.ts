@@ -1,13 +1,14 @@
 import type { SQL } from "bun";
 import { Hono } from "hono";
 import { getClaudeMdProjects, getClaudeMdTimeline } from "../db";
+import { getViewerDevIds } from "../services/visibility";
 
 export function claudeMdRoutes(sql: SQL) {
   const app = new Hono();
 
   app.get("/projects", async (c) => {
     const orgId = c.get("orgId" as never) as string;
-    const projects = await getClaudeMdProjects(sql, orgId);
+    const projects = await getClaudeMdProjects(sql, orgId, await getViewerDevIds(sql, c));
     return c.json(projects);
   });
 
@@ -16,7 +17,7 @@ export function claudeMdRoutes(sql: SQL) {
     const projectPath = c.req.query("project_path");
     if (!projectPath) return c.json({ error: "project_path required" }, 400);
     const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
-    const timeline = await getClaudeMdTimeline(sql, projectPath, orgId, limit);
+    const timeline = await getClaudeMdTimeline(sql, projectPath, orgId, await getViewerDevIds(sql, c), limit);
     return c.json(timeline);
   });
 

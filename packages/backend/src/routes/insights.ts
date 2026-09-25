@@ -22,7 +22,7 @@ import {
 } from "../db";
 import { gateSelfDeveloperId } from "../middleware/selfDeveloperGate";
 import { getTeamContributionPillars } from "../db/patternQueries";
-import { getViewerDevIds } from "../services/visibility";
+import { getSearchableDevIds, getViewerDevIds } from "../services/visibility";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
   if (!val) return def;
@@ -122,7 +122,9 @@ export function insightsRoutes(sql: SQL) {
   app.get("/failure-clusters", async (c) => {
     const days = clampInt(c.req.query("days"), 30, 365);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    return c.json(await getFailureClusters(sql, days, devIds));
+    // Error text and session ids: only the viewer's own and opted-in teammates'.
+    const searchable = await getSearchableDevIds(sql, devIds ?? [], await getViewerDevIds(sql, c));
+    return c.json(await getFailureClusters(sql, days, searchable));
   });
 
   // --- Project Board ---

@@ -76,7 +76,7 @@ export async function getRecentSessionSequences(
   developerIds?: string[]
 ): Promise<SessionSequence[]> {
   let sessionsQuery;
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     sessionsQuery = sql`
       SELECT s.id as session_id, s.developer_id, s.project_name,
         ROUND(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::FLOAT as duration_minutes

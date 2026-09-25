@@ -193,8 +193,8 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
       {!showDetails && (
         <div className="flex items-center gap-2 rounded-lg bg-muted/30 border border-border px-3 py-2 text-sm text-muted-foreground">
           <Lock className="h-4 w-4 shrink-0" />
-          {session.developerName} hasn't enabled sharing with the team, so you can see
-          that this session happened but not what it was about.
+          {session.developerName} isn't sharing this session with the team, so you can see
+          that it happened but not what it was about.
         </div>
       )}
 

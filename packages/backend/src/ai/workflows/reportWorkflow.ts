@@ -19,6 +19,7 @@ import {
   createReport,
   updateReport,
   getDocGapsForOrg,
+  getSharingDeveloperIds,
 } from "../../db";
 import type { AiReport, ReportType } from "@devscope/shared";
 
@@ -145,6 +146,10 @@ export async function gatherReportData(
 ): Promise<Partial<ReportStateType>> {
   const days = getDaysForType(state.reportType);
   const devIds = state.developerIds;
+  // Reports go to the whole org: file paths, commands and error text only from
+  // developers who share their sessions with the team (services/visibility.ts).
+  // Project names follow the same rule inside getProjectsOverview.
+  const sharingIds = await getSharingDeveloperIds(sql, devIds ?? []);
 
   // Team-level aggregate data only — no individual developer data sent to LLM.
   const [
@@ -164,9 +169,9 @@ export async function gatherReportData(
     getTeamActivitySummary(sql, days, devIds),
     getProjectsOverview(sql, days, devIds),
     getToolUsageBreakdown(sql, undefined, days, devIds),
-    getConcreteToolDetails(sql, days, devIds),
+    getConcreteToolDetails(sql, days, sharingIds),
     getSessionStatsSummary(sql, undefined, days, devIds),
-    getFailureClusters(sql, days, devIds),
+    getFailureClusters(sql, days, sharingIds),
     getPatterns(sql, { effectiveness: "effective", limit: 10 }),
     getAntiPatternStats(sql, days),
   ]);

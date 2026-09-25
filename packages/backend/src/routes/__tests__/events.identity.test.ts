@@ -67,7 +67,13 @@ mock.module("../../db", () =>
 
 const mockBroadcastToOrg = mock(() => {});
 mock.module("../../ws/handler", () =>
-  wsHandlerStubs({ broadcastToOrg: mockBroadcastToOrg }),
+  wsHandlerStubs({
+    broadcastToOrg: mockBroadcastToOrg,
+    // Record the teammate copy of per-viewer broadcasts as a plain org broadcast.
+    broadcastToOrgByViewer: (orgId: string, _o: string[], _m: unknown, teammateMsg: unknown) => {
+      if (teammateMsg) (mockBroadcastToOrg as any)(orgId, teammateMsg);
+    },
+  }),
 );
 
 const mockAutoLinkDeveloperToOrg = mock(() => Promise.resolve());

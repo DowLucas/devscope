@@ -1,5 +1,7 @@
 import type { SQL } from "bun";
-import { getSessionVisibilityRows, getSharingDeveloperIds } from "../db";
+import type { WsMessage } from "@devscope/shared";
+import { getSessionAudience, getSessionVisibilityRows, getSharingDeveloperIds } from "../db";
+import { broadcastToOrgByViewer } from "../ws/handler";
 import { getAllDeveloperIdsForUser } from "./developerLink";
 
 /**
@@ -128,4 +130,30 @@ export async function filterVisibleReports<T extends { report_type?: string; dat
     const row = sessions.get(id);
     return row !== undefined && visibilityForRow(row, viewerDevIds) !== "activity";
   });
+}
+
+/**
+ * Broadcast a live update about one session: the owner's own connections get
+ * `ownerMessage`; teammates get `teammateMessage(visibility)` (null = nothing).
+ * If the audience lookup fails, teammates are treated as activity-only and no
+ * connection is treated as the owner, so a failure never widens what is sent.
+ */
+export async function broadcastSessionUpdate(
+  sql: SQL,
+  orgIds: string[],
+  session: { developerId: string; sessionId: string },
+  ownerMessage: WsMessage,
+  teammateMessage: (v: Exclude<Visibility, "self">) => WsMessage | null,
+): Promise<void> {
+  if (orgIds.length === 0) return;
+  let audience = { shareDetails: false, privacyMode: null as string | null, ownerUserIds: [] as string[] };
+  try {
+    audience = await getSessionAudience(sql, session.developerId, session.sessionId);
+  } catch (err) {
+    console.error("[visibility] session audience lookup failed:", (err as Error).message);
+  }
+  const forTeammates = teammateMessage(teammateVisibility(audience.shareDetails, audience.privacyMode));
+  for (const orgId of orgIds) {
+    broadcastToOrgByViewer(orgId, audience.ownerUserIds, ownerMessage, forTeammates);
+  }
 }

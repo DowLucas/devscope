@@ -74,7 +74,8 @@ export function sessionsRoutes(sql: SQL) {
     return c.json(
       sessions.map((s: any) => ({
         ...s,
-        activeAgents: agentsBySession.get(s.id) ?? [],
+        // Agent names hint at what the session is doing — hidden for activity-only.
+        activeAgents: s.visibility === "activity" ? [] : agentsBySession.get(s.id) ?? [],
       })),
     );
   });
@@ -87,7 +88,7 @@ export function sessionsRoutes(sql: SQL) {
     }
     // Org-scope validation: check developer belongs to org
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
-    if (devIds && devIds.length > 0 && !devIds.includes((detail.session as any).developer_id)) {
+    if (devIds && !devIds.includes((detail.session as any).developer_id)) {
       return c.json({ error: "Session not found" }, 404);
     }
 
@@ -116,7 +117,7 @@ export function sessionsRoutes(sql: SQL) {
     if (!detail) {
       return c.json({ error: "Session not found" }, 404);
     }
-    if (devIds && devIds.length > 0 && !devIds.includes((detail.session as any).developer_id)) {
+    if (devIds && !devIds.includes((detail.session as any).developer_id)) {
       return c.json({ error: "Session not found" }, 404);
     }
 

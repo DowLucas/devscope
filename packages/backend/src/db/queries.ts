@@ -32,7 +32,7 @@ import type {
   TokenUsageSummary,
   TokenUsageOverTime,
 } from "@devscope/shared";
-import { inList, visibleSessionSql } from "./utils";
+import { inList, quoteIds, visibleSessionSql } from "./utils";
 
 export async function upsertDeveloper(
   sql: SQL,
@@ -124,7 +124,7 @@ export async function getActiveAgents(sql: SQL) {
 }
 
 export async function getActiveSessions(sql: SQL, developerIds?: string[]) {
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return await sql`
       SELECT s.*, d.name as developer_name, d.email as developer_email, d.share_details as owner_share_details
       FROM sessions s
@@ -141,7 +141,7 @@ export async function getActiveSessions(sql: SQL, developerIds?: string[]) {
 }
 
 export async function getAllDevelopers(sql: SQL, developerIds?: string[]) {
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return await sql`
       SELECT d.*,
         (SELECT COUNT(*)::INT FROM sessions WHERE developer_id = d.id AND status = 'active') as active_sessions
@@ -157,7 +157,7 @@ export async function getAllDevelopers(sql: SQL, developerIds?: string[]) {
 }
 
 export async function getRecentEvents(sql: SQL, limit: number = 50, developerIds?: string[]) {
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return await sql`
       SELECT e.*, s.developer_id, s.project_path, s.project_name, s.privacy_mode,
              d.name as developer_name, d.email as developer_email, d.share_details as owner_share_details
@@ -196,7 +196,7 @@ export async function getStaleActiveSessions(sql: SQL, thresholdMinutes: number)
 }
 
 export async function getAllSessions(sql: SQL, limit: number = 50, developerIds?: string[]) {
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return await sql`
       SELECT s.*, d.name as developer_name, d.email as developer_email, d.share_details as owner_share_details,
         (SELECT COUNT(*)::INT FROM events WHERE session_id = s.id) as event_count,
@@ -264,7 +264,7 @@ export async function getDeveloperActivityOverTime(
       GROUP BY e.created_at::DATE
       ORDER BY day ASC`) as ActivityDataPoint[];
   }
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       SELECT
         e.created_at::DATE as day,
@@ -315,7 +315,7 @@ export async function getToolUsageBreakdown(
       ORDER BY total DESC
       LIMIT 15`) as ToolUsageDataPoint[];
   }
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       SELECT
         e.payload->>'toolName' as tool_name,
@@ -353,7 +353,7 @@ export async function getConcreteToolDetails(
   days: number = 30,
   developerIds?: string[]
 ): Promise<ConcreteToolDetails> {
-  const devFilter = developerIds && developerIds.length > 0;
+  const devFilter = developerIds !== undefined;
 
   const [bashSubs, fileExts, topFiles, topDirs, searchPats, skillUse] = await Promise.all([
     // 1. Top Bash subcommands (available in all privacy modes via toolSubcommand)
@@ -613,7 +613,7 @@ export async function getSkillUsageBreakdown(
       ORDER BY total DESC
       LIMIT 20`) as SkillUsageDataPoint[];
   }
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       SELECT
         e.payload->'toolInput'->>'skill' as skill_name,
@@ -681,7 +681,7 @@ export async function getSessionStats(
       GROUP BY s.started_at::DATE
       ORDER BY day ASC`) as SessionStatsDataPoint[];
   }
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       SELECT
         s.started_at::DATE as day,
@@ -748,7 +748,7 @@ export async function getSessionStatsSummary(
       FROM sessions s
       WHERE s.started_at >= NOW() - make_interval(days => ${days})
         AND s.developer_id = ${developerId}`;
-  } else if (developerIds && developerIds.length > 0) {
+  } else if (developerIds !== undefined) {
     [result] = await sql`
       SELECT
         COUNT(*)::INT as total_sessions,
@@ -824,7 +824,7 @@ export async function getProjectActivity(
       ORDER BY event_count DESC
       LIMIT 10`) as ProjectActivityDataPoint[];
   }
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       SELECT
         ss.project_name,
@@ -885,7 +885,7 @@ export async function getTeamActivitySummary(
   days: number = 30,
   developerIds?: string[]
 ): Promise<TeamActivityEntry> {
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     const [row] = await sql`
       SELECT
         COUNT(DISTINCT s.id)::INT as total_sessions,
@@ -945,7 +945,7 @@ export async function getHourlyDistribution(
       GROUP BY EXTRACT(HOUR FROM e.created_at)
       ORDER BY hour ASC`) as HourlyDistributionPoint[];
   }
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       SELECT
         EXTRACT(HOUR FROM e.created_at)::INT as hour,
@@ -986,7 +986,7 @@ export async function getActivityPerMinute(
   // (~90s for 24h at 940k events). The developer filter belongs inside the
   // CTE: applied after the LEFT JOIN it dropped buckets that held only other
   // orgs' events instead of reporting them as zero.
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       WITH bounds AS (
         SELECT date_trunc('minute', NOW() - make_interval(hours => ${hours})) AS start
@@ -1059,7 +1059,7 @@ export async function getPeriodComparison(
           AND s.developer_id = ${developerId}`;
       return row;
     }
-    if (developerIds && developerIds.length > 0) {
+    if (developerIds !== undefined) {
       const [row] = await sql`
         SELECT
           COUNT(DISTINCT s.id)::INT as sessions,
@@ -1148,7 +1148,7 @@ export async function getToolFailureRates(
       GROUP BY day, tool_name
       Order BY day ASC, fail_count DESC`) as ToolFailureRatePoint[];
   }
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       SELECT
         e.created_at::DATE as day,
@@ -1193,7 +1193,7 @@ export async function getFailureClusters(
   developerIds?: string[]
 ): Promise<FailureCluster[]> {
   let rows;
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     rows = await sql`
       SELECT
         e.payload->>'toolName' as tool_name,
@@ -1389,7 +1389,7 @@ export async function checkAlertThresholds(
 export async function getTeamHealth(sql: SQL, developerIds?: string[]): Promise<TeamHealthData> {
   // Velocity — aggregate week-over-week trends (no per-developer data)
   async function weekMetrics(startDays: number, endDays: number) {
-    if (developerIds && developerIds.length > 0) {
+    if (developerIds !== undefined) {
       const [row] = await sql`
         SELECT
           COUNT(DISTINCT s.id)::INT as sessions,
@@ -1432,7 +1432,7 @@ export async function getTeamHealth(sql: SQL, developerIds?: string[]): Promise<
   // No developer names — this surfaces problem sessions, not problem people.
   // No idle time tracking — thinking/reading/whiteboarding is not "stuck".
   let sessionsNeedingAttention;
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     sessionsNeedingAttention = await sql`
       SELECT
         s.id as session_id,
@@ -1490,7 +1490,7 @@ export async function getProjectsOverview(
   // so the events JOIN does not multiply session rows. Without this, a project
   // with many events per session reports a wildly inflated total_minutes (see
   // DEV-25: perfectemp returned 8.37M minutes from ~140k events/session).
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       WITH session_agg AS (
         SELECT
@@ -1611,7 +1611,7 @@ export async function getProjectContributors(
 ): Promise<ProjectContributor[]> {
   // A named project only counts sessions the viewer may see.
   const visible = visibleSessionSql(viewerDevIds);
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       SELECT
         s.developer_id,
@@ -1655,7 +1655,7 @@ export async function getProjectToolUsage(
 ): Promise<ToolUsageDataPoint[]> {
   // A named project only counts sessions the viewer may see.
   const visible = visibleSessionSql(viewerDevIds);
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       SELECT
         e.payload->>'toolName' as tool_name,
@@ -1701,7 +1701,7 @@ export async function getProjectActivityOverTime(
 ): Promise<ActivityDataPoint[]> {
   // A named project only counts sessions the viewer may see.
   const visible = visibleSessionSql(viewerDevIds);
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return (await sql`
       SELECT
         e.created_at::DATE as day,
@@ -1743,8 +1743,8 @@ export async function generateDigest(
   digestType: string,
   developerIds?: string[]
 ): Promise<DigestEntry> {
-  const devFilter = developerIds && developerIds.length > 0
-    ? Sql.unsafe(`AND s.developer_id IN (${developerIds.map(id => `'${id.replace(/'/g, "''")}'`).join(",")})`)
+  const devFilter = developerIds !== undefined
+    ? Sql.unsafe(`AND s.developer_id IN (${quoteIds(developerIds)})`)
     : Sql.unsafe("");
 
   const [metrics] = await sql`
@@ -1760,13 +1760,14 @@ export async function generateDigest(
     WHERE e.created_at >= ${periodStart}::TIMESTAMPTZ AND e.created_at < ${periodEnd}::TIMESTAMPTZ
       ${devFilter}`;
 
+  // Digests are read org-wide: hidden sessions pool under a NULL project.
   const topProjects = await sql`
-    SELECT s.project_name as name, COUNT(e.id)::INT as events
+    SELECT CASE WHEN ${visibleSessionSql([])} THEN s.project_name END as name, COUNT(e.id)::INT as events
     FROM events e
     JOIN sessions s ON e.session_id = s.id
     WHERE e.created_at >= ${periodStart}::TIMESTAMPTZ AND e.created_at < ${periodEnd}::TIMESTAMPTZ
       ${devFilter}
-    GROUP BY s.project_name ORDER BY events DESC LIMIT 5`;
+    GROUP BY 1 ORDER BY events DESC LIMIT 5`;
 
   const notableFailures = await sql`
     SELECT e.payload->>'toolName' as tool_name, COUNT(*)::INT as count
@@ -1874,7 +1875,7 @@ export async function getAiRoiEfficiency(
   total_developers: number;
 }> {
   let row;
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     [row] = await sql`
       SELECT
         COUNT(DISTINCT s.id)::INT as total_sessions,
@@ -1960,7 +1961,7 @@ export async function getSessionsNeedingTitles(
   intervalMinutes: number,
   developerIds?: string[]
 ) {
-  if (developerIds && developerIds.length > 0) {
+  if (developerIds !== undefined) {
     return await sql`
       SELECT DISTINCT s.id, s.developer_id, s.project_name, s.current_title, s.privacy_mode,
         (SELECT share_details FROM developers WHERE id = s.developer_id) AS owner_share_details
@@ -2216,6 +2217,24 @@ export async function getSharingDeveloperIds(sql: SQL, developerIds: string[]): 
   return rows.map((r) => r.id);
 }
 
+/** Who owns a session's live updates: the owner's consent, privacy mode and linked dashboard users. */
+export async function getSessionAudience(sql: SQL, developerId: string, sessionId: string) {
+  const [row] = await sql`
+    SELECT d.share_details,
+      (SELECT privacy_mode FROM sessions WHERE id = ${sessionId}) AS privacy_mode,
+      COALESCE(
+        (SELECT array_agg(auth_user_id) FROM user_developer_link WHERE developer_id = d.id),
+        '{}'
+      ) AS owner_user_ids
+    FROM developers d
+    WHERE d.id = ${developerId}` as any[];
+  return {
+    shareDetails: row?.share_details === true,
+    privacyMode: (row?.privacy_mode ?? null) as string | null,
+    ownerUserIds: (row?.owner_user_ids ?? []) as string[],
+  };
+}
+
 /** The fields services/visibility.ts needs to resolve visibility for sessions. */
 export async function getSessionVisibilityRows(sql: SQL, sessionIds: string[]) {
   if (sessionIds.length === 0) return [];
@@ -2305,15 +2324,17 @@ export async function updateDataRequestStatus(
 export async function getToolingHealthSummary(
   sql: SQL,
   developerIds: string[],
-  days: number = 7
+  days: number = 7,
+  viewerDevIds: string[] = []
 ): Promise<ToolingHealthSummary[]> {
   if (developerIds.length === 0) return [];
 
+  // Projects of sessions the viewer may not see pool under NULL.
   return await sql`
     WITH recent AS (
       SELECT
         e.payload->>'toolName' AS tool_name,
-        s.project_name,
+        CASE WHEN ${visibleSessionSql(viewerDevIds)} THEN s.project_name END AS project_name,
         COUNT(*)::INT AS total_calls,
         COUNT(*) FILTER (WHERE e.event_type = 'tool.fail')::INT AS failure_count,
         ROUND(
@@ -2326,7 +2347,7 @@ export async function getToolingHealthSummary(
       WHERE s.developer_id IN (${inList(developerIds)})
         AND e.event_type IN ('tool.complete', 'tool.fail')
         AND e.created_at >= NOW() - make_interval(days => ${days})
-      GROUP BY tool_name, s.project_name
+      GROUP BY 1, 2
       HAVING COUNT(*) >= 3
     )
     SELECT *, 'stable'::TEXT AS trend FROM recent
@@ -2360,11 +2381,12 @@ export async function snapshotToolingHealth(
 ) {
   if (developerIds.length === 0) return;
 
-  // Compute today's aggregates per tool+project
+  // Compute today's aggregates per tool+project. Snapshots are read org-wide,
+  // so only projects teammates may see are named (services/visibility.ts).
   const rows = await sql`
     SELECT
       e.payload->>'toolName' AS tool_name,
-      s.project_name,
+      CASE WHEN ${visibleSessionSql([])} THEN s.project_name END AS project_name,
       COUNT(*)::INT AS total_calls,
       COUNT(*) FILTER (WHERE e.event_type = 'tool.fail')::INT AS failure_count,
       ROUND(
@@ -2377,7 +2399,7 @@ export async function snapshotToolingHealth(
     WHERE s.developer_id IN (${inList(developerIds)})
       AND e.event_type IN ('tool.complete', 'tool.fail')
       AND e.created_at >= CURRENT_DATE
-    GROUP BY tool_name, s.project_name
+    GROUP BY 1, 2
     HAVING COUNT(*) >= 1`;
 
   for (const row of rows as any[]) {
@@ -2561,7 +2583,13 @@ export async function detectToolingAnomalies(
     )
     SELECT
       t.tool_name,
-      t.project_name,
+      -- Broadcast org-wide: name the project only if a teammate-visible session has it.
+      CASE WHEN EXISTS (
+        SELECT 1 FROM sessions vs
+        WHERE vs.project_name = t.project_name
+          AND vs.developer_id IN (${inList(developerIds)})
+          AND ${visibleSessionSql([], "vs")}
+      ) THEN t.project_name END AS project_name,
       t.failure_rate::NUMERIC AS current_rate,
       COALESCE(b.avg_rate, 0)::NUMERIC AS baseline_rate,
       t.total_calls

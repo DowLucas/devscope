@@ -188,11 +188,11 @@ export interface DigestSummary {
   total_failures: number;
   active_developers: number;
   active_projects: number;
-  top_projects: { name: string; events: number }[];
+  top_projects: { name: string | null; events: number }[];
   notable_failures: { tool_name: string; count: number }[];
   scorecard?: { label: string; value: number; delta_percent: number; status: string }[];
   roi?: { prompts_per_session: number; tool_calls_per_session: number; sessions_per_developer: number };
-  project_allocation?: { project_name: string; percentage: number }[];
+  project_allocation?: { project_name: string | null; percentage: number }[];
 }
 
 // --- Concrete Tool Details ---

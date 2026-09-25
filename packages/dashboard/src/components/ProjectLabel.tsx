@@ -16,7 +16,7 @@ export function ProjectLabel({ name, className, fallback = "Private" }: ProjectL
   return (
     <span
       className={`inline-flex items-center gap-1 text-muted-foreground ${className ?? ""}`}
-      title="The owner hasn't enabled sharing with the team"
+      title="The owner isn't sharing this with the team"
     >
       <Lock className="h-3 w-3 shrink-0" />
       {fallback}

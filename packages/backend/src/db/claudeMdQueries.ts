@@ -1,4 +1,6 @@
 import type { SQL } from "bun";
+import { sql as Sql } from "bun";
+import { quoteIds, visibleSessionPredicate } from "./utils";
 import type {
   ClaudeMdSnapshot,
   ClaudeMdCorrelation,
@@ -54,10 +56,22 @@ export async function upsertClaudeMdSnapshot(
   return existing as ClaudeMdSnapshot;
 }
 
+/**
+ * Snapshot `s` is visible to this viewer: they captured it, or its session is
+ * visible to them (services/visibility.ts). No session → owner only.
+ */
+function visibleSnapshotSql(viewerDevIds: string[], alias = "s") {
+  return Sql.unsafe(
+    `(${alias}.developer_id IN (${quoteIds(viewerDevIds)}) OR EXISTS (` +
+      `SELECT 1 FROM sessions vs WHERE vs.id = ${alias}.session_id AND ${visibleSessionPredicate(viewerDevIds, "vs")}))`,
+  );
+}
+
 export async function getClaudeMdTimeline(
   sql: SQL,
   projectPath: string,
   orgId: string,
+  viewerDevIds: string[],
   limit = 50
 ): Promise<ClaudeMdTimelineEntry[]> {
   const rows = await sql`
@@ -86,6 +100,7 @@ export async function getClaudeMdTimeline(
     LEFT JOIN claude_md_correlations c ON c.snapshot_id = s.id
     WHERE s.project_path = ${projectPath}
       AND s.organization_id = ${orgId}
+      AND ${visibleSnapshotSql(viewerDevIds)}
     ORDER BY s.captured_at DESC
     LIMIT ${limit}
   `;
@@ -125,18 +140,20 @@ export async function getClaudeMdTimeline(
 
 export async function getClaudeMdProjects(
   sql: SQL,
-  orgId: string
+  orgId: string,
+  viewerDevIds: string[]
 ): Promise<
   Array<{ project_name: string; project_path: string; snapshot_count: number }>
 > {
   const rows = await sql`
     SELECT
-      project_name,
-      project_path,
+      s.project_name,
+      s.project_path,
       COUNT(*) AS snapshot_count
-    FROM claude_md_snapshots
-    WHERE organization_id = ${orgId}
-    GROUP BY project_name, project_path
+    FROM claude_md_snapshots s
+    WHERE s.organization_id = ${orgId}
+      AND ${visibleSnapshotSql(viewerDevIds)}
+    GROUP BY s.project_name, s.project_path
     ORDER BY project_name ASC
   `;
   return rows as any[];

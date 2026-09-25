@@ -7,7 +7,7 @@ import {
   type GenerateContentConfig,
 } from "@google/genai";
 import { TEMPERATURE, DEFAULT_MODEL, isAiAvailable } from "../gemini";
-import { getToolDeclarations, findTool } from "../tools";
+import { getToolDeclarations, findTool, type ToolScope } from "../tools";
 import { recordTokenUsage } from "../../db";
 import { validateAndRedactTeamOutput } from "../grounding/validator";
 import {
@@ -109,7 +109,7 @@ Guidelines:
 const QueryState = Annotation.Root({
   question: Annotation<string>,
   conversationHistory: Annotation<Content[]>,
-  developerIds: Annotation<string[] | undefined>,
+  scope: Annotation<ToolScope>,
   intent: Annotation<"needs_data" | "general">,
   toolCallsQueue: Annotation<Array<{ name: string; args: Record<string, unknown> }>>,
   toolResults: Annotation<Array<{ name: string; result: string }>>,
@@ -195,7 +195,7 @@ async function callTools(
     }
 
     try {
-      const result = await tool.execute(sql, tc.args, state.developerIds);
+      const result = await tool.execute(sql, tc.args, state.scope);
       results.push({ name: tc.name, result });
     } catch (err) {
       results.push({
@@ -303,7 +303,7 @@ export async function runQueryWorkflow(
   sql: SQL,
   question: string,
   conversationHistory: Content[] = [],
-  developerIds?: string[]
+  scope: ToolScope
 ): Promise<QueryResult> {
   // B7: route before spending anything. An individual-targeting question is
   // refused here, so no Gemini call is made and no per-developer rows are ever
@@ -321,7 +321,7 @@ export async function runQueryWorkflow(
   const result = await app.invoke({
     question,
     conversationHistory,
-    developerIds,
+    scope,
     intent: "general" as const,
     toolCallsQueue: [],
     toolResults: [],
@@ -355,7 +355,7 @@ export async function runQueryWorkflowStreaming(
   sql: SQL,
   question: string,
   conversationHistory: Content[] = [],
-  developerIds?: string[]
+  scope: ToolScope
 ): Promise<ReadableStream<Uint8Array>> {
   const encoder = new TextEncoder();
 
@@ -379,7 +379,7 @@ export async function runQueryWorkflowStreaming(
         const result = await app.invoke({
           question,
           conversationHistory,
-          developerIds,
+          scope,
           intent: "general" as const,
           toolCallsQueue: [],
           toolResults: [],

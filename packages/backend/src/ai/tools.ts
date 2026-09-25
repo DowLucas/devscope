@@ -48,9 +48,30 @@ function truncateResult(data: unknown): string {
   return json.slice(0, MAX_RESULT_SIZE) + "...(truncated)";
 }
 
+/**
+ * Who is asking. `orgDevIds` scopes aggregates to the org; `viewerDevIds` are
+ * the asker's own developer ids; `searchableDevIds` are those plus teammates
+ * who share their sessions (services/visibility.ts) — the only developers whose
+ * content (file paths, error text) or project names a tool may return.
+ */
+export interface ToolScope {
+  orgDevIds?: string[];
+  viewerDevIds: string[];
+  searchableDevIds: string[];
+}
+
 export interface ToolDefinition {
   declaration: FunctionDeclaration;
-  execute: (sql: SQL, args: Record<string, unknown>, developerIds?: string[]) => Promise<string>;
+  execute: (sql: SQL, args: Record<string, unknown>, scope: ToolScope) => Promise<string>;
+}
+
+/**
+ * Per-developer breakdowns are self-only, like gateSelfDeveloperId on the
+ * REST insights routes. Returns an error payload for anyone else.
+ */
+function denyOtherDeveloper(args: Record<string, unknown>, scope: ToolScope): string | null {
+  if (!args.developerId || scope.viewerDevIds.includes(args.developerId as string)) return null;
+  return JSON.stringify({ error: "Per-developer data is only available for your own developer ID" });
 }
 
 export const toolRegistry: ToolDefinition[] = [
@@ -73,15 +94,14 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args, developerIds) => {
-      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
-        return JSON.stringify({ error: "Invalid developer ID" });
-      }
+    execute: async (sql, args, scope) => {
+      const denied = denyOtherDeveloper(args, scope);
+      if (denied) return denied;
       const result = await getDeveloperActivityOverTime(
         sql,
         args.developerId as string | undefined,
         clampDays(args.days as number | undefined),
-        developerIds
+        scope.orgDevIds
       );
       return truncateResult(result);
     },
@@ -105,15 +125,14 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args, developerIds) => {
-      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
-        return JSON.stringify({ error: "Invalid developer ID" });
-      }
+    execute: async (sql, args, scope) => {
+      const denied = denyOtherDeveloper(args, scope);
+      if (denied) return denied;
       const result = await getToolUsageBreakdown(
         sql,
         args.developerId as string | undefined,
         clampDays(args.days as number | undefined),
-        developerIds
+        scope.orgDevIds
       );
       return truncateResult(result);
     },
@@ -137,14 +156,13 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args, developerIds) => {
-      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
-        return JSON.stringify({ error: "Invalid developer ID" });
-      }
-      // If a specific developer is requested, scope to just that developer
+    execute: async (sql, args, scope) => {
+      const denied = denyOtherDeveloper(args, scope);
+      if (denied) return denied;
+      // File paths and commands: only the asker's own or opted-in teammates'.
       const scopedIds = args.developerId
         ? [args.developerId as string]
-        : developerIds;
+        : scope.searchableDevIds;
       const result = await getConcreteToolDetails(
         sql,
         clampDays(args.days as number | undefined),
@@ -172,15 +190,14 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args, developerIds) => {
-      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
-        return JSON.stringify({ error: "Invalid developer ID" });
-      }
+    execute: async (sql, args, scope) => {
+      const denied = denyOtherDeveloper(args, scope);
+      if (denied) return denied;
       const result = await getSessionStats(
         sql,
         args.developerId as string | undefined,
         clampDays(args.days as number | undefined),
-        developerIds
+        scope.orgDevIds
       );
       return truncateResult(result);
     },
@@ -204,15 +221,14 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args, developerIds) => {
-      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
-        return JSON.stringify({ error: "Invalid developer ID" });
-      }
+    execute: async (sql, args, scope) => {
+      const denied = denyOtherDeveloper(args, scope);
+      if (denied) return denied;
       const result = await getSessionStatsSummary(
         sql,
         args.developerId as string | undefined,
         clampDays(args.days as number | undefined),
-        developerIds
+        scope.orgDevIds
       );
       return truncateResult(result);
     },
@@ -232,11 +248,11 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args, developerIds) => {
+    execute: async (sql, args, scope) => {
       const result = await getTeamActivitySummary(
         sql,
         clampDays(args.days as number | undefined),
-        developerIds
+        scope.orgDevIds
       );
       return truncateResult(result);
     },
@@ -260,15 +276,14 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args, developerIds) => {
-      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
-        return JSON.stringify({ error: "Invalid developer ID" });
-      }
+    execute: async (sql, args, scope) => {
+      const denied = denyOtherDeveloper(args, scope);
+      if (denied) return denied;
       const result = await getHourlyDistribution(
         sql,
         args.developerId as string | undefined,
         clampDays(args.days as number | undefined),
-        developerIds
+        scope.orgDevIds
       );
       return truncateResult(result);
     },
@@ -293,15 +308,14 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args, developerIds) => {
-      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
-        return JSON.stringify({ error: "Invalid developer ID" });
-      }
+    execute: async (sql, args, scope) => {
+      const denied = denyOtherDeveloper(args, scope);
+      if (denied) return denied;
       const result = await getPeriodComparison(
         sql,
         clampDays(args.days as number | undefined),
         args.developerId as string | undefined,
-        developerIds
+        scope.orgDevIds
       );
       return truncateResult(result);
     },
@@ -325,15 +339,14 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args, developerIds) => {
-      if (args.developerId && developerIds && !developerIds.includes(args.developerId as string)) {
-        return JSON.stringify({ error: "Invalid developer ID" });
-      }
+    execute: async (sql, args, scope) => {
+      const denied = denyOtherDeveloper(args, scope);
+      if (denied) return denied;
       const result = await getToolFailureRates(
         sql,
         clampDays(args.days as number | undefined),
         args.developerId as string | undefined,
-        developerIds
+        scope.orgDevIds
       );
       return truncateResult(result);
     },
@@ -353,11 +366,12 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args, developerIds) => {
+    execute: async (sql, args, scope) => {
+      // Error messages: only from the asker's own or opted-in teammates' sessions.
       const result = await getFailureClusters(
         sql,
         clampDays(args.days as number | undefined),
-        developerIds
+        scope.searchableDevIds
       );
       return truncateResult(result);
     },
@@ -377,11 +391,12 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args, developerIds) => {
+    execute: async (sql, args, scope) => {
       const result = await getProjectsOverview(
         sql,
         clampDays(args.days as number | undefined),
-        developerIds
+        scope.orgDevIds,
+        scope.viewerDevIds
       );
       return truncateResult(result);
     },
@@ -406,12 +421,13 @@ export const toolRegistry: ToolDefinition[] = [
         required: ["projectName"],
       },
     },
-    execute: async (sql, args, developerIds) => {
+    execute: async (sql, args, scope) => {
       const result = await getProjectContributors(
         sql,
         args.projectName as string,
         clampDays(args.days as number | undefined),
-        developerIds
+        scope.orgDevIds,
+        scope.viewerDevIds
       );
       return truncateResult(result);
     },
@@ -436,12 +452,13 @@ export const toolRegistry: ToolDefinition[] = [
         required: ["projectName"],
       },
     },
-    execute: async (sql, args, developerIds) => {
+    execute: async (sql, args, scope) => {
       const result = await getProjectActivityOverTime(
         sql,
         args.projectName as string,
         clampDays(args.days as number | undefined),
-        developerIds
+        scope.orgDevIds,
+        scope.viewerDevIds
       );
       return truncateResult(result);
     },
@@ -456,8 +473,8 @@ export const toolRegistry: ToolDefinition[] = [
         properties: {},
       },
     },
-    execute: async (sql, _args, developerIds) => {
-      const result = await getAllDevelopers(sql, developerIds);
+    execute: async (sql, _args, scope) => {
+      const result = await getAllDevelopers(sql, scope.orgDevIds);
       return truncateResult(result);
     },
   },

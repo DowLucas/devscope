@@ -1,11 +1,22 @@
-import { describe, expect, test } from "bun:test";
-import {
+import { describe, expect, mock, test } from "bun:test";
+import { dbStubs } from "../../__test_helpers__/mockStubs";
+
+const visibilityRows = [
+  { id: "s-shared", developer_id: "dev-owner", privacy_mode: "standard", owner_share_details: true },
+  { id: "s-hidden", developer_id: "dev-owner", privacy_mode: "standard", owner_share_details: false },
+  { id: "s-mine", developer_id: "dev-viewer", privacy_mode: "private", owner_share_details: false },
+];
+mock.module("../../db", () => dbStubs({
+  getSessionVisibilityRows: mock(() => Promise.resolve(visibilityRows)),
+}));
+
+const {
   resolveVisibility,
   teammateVisibility,
   redactSessionRow,
   redactEvent,
   filterVisibleReports,
-} from "../visibility";
+} = await import("../visibility");
 
 const owner = "dev-owner";
 const viewer = "dev-viewer";
@@ -166,13 +177,7 @@ describe("redactEvent", () => {
 });
 
 describe("filterVisibleReports", () => {
-  // Fake Bun.sql tag: every query returns the session visibility rows.
-  const sessions = [
-    { id: "s-shared", developer_id: owner, privacy_mode: "standard", owner_share_details: true },
-    { id: "s-hidden", developer_id: owner, privacy_mode: "standard", owner_share_details: false },
-    { id: "s-mine", developer_id: viewer, privacy_mode: "private", owner_share_details: false },
-  ];
-  const fakeSql = (() => Promise.resolve(sessions)) as any;
+  const fakeSql = {} as any; // queries are mocked above
   const report = (id: string, type: string, sessionId?: string, asString = false) => {
     const ctx = sessionId ? { session_id: sessionId } : {};
     return { id, report_type: type, data_context: asString ? JSON.stringify(ctx) : ctx };

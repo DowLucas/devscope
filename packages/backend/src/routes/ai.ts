@@ -21,7 +21,7 @@ import {
   getTokenUsageSummary,
   getTodayTokenCount,
 } from "../db";
-import { filterVisibleReports, getViewerDevIds, teammateVisibility, visibilityForRow } from "../services/visibility";
+import { broadcastSessionUpdate, filterVisibleReports, getSearchableDevIds, getViewerDevIds, visibilityForRow } from "../services/visibility";
 import { broadcast, broadcastToOrg } from "../ws/handler";
 import type { Content } from "@google/genai";
 import type { InsightType, InsightSeverity, ReportType } from "@devscope/shared";
@@ -120,7 +120,12 @@ export function aiRoutes(sql: SQL) {
     }
 
     // Run streaming workflow
-    const stream = await runQueryWorkflowStreaming(sql, question, history, devIds);
+    const viewerDevIds = await getViewerDevIds(sql, c);
+    const stream = await runQueryWorkflowStreaming(sql, question, history, {
+      orgDevIds: devIds,
+      viewerDevIds,
+      searchableDevIds: await getSearchableDevIds(sql, devIds ?? [], viewerDevIds),
+    });
 
     // Collect full answer for saving
     const reader = stream.getReader();
@@ -328,7 +333,7 @@ export function aiRoutes(sql: SQL) {
     const sessionRow = sessionRows[0];
 
     // Org-scope validation
-    if (devIds && devIds.length > 0 && !devIds.includes(sessionRow.developer_id)) {
+    if (devIds && !devIds.includes(sessionRow.developer_id)) {
       return c.json({ error: "Session not found" }, 404);
     }
 
@@ -380,10 +385,15 @@ export function aiRoutes(sql: SQL) {
     }
     const report = await runSessionFeedbackWorkflow(sql, session_id, privacyMode, orgId);
 
-    // Only announce it org-wide when every teammate may read it.
-    if (teammateVisibility(sessionRow.owner_share_details, privacyMode) === "shared") {
-      broadcastToOrg(orgId, { type: "ai.report.completed", data: report });
-    }
+    // The owner always hears about it; teammates only if the session is shared.
+    const reportMessage = { type: "ai.report.completed" as const, data: report };
+    await broadcastSessionUpdate(
+      sql,
+      [orgId],
+      { developerId: sessionRow.developer_id, sessionId: session_id },
+      reportMessage,
+      (v) => (v === "shared" ? reportMessage : null),
+    );
 
     return c.json(report);
   });

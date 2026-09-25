@@ -6,8 +6,7 @@ import {
   saveSessionTitle,
 } from "../db";
 import { recordTokenUsage } from "../db/aiQueries";
-import { broadcastToOrg } from "../ws/handler";
-import { teammateVisibility } from "../services/visibility";
+import { broadcastSessionUpdate } from "../services/visibility";
 import { getOrgDeveloperIds } from "../services/developerLink";
 
 const CHECK_INTERVAL_MS = 60_000;
@@ -106,13 +105,15 @@ export function startSessionTitleGeneration(sql: SQL) {
               orgId
             );
 
-            // The org-wide feed only carries titles teammates may see.
-            if (teammateVisibility(session.owner_share_details, session.privacy_mode) === "shared") {
-              broadcastToOrg(orgId, {
-                type: "session.title.update",
-                data: { sessionId: session.id, title },
-              });
-            }
+            // Teammates only get titles the owner shares with them.
+            const titleMessage = { type: "session.title.update" as const, data: { sessionId: session.id, title } };
+            await broadcastSessionUpdate(
+              sql,
+              [orgId],
+              { developerId: session.developer_id, sessionId: session.id },
+              titleMessage,
+              (v) => (v === "shared" ? titleMessage : null),
+            );
           } catch (err) {
             if (isRateLimit(err)) {
               cooldownUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;

@@ -12,7 +12,12 @@ const orgClients: Map<string, Set<WSContext>> =
 const clientOrg: Map<WSContext, string> =
   g.__gc_ws_client_org ??= new Map<WSContext, string>();
 
-export function addClient(ws: WSContext, orgId?: string) {
+// WS client → auth user id, so owners can get fuller messages than teammates
+const clientUser: Map<WSContext, string> =
+  g.__gc_ws_client_user ??= new Map<WSContext, string>();
+
+export function addClient(ws: WSContext, orgId?: string, userId?: string) {
+  if (userId) clientUser.set(ws, userId);
   if (orgId) {
     let clients = orgClients.get(orgId);
     if (!clients) {
@@ -36,6 +41,7 @@ export function removeClient(ws: WSContext) {
     }
     clientOrg.delete(ws);
   }
+  clientUser.delete(ws);
   clientLastPong.delete(ws);
 }
 
@@ -53,6 +59,36 @@ export function broadcastToOrg(orgId: string, message: WsMessage) {
     } catch {
       clients.delete(client);
       clientOrg.delete(client);
+    }
+  }
+}
+
+/**
+ * Send one message to the session owner's connections and another to the rest
+ * of the org (services/visibility.ts decides what teammates may see). A null
+ * teammate message sends nothing to them.
+ */
+export function broadcastToOrgByViewer(
+  orgId: string,
+  ownerUserIds: string[],
+  ownerMessage: WsMessage,
+  teammateMessage: WsMessage | null,
+) {
+  const clients = orgClients.get(orgId);
+  if (!clients) return;
+  const owners = new Set(ownerUserIds);
+  const ownerData = JSON.stringify(ownerMessage);
+  const teammateData = teammateMessage ? JSON.stringify(teammateMessage) : null;
+  for (const client of clients) {
+    const userId = clientUser.get(client);
+    const data = userId && owners.has(userId) ? ownerData : teammateData;
+    if (data === null) continue;
+    try {
+      client.send(data);
+    } catch {
+      clients.delete(client);
+      clientOrg.delete(client);
+      clientUser.delete(client);
     }
   }
 }

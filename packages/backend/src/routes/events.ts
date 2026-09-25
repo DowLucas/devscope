@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
-import type { DevscopeEvent } from "@devscope/shared";
+import type { DevscopeEvent, WsMessage } from "@devscope/shared";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import {
@@ -18,7 +18,7 @@ import {
 } from "../db";
 import { broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg, autoLinkUserToDeveloper, computeDeveloperId } from "../services/developerLink";
-import { getViewerDevIds, redactEvent, teammateVisibility, visibilityForRow } from "../services/visibility";
+import { broadcastSessionUpdate, getViewerDevIds, redactEvent, visibilityForRow } from "../services/visibility";
 import { logEthicsEvent } from "../utils/ethicsAudit";
 import { evaluateFriction, cleanupFrictionSession } from "../services/frictionDetector";
 import { CURRENT_SALT_VERSION, deriveOrgSalt } from "../utils/orgSalt";
@@ -111,6 +111,14 @@ export function eventsRoutes(sql: SQL) {
       }
     }
 
+    // Updates that describe what the session is doing: the owner always gets
+    // them, teammates only when the session is shared with them.
+    const orgIds = (devOrgs as any[]).map((r) => r.organization_id);
+    const sessionRef = { developerId: event.developerId, sessionId: event.sessionId };
+    function broadcastSessionDetail(msg: WsMessage) {
+      return broadcastSessionUpdate(sql, orgIds, sessionRef, msg, (v) => (v === "shared" ? msg : null));
+    }
+
     // Session status broadcasts
     if (opts.sessionCreatedOrReactivated) {
       broadcastToDevOrgs({ type: "session.update", data: { sessionId: event.sessionId, status: "active" } });
@@ -120,17 +128,14 @@ export function eventsRoutes(sql: SQL) {
       broadcastToDevOrgs({ type: "developer.update", data: { developerId: event.developerId } });
     }
 
-    // The WebSocket feed goes to the whole org, so it carries what a teammate
-    // may see. The owner's own views refetch full detail over REST.
-    const [owner] = await sql`
-      SELECT d.share_details, s.privacy_mode
-      FROM developers d LEFT JOIN sessions s ON s.id = ${event.sessionId}
-      WHERE d.id = ${event.developerId}` as any[];
-    const visibility = teammateVisibility(owner?.share_details, owner?.privacy_mode);
-    broadcastToDevOrgs({
-      type: "event.new",
-      data: redactEvent(event as unknown as Record<string, unknown>, visibility) as any,
-    });
+    // Owners get the full event; teammates what services/visibility.ts allows.
+    await broadcastSessionUpdate(
+      sql,
+      orgIds,
+      sessionRef,
+      { type: "event.new", data: event },
+      (v) => ({ type: "event.new", data: redactEvent(event as unknown as Record<string, unknown>, v) }),
+    );
 
     // Increment compaction count on compact.complete, track peak context usage, and finalize token segment
     if (event.eventType === "compact.complete") {
@@ -204,7 +209,7 @@ export function eventsRoutes(sql: SQL) {
         const toolName = toolPayload.toolName ?? "unknown";
         const alert = await checkAlertThresholds(sql, event.sessionId, toolName);
         if (alert) {
-          broadcastToDevOrgs({ type: "alert.triggered", data: alert });
+          await broadcastSessionDetail({ type: "alert.triggered", data: alert });
         }
       }
     }
@@ -234,7 +239,7 @@ export function eventsRoutes(sql: SQL) {
           const frictionAlert = evaluateFriction(event.sessionId, event, rules);
           if (frictionAlert) {
             const saved = await insertFrictionAlert(sql, { ...frictionAlert, organization_id: orgId });
-            broadcastToDevOrgs({ type: "friction.alert", data: saved });
+            await broadcastSessionDetail({ type: "friction.alert", data: saved });
             if (!firstTrippedAlert) {
               firstTrippedAlert = {
                 rule_type: frictionAlert.rule_type,
