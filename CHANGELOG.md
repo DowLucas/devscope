@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Spoken "a session needs you" summaries.** `POST /api/ai/voice-summary` turns
+  a blocked session (permission prompt, question, failed or finished turn) into
+  one sentence for the plugin's voice announcer (plugin 0.20.0) to read aloud.
+  Stateless: only token usage is recorded, as `voice_summary`. The plugin never
+  calls it for `private` sessions and falls back to a local sentence on any error.
+
 - **Choose whether your team sees your sessions.** Settings → Data Sharing → "Share my
   sessions with my team" now controls what teammates see. Off (the default): they only
   see that you're active: your name, session status, count and timing. On: they see
@@ -54,6 +60,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- AI rate limiting for plugin (API-key) requests is now per user. They all
+  shared one 20-per-minute bucket before, so one busy user could block
+  `/devscope:ask` for everyone.
 - An organization with no linked developers no longer sees every organization's
   sessions and recent events (an empty developer list was treated as "no filter").
 - `POST /api/prompts/similar` only returns the caller's own prompts; it used to accept
