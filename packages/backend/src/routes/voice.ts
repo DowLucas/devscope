@@ -42,8 +42,8 @@ export function voiceRoutes(sql: SQL) {
     if (!checkRateLimit(`tts:${rateLimitKey(c)}`)) {
       return c.json({ error: "Rate limit exceeded. Max 20 voice requests/minute." }, 429);
     }
-    const { text, voice, speed } = c.req.valid("json");
-    const audio = await synthesize(text, voice, speed);
+    const { text, voice, speed, volume } = c.req.valid("json");
+    const audio = await synthesize(text, voice, speed, volume);
     if (!audio) return c.json({ error: "Voice unavailable" }, 503);
     return new Response(audio, { headers: { "content-type": "audio/wav", "cache-control": "no-store" } });
   });

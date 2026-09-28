@@ -20,7 +20,7 @@ const wav = () => new Response(new Uint8Array([82, 73, 70, 70]), { headers: { "c
 describe("tts client", () => {
   test("posts to the OpenAI-compatible speech endpoint and returns audio", async () => {
     const f = stubFetch(async () => wav());
-    const out = await tts.synthesize("cloud needs you", "am_michael", 1.5);
+    const out = await tts.synthesize("cloud needs you", "am_michael", 1.5, 2.5);
     expect(out?.byteLength).toBe(4);
     const [url, init] = f.mock.calls[0]!;
     expect(url).toBe("http://kokoro.test:8880/v1/audio/speech");
@@ -29,6 +29,7 @@ describe("tts client", () => {
       input: "cloud needs you",
       voice: "am_michael",
       speed: 1.5,
+      volume_multiplier: 2.5,
       response_format: "wav",
     });
   });
@@ -39,6 +40,7 @@ describe("tts client", () => {
     const body = JSON.parse(f.mock.calls[0]![1].body);
     expect(body.voice).toBe(tts.TTS_DEFAULTS.voice);
     expect(body.speed).toBe(tts.TTS_DEFAULTS.speed);
+    expect(body.volume_multiplier).toBe(tts.TTS_DEFAULTS.volume);
   });
 
   test("non-200, non-audio, empty and network errors return null", async () => {

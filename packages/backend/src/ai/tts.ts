@@ -20,6 +20,9 @@ export const TTS_MODEL = process.env.TTS_MODEL ?? "kokoro";
 export const TTS_DEFAULTS = {
   voice: process.env.TTS_VOICE ?? "am_michael",
   speed: Number(process.env.TTS_SPEED ?? 1.5),
+  // Kokoro's volume_multiplier raises loudness while keeping peaks limited;
+  // at 2.0 the voice is twice as loud as default with no clipping.
+  volume: Number(process.env.TTS_VOLUME ?? 2),
 } as const;
 
 const TIMEOUT_MS = 15_000;
@@ -33,13 +36,21 @@ export async function synthesize(
   text: string,
   voice: string = TTS_DEFAULTS.voice,
   speed: number = TTS_DEFAULTS.speed,
+  volume: number = TTS_DEFAULTS.volume,
 ): Promise<ArrayBuffer | null> {
   if (!TTS_URL) return null;
   try {
     const res = await fetch(`${TTS_URL}/v1/audio/speech`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: TTS_MODEL, input: text, voice, speed, response_format: "wav" }),
+      body: JSON.stringify({
+        model: TTS_MODEL,
+        input: text,
+        voice,
+        speed,
+        volume_multiplier: volume,
+        response_format: "wav",
+      }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!res.ok) {
