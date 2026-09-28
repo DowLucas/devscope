@@ -2,8 +2,7 @@ import type { SQL } from "bun";
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { isAiAvailable, callGemini, DEFAULT_MODEL } from "../ai/gemini";
-import { VOICE, buildVoicePrompt, toSpokenText, voiceSummaryBody } from "../services/voiceSummary";
+import { AI_DAILY_TOKEN_BUDGET, requireAi as requireAiGuard } from "./aiGuards";
 import { runQueryWorkflowStreaming } from "../ai/workflows/queryWorkflow";
 import { runInsightWorkflow } from "../ai/workflows/insightWorkflow";
 import { runReportWorkflow } from "../ai/workflows/reportWorkflow";
@@ -21,86 +20,16 @@ import {
   getReport,
   getTokenUsageSummary,
   getTodayTokenCount,
-  recordTokenUsage,
 } from "../db";
 import { broadcastSessionUpdate, filterVisibleReports, getSearchableDevIds, getViewerDevIds, visibilityForRow } from "../services/visibility";
 import { broadcast, broadcastToOrg } from "../ws/handler";
 import type { Content } from "@google/genai";
 import type { InsightType, InsightSeverity, ReportType } from "@devscope/shared";
 
-const AI_DAILY_TOKEN_BUDGET = Number(
-  process.env.AI_DAILY_TOKEN_BUDGET ?? 1_000_000
-);
-
-// In-memory rate limiter: 20 requests/minute
-const rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT = 20;
-const RATE_WINDOW_MS = 60_000;
-
-function checkRateLimit(key: string): boolean {
-  const now = Date.now();
-  const timestamps = rateLimitMap.get(key) ?? [];
-  const recent = timestamps.filter((t) => now - t < RATE_WINDOW_MS);
-  if (recent.length >= RATE_LIMIT) return false;
-  recent.push(now);
-  rateLimitMap.set(key, recent);
-  return true;
-}
-
 export function aiRoutes(sql: SQL) {
   const app = new Hono();
 
-  // Guard middleware for generation endpoints only (POST routes that call Gemini)
-  function requireAi() {
-    return async (c: any, next: any) => {
-      if (!isAiAvailable()) {
-        return c.json(
-          { error: "AI features unavailable: GEMINI_API_KEY not configured" },
-          503
-        );
-      }
-      const session = c.get("session" as never) as any;
-      // API-key requests carry the key owner in `user`, not `session.user`.
-      const user = c.get("user" as never) as any;
-      const clientKey = session?.user?.id ?? user?.id ?? c.req.header("x-forwarded-for") ?? "default";
-      if (!checkRateLimit(clientKey)) {
-        return c.json({ error: "Rate limit exceeded. Max 20 AI requests/minute." }, 429);
-      }
-      const todayTokens = await getTodayTokenCount(sql);
-      if (todayTokens >= AI_DAILY_TOKEN_BUDGET) {
-        return c.json(
-          { error: "Daily AI token budget exceeded. Try again tomorrow." },
-          429
-        );
-      }
-      return next();
-    };
-  }
-
-  // --- Voice ---
-
-  // One spoken sentence for the plugin's "a session needs you" announcer.
-  // Stateless: nothing is persisted beyond token usage.
-  app.post("/voice-summary", requireAi(), zValidator("json", voiceSummaryBody), async (c) => {
-    const orgId = c.get("orgId" as never) as string | undefined;
-    let result;
-    try {
-      result = await callGemini(buildVoicePrompt(c.req.valid("json")), undefined, {
-        temperature: VOICE.temperature,
-        maxOutputTokens: VOICE.maxOutputTokens,
-      });
-    } catch (err) {
-      console.error("[ai] voice summary failed:", err);
-      return c.json({ error: "Summary unavailable" }, 502);
-    }
-    // Usage accounting must not cost the user their summary.
-    recordTokenUsage(sql, "voice_summary", DEFAULT_MODEL, result.inputTokens, result.outputTokens, orgId).catch(
-      (err) => console.error("[ai] voice usage not recorded:", err),
-    );
-    const text = toSpokenText(result.text);
-    if (!text) return c.json({ error: "Empty summary" }, 502);
-    return c.json({ text });
-  });
+  const requireAi = () => requireAiGuard(sql);
 
   // --- Chat ---
 

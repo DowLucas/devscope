@@ -28,6 +28,13 @@ export const voiceSummaryBody = z.object({
 
 export type VoiceSummaryInput = z.infer<typeof voiceSummaryBody>;
 
+/** Text to voice on the server. Voice names are Kokoro's, e.g. `am_michael`. */
+export const voiceAudioBody = z.object({
+  text: z.string().trim().min(1).max(VOICE.maxChars * 2),
+  voice: z.string().regex(/^[a-z]{2}_[a-z0-9_]{2,30}$/).optional(),
+  speed: z.number().min(0.5).max(2).optional(),
+});
+
 const TRIGGER_MEANING: Record<VoiceSummaryInput["trigger"], string> = {
   permission: "is waiting for the developer to approve or deny a tool call",
   question: "asked the developer a question and is waiting for an answer",
