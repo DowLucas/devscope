@@ -29,6 +29,7 @@ import { startSessionIntentClassification } from "./jobs/sessionIntentClassifica
 import { startCoachingCardGeneration } from "./jobs/coachingCards";
 import { startSemanticIndexing } from "./jobs/semanticIndexing";
 import { aiRoutes } from "./routes/ai";
+import { voiceRoutes } from "./routes/voice";
 import { coachingRoutes } from "./routes/coaching";
 import { frictionRoutes } from "./routes/friction";
 import { claudeMdRoutes } from "./routes/claudeMd";
@@ -325,6 +326,7 @@ app.route("/api/developers", developersRoutes(sql));
 app.route("/api/insights", insightsRoutes(sql));
 app.route("/api/alerts", alertsRoutes(sql));
 app.route("/api/export", exportRoutes(sql));
+app.route("/api/ai", voiceRoutes(sql));
 app.route("/api/ai", aiRoutes(sql));
 app.route("/api/teams", teamsRoutes(sql));
 app.route("/api/patterns", patternsRoutes(sql));

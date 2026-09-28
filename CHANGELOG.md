@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Server voice for the voice announcer.** `POST /api/ai/voice-audio` turns the
+  announcement into speech with a Kokoro TTS service on the homelab (`TTS_URL`;
+  default voice `am_michael` at 1.5×), so plugin users hear a natural voice
+  without installing anything. Unset `TTS_URL` answers 503 and the plugin uses
+  a local voice. Voice endpoints now live in `routes/voice.ts`.
 - **Spoken "a session needs you" summaries.** `POST /api/ai/voice-summary` turns
   a blocked session (permission prompt, question, failed or finished turn) into
   one sentence for the plugin's voice announcer (plugin 0.20.0) to read aloud.

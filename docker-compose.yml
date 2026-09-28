@@ -36,6 +36,8 @@ services:
       DEVSCOPE_ADMIN_NAME: ${DEVSCOPE_ADMIN_NAME:-Admin}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       AI_DAILY_TOKEN_BUDGET: ${AI_DAILY_TOKEN_BUDGET:-1000000}
+      # Kokoro-FastAPI base URL for the plugin's server voice; unset disables it.
+      TTS_URL: ${TTS_URL:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}

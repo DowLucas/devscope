@@ -115,6 +115,7 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     createReport: noop,
     updateReport: noop,
     recordTokenUsage: noop,
+    getTodayTokenCount: mock(() => Promise.resolve(0)),
     // semanticQueries.ts
     buildTurns: mock(() => Promise.resolve(0)),
     getPendingEmbeddings: noopArr,

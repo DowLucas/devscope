@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { VOICE, buildVoicePrompt, toSpokenText, voiceSummaryBody } from "../voiceSummary";
+import { VOICE, buildVoicePrompt, toSpokenText, voiceAudioBody, voiceSummaryBody } from "../voiceSummary";
 
 describe("voiceSummaryBody", () => {
   test("accepts a minimal permission request", () => {
@@ -53,5 +53,19 @@ describe("toSpokenText", () => {
 
   test("returns empty for empty model output", () => {
     expect(toSpokenText("  ``` ```  ")).toBe("");
+  });
+});
+
+describe("voiceAudioBody", () => {
+  test("accepts text with optional voice and speed", () => {
+    expect(voiceAudioBody.safeParse({ text: "cloud needs you" }).success).toBe(true);
+    expect(voiceAudioBody.safeParse({ text: "hi", voice: "am_michael", speed: 1.5 }).success).toBe(true);
+  });
+
+  test("rejects empty or oversized text, odd voice names and extreme speeds", () => {
+    expect(voiceAudioBody.safeParse({ text: " " }).success).toBe(false);
+    expect(voiceAudioBody.safeParse({ text: "x".repeat(VOICE.maxChars * 2 + 1) }).success).toBe(false);
+    expect(voiceAudioBody.safeParse({ text: "hi", voice: "../etc" }).success).toBe(false);
+    expect(voiceAudioBody.safeParse({ text: "hi", speed: 5 }).success).toBe(false);
   });
 });

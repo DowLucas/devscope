@@ -81,6 +81,7 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/similar/skill-chains` | GET | Caller's learned skill sequences, cached by the plugin at session start for next-skill hints |
 | `/api/similar/preflight` | POST | "You've asked this before" recall for the plugin's prompt hook: caller's own sessions only, similarity ≥ 0.9, earlier than 2 h ago, fails open to an empty result |
 | `/api/ai/voice-summary` | POST | One spoken sentence for the plugin's voice announcer (`trigger`, `project`, optional `tool`/`detail`/`last_message`); stateless, only token usage is recorded as `voice_summary`. The plugin never calls it for `private` sessions |
+| `/api/ai/voice-audio` | POST | That sentence as WAV (`text`, optional Kokoro `voice`/`speed`), voiced by the homelab TTS service; 503 when `TTS_URL` is unset or the service fails, so the plugin falls back to a local voice. Own 20/min bucket, no Gemini budget |
 | `/api/health` | GET | Health check + WS client count |
 | `/ws` | WS | Real-time event stream |
 
@@ -193,6 +194,14 @@ Every prompt and response is embedded so similar past work can be found by meani
 - **Error recall** (`error_embeddings`, migration 047): every non-private `tool.fail` with an `errorMessage` of 20+ chars is embedded by the same job, after turns. `prepareErrorText` masks directories (keeps the file name), hex ids and long numbers so the same failure in another file or run lands close by. Rejected messages go to `error_embedding_failures`.
 - **Skill chains:** `getSkillChains` learns "after skill A the user next runs B" from the order of `Skill` tool calls per session (count ≥ 3, share ≥ 0.25, top 2 per skill). Computed on request; no table.
 - **Pairing caveat:** turns are paired by order within a session, not by `promptId` (only newer plugin versions send it). `response.complete` is main-thread only, so this is reliable.
+
+## Server voice
+
+The plugin's voice announcer speaks through `/api/ai/voice-audio`, so users get a natural voice without installing a model. Both voice endpoints live in `routes/voice.ts` (mounted under `/api/ai`; the Gemini guard and rate limiter are shared with `routes/ai.ts` via `routes/aiGuards.ts`).
+
+- **Service:** [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) CPU image (`ghcr.io/remsky/kokoro-fastapi-cpu`, ~3.3 GB) next to the backend on the internal network only, never exposed. It speaks the OpenAI-compatible `/v1/audio/speech`; `ai/tts.ts` never throws and returns null on any failure.
+- **Env:** `TTS_URL` (e.g. `http://kokoro:8880`; unset disables the feature), `TTS_VOICE` (default `am_michael`), `TTS_SPEED` (default `1.5`), `TTS_MODEL` (default `kokoro`).
+- **Privacy:** only the sentence the backend itself wrote for a non-private session is voiced; the plugin never sends `private` sessions here. Nothing is stored.
 
 ## Ethics & Design Principles
 
