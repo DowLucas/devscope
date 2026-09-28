@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Louder server voice.** `/api/ai/voice-audio` takes an optional `volume`
+  (Kokoro `volume_multiplier`, 0.5-3); the default `TTS_VOLUME=2` doubles the
+  loudness without clipping (Kokoro keeps peaks limited).
+
 - **Server voice for the voice announcer.** `POST /api/ai/voice-audio` turns the
   announcement into speech with a Kokoro TTS service on the homelab (`TTS_URL`;
   default voice `am_michael` at 1.5×), so plugin users hear a natural voice

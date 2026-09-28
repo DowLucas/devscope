@@ -33,6 +33,7 @@ export const voiceAudioBody = z.object({
   text: z.string().trim().min(1).max(VOICE.maxChars * 2),
   voice: z.string().regex(/^[a-z]{2}_[a-z0-9_]{2,30}$/).optional(),
   speed: z.number().min(0.5).max(2).optional(),
+  volume: z.number().min(0.5).max(3).optional(),
 });
 
 const TRIGGER_MEANING: Record<VoiceSummaryInput["trigger"], string> = {

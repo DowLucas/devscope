@@ -9,7 +9,7 @@ const mockSynthesize = mock(async () => new Uint8Array([82, 73, 70, 70]).buffer 
 mock.module("../../ai/tts", () => ({
   isTtsAvailable: () => available,
   synthesize: mockSynthesize,
-  TTS_DEFAULTS: { voice: "am_michael", speed: 1.5 },
+  TTS_DEFAULTS: { voice: "am_michael", speed: 1.5, volume: 2 },
   TTS_MODEL: "kokoro",
 }));
 
@@ -41,11 +41,11 @@ beforeEach(() => {
 
 describe("POST /api/ai/voice-audio", () => {
   test("returns WAV from the TTS service", async () => {
-    const res = await post(buildApp(), { text: "cloud needs you", voice: "am_michael", speed: 1.5 });
+    const res = await post(buildApp(), { text: "cloud needs you", voice: "am_michael", speed: 1.5, volume: 2.5 });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("audio/wav");
     expect((await res.arrayBuffer()).byteLength).toBe(4);
-    expect(mockSynthesize).toHaveBeenCalledWith("cloud needs you", "am_michael", 1.5);
+    expect(mockSynthesize).toHaveBeenCalledWith("cloud needs you", "am_michael", 1.5, 2.5);
   });
 
   test("503 when no TTS service is configured, without calling it", async () => {
@@ -64,6 +64,7 @@ describe("POST /api/ai/voice-audio", () => {
     const app = buildApp();
     expect((await post(app, { text: "" })).status).toBe(400);
     expect((await post(app, { text: "hi", voice: "../../etc" })).status).toBe(400);
+    expect((await post(app, { text: "hi", volume: 10 })).status).toBe(400);
     expect(mockSynthesize).not.toHaveBeenCalled();
   });
 
