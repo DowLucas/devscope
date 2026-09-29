@@ -68,6 +68,10 @@ export function useDevscopeSocket() {
                 apiFetch("/api/sessions/active").then((r) => r.json()),
               ]).then(([devs, sessions]: [Developer[], (Session & { activeAgents?: ActiveAgent[] })[]]) => {
                 if (isStale()) return;
+                // A 401/429 answers with an `{ error }` object, not an array.
+                // Storing that as `developers` crashes every `.filter`/`.map`
+                // consumer (the sidebar is always mounted) and blanks the app.
+                if (!Array.isArray(devs) || !Array.isArray(sessions)) return;
                 const apiAgents = sessions
                   .flatMap((s) => s.activeAgents ?? [])
                   .filter((a) => a.agentId != null);
