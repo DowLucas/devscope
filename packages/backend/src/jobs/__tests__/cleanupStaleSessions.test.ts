@@ -8,6 +8,7 @@ import { dbStubs, wsHandlerStubs } from "../../__test_helpers__/mockStubs";
 const mockGetStaleActiveSessions = mock(() => Promise.resolve([] as any[]));
 const mockEndSession = mock(() => Promise.resolve());
 const mockBroadcast = mock(() => {});
+const mockBroadcastToOrg = mock((_orgId: string, _msg: unknown) => {});
 
 mock.module("../../db", () => dbStubs({
   getStaleActiveSessions: mockGetStaleActiveSessions,
@@ -16,6 +17,7 @@ mock.module("../../db", () => dbStubs({
 
 mock.module("../../ws/handler", () => wsHandlerStubs({
   broadcast: mockBroadcast,
+  broadcastToOrg: mockBroadcastToOrg,
 }));
 
 // Import AFTER mocks are registered
@@ -33,8 +35,14 @@ function wait(ms = 80): Promise<void> {
 }
 
 /** Build a fake sql tagged-template (not actually called by the module). */
-function makeMockSql() {
-  return mock(() => Promise.resolve([])) as any;
+function makeMockSql(orgsByDeveloper: Record<string, string[]> = {}) {
+  return mock((strings: TemplateStringsArray, ...values: unknown[]) => {
+    if (strings.join("?").includes("organization_developer")) {
+      const ids = orgsByDeveloper[String(values[0])] ?? [];
+      return Promise.resolve(ids.map((organization_id) => ({ organization_id })));
+    }
+    return Promise.resolve([]);
+  }) as any;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,6 +63,7 @@ beforeEach(() => {
   mockEndSession.mockReset();
   mockEndSession.mockImplementation(() => Promise.resolve());
   mockBroadcast.mockReset();
+  mockBroadcastToOrg.mockReset();
 
   // Reset env var to default
   delete process.env.STALE_SESSION_TIMEOUT_MINUTES;
@@ -209,7 +218,7 @@ describe("startStaleSessionCleanup", () => {
         { id: "sess-11", developer_id: "dev-y", developer_name: "Yara" },
       ];
 
-      const sql = makeMockSql();
+      const sql = makeMockSql({ "dev-x": ["org-1"], "dev-y": ["org-1", "org-2"] });
 
       // First call sets up startup (returns empty) and interval
       startStaleSessionCleanup(sql);
@@ -284,28 +293,21 @@ describe("startStaleSessionCleanup", () => {
         expect(mockEndSession).toHaveBeenCalledWith(sql, "sess-10");
         expect(mockEndSession).toHaveBeenCalledWith(sql, "sess-11");
 
-        // Should broadcast session.update for each session
-        expect(mockBroadcast).toHaveBeenCalledWith({
-          type: "session.update",
-          data: { sessionId: "sess-10", status: "ended" },
-        });
-        expect(mockBroadcast).toHaveBeenCalledWith({
-          type: "session.update",
-          data: { sessionId: "sess-11", status: "ended" },
-        });
+        // Org-scoped delivery only: never the global broadcast()
+        expect(mockBroadcast).not.toHaveBeenCalled();
 
-        // Should broadcast developer.update for each unique developer
-        expect(mockBroadcast).toHaveBeenCalledWith({
-          type: "developer.update",
-          data: { developerId: "dev-x" },
-        });
-        expect(mockBroadcast).toHaveBeenCalledWith({
-          type: "developer.update",
-          data: { developerId: "dev-y" },
-        });
-
-        // 2 session.update + 2 developer.update = 4 total broadcasts
-        expect(mockBroadcast).toHaveBeenCalledTimes(4);
+        const sessionMsg = (id: string) => ({ type: "session.update", data: { sessionId: id, status: "ended" } });
+        const devMsg = (id: string) => ({ type: "developer.update", data: { developerId: id } });
+        expect(mockBroadcastToOrg).toHaveBeenCalledWith("org-1", sessionMsg("sess-10"));
+        expect(mockBroadcastToOrg).toHaveBeenCalledWith("org-1", devMsg("dev-x"));
+        expect(mockBroadcastToOrg).toHaveBeenCalledWith("org-1", sessionMsg("sess-11"));
+        expect(mockBroadcastToOrg).toHaveBeenCalledWith("org-2", sessionMsg("sess-11"));
+        expect(mockBroadcastToOrg).toHaveBeenCalledWith("org-1", devMsg("dev-y"));
+        expect(mockBroadcastToOrg).toHaveBeenCalledWith("org-2", devMsg("dev-y"));
+        // dev-x's session must never reach org-2
+        expect(mockBroadcastToOrg).not.toHaveBeenCalledWith("org-2", sessionMsg("sess-10"));
+        // 3 session.update + 3 developer.update deliveries
+        expect(mockBroadcastToOrg).toHaveBeenCalledTimes(6);
       } finally {
         globalThis.setInterval = originalSetInterval;
       }
@@ -317,7 +319,7 @@ describe("startStaleSessionCleanup", () => {
         { id: "sess-21", developer_id: "dev-same", developer_name: "Same Dev" },
       ];
 
-      const sql = makeMockSql();
+      const sql = makeMockSql({ "dev-same": ["org-1"] });
       g.__gc_cleanup_startup_done = true; // skip startup
 
       const originalSetInterval = globalThis.setInterval;
@@ -343,28 +345,24 @@ describe("startStaleSessionCleanup", () => {
         capturedCallback!();
         await wait();
 
-        // 2 session.update broadcasts
-        expect(mockBroadcast).toHaveBeenCalledWith({
+        expect(mockBroadcast).not.toHaveBeenCalled();
+        expect(mockBroadcastToOrg).toHaveBeenCalledWith("org-1", {
           type: "session.update",
           data: { sessionId: "sess-20", status: "ended" },
         });
-        expect(mockBroadcast).toHaveBeenCalledWith({
+        expect(mockBroadcastToOrg).toHaveBeenCalledWith("org-1", {
           type: "session.update",
           data: { sessionId: "sess-21", status: "ended" },
         });
 
         // Only 1 developer.update (deduplicated via Set)
-        const developerUpdateCalls = mockBroadcast.mock.calls.filter(
-          (call: any[]) => call[0]?.type === "developer.update"
+        const developerUpdateCalls = mockBroadcastToOrg.mock.calls.filter(
+          (call: any[]) => call[1]?.type === "developer.update"
         );
         expect(developerUpdateCalls.length).toBe(1);
-        expect(developerUpdateCalls[0][0]).toEqual({
-          type: "developer.update",
-          data: { developerId: "dev-same" },
-        });
 
         // Total: 2 session.update + 1 developer.update = 3
-        expect(mockBroadcast).toHaveBeenCalledTimes(3);
+        expect(mockBroadcastToOrg).toHaveBeenCalledTimes(3);
       } finally {
         globalThis.setInterval = originalSetInterval;
       }
@@ -394,6 +392,7 @@ describe("startStaleSessionCleanup", () => {
         await wait();
 
         expect(mockBroadcast).not.toHaveBeenCalled();
+        expect(mockBroadcastToOrg).not.toHaveBeenCalled();
         expect(mockEndSession).not.toHaveBeenCalled();
       } finally {
         globalThis.setInterval = originalSetInterval;

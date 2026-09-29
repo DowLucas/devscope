@@ -74,10 +74,20 @@ export async function createSession(
       privacy_mode = COALESCE(EXCLUDED.privacy_mode, sessions.privacy_mode),
       model = COALESCE(EXCLUDED.model, sessions.model),
       status = 'active',
-      ended_at = NULL`;
+      ended_at = NULL
+    WHERE sessions.developer_id = EXCLUDED.developer_id`;
 }
 
-export async function endSession(sql: SQL, id: string) {
+/**
+ * End a session. When `developerId` is given (ingestion paths, where the id is
+ * client-supplied) the update only applies if that developer owns the session.
+ * Internal jobs (stale cleanup) omit it.
+ */
+export async function endSession(sql: SQL, id: string, developerId?: string) {
+  if (developerId !== undefined) {
+    await sql`UPDATE sessions SET status = 'ended', ended_at = NOW() WHERE id = ${id} AND developer_id = ${developerId}`;
+    return;
+  }
   await sql`UPDATE sessions SET status = 'ended', ended_at = NOW() WHERE id = ${id}`;
 }
 
