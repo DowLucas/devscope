@@ -256,10 +256,14 @@ app.use("/api/*", async (c, next) => {
     return next();
   }
   const user = c.get("user" as never) as any;
+  // Plugin (API key) and dashboard (session) traffic get separate buckets:
+  // requireApiKeyOrSession sets the same `user` for both, so a burst of plugin
+  // hook calls used to exhaust the quota and 429 the dashboard's own fetches.
+  const viaApiKey = Boolean(c.get("apiKeyUserId" as never));
   return rateLimitMiddleware({
     maxRequests: 300,
     windowMs: 60_000,
-    prefix: "auth",
+    prefix: viaApiKey ? "auth-key" : "auth",
     keyFn: () => user?.id ?? getClientIp(c),
   })(c, next);
 });

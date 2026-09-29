@@ -64,9 +64,12 @@ export const useActivityStore = create<ActivityState>((set) => ({
       return { events: [event, ...state.events].slice(0, MAX_EVENTS) };
     }),
 
-  setDevelopers: (developers) => set({ developers }),
-  setActiveSessions: (activeSessions) => set({ activeSessions }),
-  setActiveAgents: (activeAgents) => set({ activeAgents }),
+  // Ignore non-array payloads (e.g. an `{ error }` body from a 401/429) so a
+  // failed fetch can never replace a list with something that crashes `.map`.
+  setDevelopers: (developers) => set((state) => (Array.isArray(developers) ? { developers } : state)),
+  setActiveSessions: (activeSessions) =>
+    set((state) => (Array.isArray(activeSessions) ? { activeSessions } : state)),
+  setActiveAgents: (activeAgents) => set((state) => (Array.isArray(activeAgents) ? { activeAgents } : state)),
   addActiveAgent: (agent) =>
     set((state) => {
       if (state.activeAgents.some((a) => a.agentId === agent.agentId)) return state;

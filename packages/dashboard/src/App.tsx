@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { AuthProvider } from "@/components/AuthProvider";
 import { AuthGuard } from "@/components/AuthGuard";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { Layout } from "@/components/Layout";
 import { LiveFeed } from "@/components/LiveFeed";
 import { DeveloperCards } from "@/components/DeveloperCards";
@@ -125,7 +126,9 @@ function App() {
         {/* All dashboard routes go through AuthGuard */}
         <Route path="/dashboard/*?">
           <AuthGuard>
-            <AppContent />
+            <AppErrorBoundary>
+              <AppContent />
+            </AppErrorBoundary>
           </AuthGuard>
         </Route>
 
