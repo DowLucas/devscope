@@ -3,7 +3,7 @@ import { StateGraph, Annotation, END, START } from "@langchain/langgraph";
 import { callGemini, TEMPERATURE } from "../gemini";
 import { getPatterns } from "../../db/patternQueries";
 import { getAntiPatterns } from "../../db/antiPatternQueries";
-import { getRecentSessionSequences, type SessionSequence } from "../../db/patternQueries";
+import { getRecentSessionSequences, getOrgSharingDeveloperIds, type SessionSequence } from "../../db/patternQueries";
 import {
   getTeamSkillById,
   createTeamSkill,
@@ -47,16 +47,17 @@ async function gatherNewData(
   state: RefinementStateType,
   sql: SQL
 ): Promise<Partial<RefinementStateType>> {
+  const sharingIds = await getOrgSharingDeveloperIds(sql, state.orgId);
   const [existingSkill, freshPatterns, freshAntiPatterns, sessionSequences] =
     await Promise.all([
-      getTeamSkillById(sql, state.skillId),
-      getPatterns(sql, { effectiveness: "effective", minOccurrences: 2, limit: 15 }),
-      getAntiPatterns(sql, { limit: 10 }),
-      getRecentSessionSequences(sql, 14, 50),
+      getTeamSkillById(sql, state.skillId, state.orgId),
+      getPatterns(sql, state.orgId, { effectiveness: "effective", minOccurrences: 2, limit: 15 }),
+      getAntiPatterns(sql, state.orgId, { limit: 10 }),
+      getRecentSessionSequences(sql, 14, 50, sharingIds),
     ]);
 
   const existingLinks = existingSkill
-    ? await getSkillPatternLinks(sql, existingSkill.id)
+    ? await getSkillPatternLinks(sql, existingSkill.id, state.orgId)
     : [];
 
   return { existingSkill, existingLinks, freshPatterns, freshAntiPatterns, sessionSequences };
@@ -186,8 +187,8 @@ async function persistRefinement(
   }
 
   if (decision === "archive") {
-    await updateTeamSkill(sql, state.existingSkill.id, { status: "archived" });
-    const archived = await getTeamSkillById(sql, state.existingSkill.id);
+    await updateTeamSkill(sql, state.existingSkill.id, state.orgId, { status: "archived" });
+    const archived = await getTeamSkillById(sql, state.existingSkill.id, state.orgId);
     return { resultSkill: archived };
   }
 
@@ -195,7 +196,7 @@ async function persistRefinement(
     const r = state.refinementResult;
 
     // Archive old version
-    await updateTeamSkill(sql, state.existingSkill.id, { status: "archived" });
+    await updateTeamSkill(sql, state.existingSkill.id, state.orgId, { status: "archived" });
 
     // Create new version
     const newSkill = await createTeamSkill(sql, {

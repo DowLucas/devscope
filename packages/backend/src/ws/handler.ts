@@ -93,17 +93,18 @@ export function broadcastToOrgByViewer(
   }
 }
 
-export function broadcast(message: WsMessage) {
-  const data = JSON.stringify(message);
-  for (const [, clients] of orgClients) {
-    for (const client of clients) {
-      try {
-        client.send(data);
-      } catch {
-        clients.delete(client);
-        clientOrg.delete(client);
-      }
-    }
+// Close a user's live sockets for one org, e.g. after they are removed from it.
+// Membership is only checked at upgrade, so an open socket would otherwise keep
+// receiving the org's events.
+export function disconnectUserFromOrg(orgId: string, userId: string) {
+  const clients = orgClients.get(orgId);
+  if (!clients) return;
+  for (const client of [...clients]) {
+    if (clientUser.get(client) !== userId) continue;
+    removeClient(client);
+    try {
+      client.close(4003, "Removed from organization");
+    } catch {}
   }
 }
 

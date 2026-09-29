@@ -19,6 +19,22 @@ const TermsLabel = createElement("span", null,
   }, "Privacy Policy"),
 );
 
+const SPAM_HINT = "If you don't see it within a few minutes, check your spam or junk folder.";
+
+// Keys verified in @daveyplate/better-auth-ui src/localization/auth-localization.ts
+const AUTH_LOCALIZATION = {
+  SIGN_UP_EMAIL: `We sent a verification link to your email. ${SPAM_HINT}`,
+  EMAIL_NOT_VERIFIED: `Your email isn't verified yet. We sent a new verification link. ${SPAM_HINT}`,
+  VERIFY_YOUR_EMAIL: "Verify Your Email",
+  VERIFY_YOUR_EMAIL_DESCRIPTION: `Please verify your email address using the link we sent you. ${SPAM_HINT} Still nothing? Click the button below to resend.`,
+  EMAIL_VERIFICATION_DESCRIPTION: `Please check your email for the verification code. ${SPAM_HINT}`,
+  EMAIL_OTP_VERIFICATION_SENT: `Please check your email for the verification code. ${SPAM_HINT}`,
+  EMAIL_VERIFY_CHANGE: `Please check your email to verify the change. ${SPAM_HINT}`,
+  FORGOT_PASSWORD_EMAIL: `Check your email for the password reset link. ${SPAM_HINT}`,
+  MAGIC_LINK_EMAIL: `Check your email for the magic link. ${SPAM_HINT}`,
+  DELETE_ACCOUNT_VERIFY: `Please check your email to verify the deletion of your account. ${SPAM_HINT}`,
+};
+
 const ALL_SOCIAL_PROVIDERS = ["github", "google"] as const;
 
 function useListAccounts() {
@@ -96,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       social={{ providers: socialProviders }}
       credentials={{ confirmPassword: import.meta.env.PROD }}
       emailVerification={true}
+      localization={AUTH_LOCALIZATION}
       additionalFields={{
         acceptedTerms: {
           label: TermsLabel,

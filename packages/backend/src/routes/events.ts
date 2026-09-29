@@ -359,7 +359,12 @@ export function eventsRoutes(sql: SQL) {
       .catch((err) => console.error("[events] autoLinkUserToDeveloper failed:", err));
 
     // Check if this event is reactivating an ended session (e.g. after backend restart)
-    const [existingSession] = await sql`SELECT status FROM sessions WHERE id = ${event.sessionId}`;
+    const [existingSession] = await sql`SELECT status, developer_id FROM sessions WHERE id = ${event.sessionId}`;
+    // Session ids are client-supplied: never let one API key act on a session
+    // owned by another developer (create/reactivate, end, append events).
+    if (existingSession && (existingSession as any).developer_id !== event.developerId) {
+      return c.json({ error: "Session belongs to another developer" }, 403);
+    }
     const wasEnded = (existingSession as any)?.status === "ended";
 
     // Only create/reactivate sessions on explicit session.start or when
@@ -410,7 +415,7 @@ export function eventsRoutes(sql: SQL) {
       const isContinuation = ["clear", "resume", "compact"].includes(endReason ?? "");
 
       if (!isContinuation) {
-        await endSession(sql, event.sessionId);
+        await endSession(sql, event.sessionId, event.developerId);
         broadcastSessionEnded = true;
       }
     }
@@ -663,7 +668,10 @@ export function eventsRoutes(sql: SQL) {
       .catch((err) => console.error("[events/hook] autoLinkUserToDeveloper failed:", err));
 
     // Ensure session exists and is active (mirrors main POST / handler behavior)
-    const [existingSession] = await sql`SELECT status FROM sessions WHERE id = ${event.sessionId}`;
+    const [existingSession] = await sql`SELECT status, developer_id FROM sessions WHERE id = ${event.sessionId}`;
+    if (existingSession && (existingSession as any).developer_id !== event.developerId) {
+      return c.json({ error: "Session belongs to another developer" }, 403);
+    }
     const sessionCreatedOrReactivated = !existingSession || (existingSession as any).status === "ended";
     if (sessionCreatedOrReactivated) {
       await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, null, null);

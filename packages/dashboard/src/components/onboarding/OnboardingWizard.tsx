@@ -69,7 +69,16 @@ export function OnboardingWizard() {
     setTeamStep("creating");
     authClient.organization
       .acceptInvitation({ invitationId: inviteToken })
-      .then(async () => {
+      .then(async (res) => {
+        const acceptErr = (res as { error?: { code?: string } | null })?.error;
+        if (acceptErr) {
+          if (acceptErr.code === "EMAIL_VERIFICATION_REQUIRED_BEFORE_ACCEPTING_OR_REJECTING_INVITATION") {
+            // Send them to the invite page, which offers a resend button
+            setLocation(`/invite/${inviteToken}`);
+            return;
+          }
+          throw new Error("accept failed");
+        }
         sessionStorage.removeItem("devscope_invite_token");
         // Set the joined org as active and populate the store
         try {

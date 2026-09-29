@@ -33,3 +33,9 @@ export function visibleSessionPredicate(viewerDevIds: string[], alias = "s"): st
 export function visibleSessionSql(viewerDevIds: string[], alias = "s"): ReturnType<typeof Sql.unsafe> {
   return Sql.unsafe(visibleSessionPredicate(viewerDevIds, alias));
 }
+
+/** API/LLM-facing view of a pattern or anti-pattern: `data_context` holds mined file paths and commands and never leaves the server. */
+export function withoutContext<T extends { data_context?: unknown }>(row: T): Omit<T, "data_context"> {
+  const { data_context: _drop, ...rest } = row;
+  return rest;
+}

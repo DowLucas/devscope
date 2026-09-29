@@ -1,6 +1,6 @@
 import type { SQL } from "bun";
 import { getStaleActiveSessions, endSession } from "../db";
-import { broadcast } from "../ws/handler";
+import { broadcastToOrg } from "../ws/handler";
 
 const INTERVAL_MS = 60_000;
 const STARTUP_STALE_THRESHOLD_MINUTES = 60 * 24; // 24 hours
@@ -41,16 +41,31 @@ export function startStaleSessionCleanup(sql: SQL) {
       if (staleSessions.length === 0) return;
 
       const affectedDeveloperIds = new Set<string>();
+      // Cache developer -> org ids; a developer can belong to several orgs.
+      const orgCache = new Map<string, string[]>();
+      const orgsFor = async (developerId: string) => {
+        let ids = orgCache.get(developerId);
+        if (!ids) {
+          const rows = await sql`SELECT organization_id FROM organization_developer WHERE developer_id = ${developerId}` as any[];
+          ids = rows.map((r) => r.organization_id);
+          orgCache.set(developerId, ids);
+        }
+        return ids;
+      };
+      // Never use the global broadcast(): session ids must not leak across orgs.
+      const broadcastToDevOrgs = async (developerId: string, msg: any) => {
+        for (const orgId of await orgsFor(developerId)) broadcastToOrg(orgId, msg);
+      };
 
       for (const session of staleSessions) {
         await endSession(sql, session.id);
         affectedDeveloperIds.add(session.developer_id);
-        broadcast({ type: "session.update", data: { sessionId: session.id, status: "ended" } });
+        await broadcastToDevOrgs(session.developer_id, { type: "session.update", data: { sessionId: session.id, status: "ended" } });
         console.log(`[cleanup] Ended stale session ${session.id} (developer: ${session.developer_name})`);
       }
 
       for (const developerId of affectedDeveloperIds) {
-        broadcast({ type: "developer.update", data: { developerId } });
+        await broadcastToDevOrgs(developerId, { type: "developer.update", data: { developerId } });
       }
 
       console.log(`[cleanup] Cleaned up ${staleSessions.length} stale session(s)`);

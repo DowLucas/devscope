@@ -21,6 +21,7 @@ import {
   getAntiPatterns,
   getAntiPatternStats,
 } from "../db";
+import { withoutContext } from "../db/utils";
 
 const MAX_DAYS = 365;
 const MAX_RESULT_SIZE = 15_000; // 15KB
@@ -58,6 +59,8 @@ export interface ToolScope {
   orgDevIds?: string[];
   viewerDevIds: string[];
   searchableDevIds: string[];
+  /** Caller's org. Patterns and anti-patterns are org-owned; without it those tools return nothing. */
+  orgId?: string;
 }
 
 export interface ToolDefinition {
@@ -503,20 +506,22 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, scope) => {
+      if (!scope.orgId) return JSON.stringify({ error: "Organization context required" });
       if (args.effectiveness || args.category) {
-        const result = await getPatterns(sql, {
+        const result = await getPatterns(sql, scope.orgId, {
           effectiveness: args.effectiveness as string | undefined,
           category: args.category as string | undefined,
           limit: 20,
         });
-        return truncateResult(result);
+        return truncateResult(result.map(withoutContext));
       }
       const result = await getPatternStats(
         sql,
+        scope.orgId,
         clampDays(args.days as number | undefined)
       );
-      return truncateResult(result);
+      return truncateResult({ ...result, top_patterns: result.top_patterns.map(withoutContext) });
     },
   },
   {
@@ -539,19 +544,21 @@ export const toolRegistry: ToolDefinition[] = [
         },
       },
     },
-    execute: async (sql, args) => {
+    execute: async (sql, args, scope) => {
+      if (!scope.orgId) return JSON.stringify({ error: "Organization context required" });
       if (args.severity) {
-        const result = await getAntiPatterns(sql, {
+        const result = await getAntiPatterns(sql, scope.orgId, {
           severity: args.severity as string,
           limit: 20,
         });
-        return truncateResult(result);
+        return truncateResult(result.map(withoutContext));
       }
       const result = await getAntiPatternStats(
         sql,
+        scope.orgId,
         clampDays(args.days as number | undefined)
       );
-      return truncateResult(result);
+      return truncateResult({ ...result, top_anti_patterns: result.top_anti_patterns.map(withoutContext) });
     },
   },
 ];

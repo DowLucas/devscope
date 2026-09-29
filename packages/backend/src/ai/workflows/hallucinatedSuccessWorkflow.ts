@@ -7,7 +7,7 @@ import {
 import { classifySuccessClaims, claimEvidence } from "../detection/successClaim";
 import { upsertAntiPattern, createAntiPatternMatch } from "../../db/antiPatternQueries";
 import { inList } from "../../db/utils";
-import type { ToolEvent } from "../../db/patternQueries";
+import { getOrgSharingDeveloperIds, type ToolEvent } from "../../db/patternQueries";
 
 // Async batch detector: scans recently ended sessions for "claimed success
 // without verification" and persists matches as anti_patterns. Wired from
@@ -20,12 +20,16 @@ import type { ToolEvent } from "../../db/patternQueries";
 
 export async function runHallucinatedSuccessDetection(
   sql: SQL,
+  orgId: string,
   days: number = 1,
 ): Promise<number> {
-  // Recent sessions to scan
+  // Recent sessions to scan: this org's, from developers who share with the team
+  const devIds = await getOrgSharingDeveloperIds(sql, orgId);
+  if (devIds.length === 0) return 0;
   const sessions = await sql`
     SELECT id, privacy_mode FROM sessions
     WHERE status = 'ended'
+      AND developer_id IN (${inList(devIds)})
       AND ended_at >= NOW() - make_interval(days => ${days})`;
   const sessionIds = (sessions as any[])
     .filter((s) => s.privacy_mode !== "private")
@@ -126,7 +130,7 @@ export async function runHallucinatedSuccessDetection(
     if (!hit) continue;
 
     try {
-      const ap = await upsertAntiPattern(sql, {
+      const ap = await upsertAntiPattern(sql, orgId, {
         name: hit.name,
         description: hit.description,
         detection_rule: hit.rule,

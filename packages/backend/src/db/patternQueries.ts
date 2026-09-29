@@ -69,33 +69,37 @@ export interface SessionSequence {
   concrete_details: SessionConcreteDetails;
 }
 
+/**
+ * Org developers who share their sessions with the team. Pattern mining feeds
+ * file paths, commands and search patterns into a model and stores the result
+ * for the whole org, so it may only read these developers' sessions.
+ */
+export async function getOrgSharingDeveloperIds(sql: SQL, orgId: string): Promise<string[]> {
+  const rows = await sql`
+    SELECT d.id FROM organization_developer od
+    JOIN developers d ON d.id = od.developer_id
+    WHERE od.organization_id = ${orgId} AND d.share_details = TRUE` as { id: string }[];
+  return rows.map((r) => r.id);
+}
+
+/** `developerIds` is required: there is deliberately no unscoped (all-tenant) read. */
 export async function getRecentSessionSequences(
   sql: SQL,
-  days: number = 1,
-  limit: number = 200,
-  developerIds?: string[]
+  days: number,
+  limit: number,
+  developerIds: string[]
 ): Promise<SessionSequence[]> {
-  let sessionsQuery;
-  if (developerIds !== undefined) {
-    sessionsQuery = sql`
-      SELECT s.id as session_id, s.developer_id, s.project_name,
-        ROUND(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::FLOAT as duration_minutes
-      FROM sessions s
-      WHERE s.status = 'ended'
-        AND s.ended_at >= NOW() - make_interval(days => ${days})
-        AND s.developer_id IN (${inList(developerIds)})
-      ORDER BY s.ended_at DESC
-      LIMIT ${limit}`;
-  } else {
-    sessionsQuery = sql`
-      SELECT s.id as session_id, s.developer_id, s.project_name,
-        ROUND(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::FLOAT as duration_minutes
-      FROM sessions s
-      WHERE s.status = 'ended'
-        AND s.ended_at >= NOW() - make_interval(days => ${days})
-      ORDER BY s.ended_at DESC
-      LIMIT ${limit}`;
-  }
+  if (developerIds.length === 0) return [];
+
+  const sessionsQuery = sql`
+    SELECT s.id as session_id, s.developer_id, s.project_name,
+      ROUND(EXTRACT(EPOCH FROM (COALESCE(s.ended_at, NOW()) - s.started_at)) / 60)::FLOAT as duration_minutes
+    FROM sessions s
+    WHERE s.status = 'ended'
+      AND s.ended_at >= NOW() - make_interval(days => ${days})
+      AND s.developer_id IN (${inList(developerIds)})
+    ORDER BY s.ended_at DESC
+    LIMIT ${limit}`;
 
   const sessions = await sessionsQuery;
   if (sessions.length === 0) return [];
@@ -339,6 +343,7 @@ export async function getRecentSessionSequences(
 
 export async function upsertPattern(
   sql: SQL,
+  orgId: string,
   pattern: {
     name: string;
     description: string;
@@ -350,11 +355,12 @@ export async function upsertPattern(
     data_context?: Record<string, unknown>;
   }
 ): Promise<SessionPattern> {
-  // Try to find an existing pattern with the same tool sequence
+  // Try to find an existing pattern with the same tool sequence, within this org only
   const seqStr = pattern.tool_sequence.join(",");
   const existing = await sql`
     SELECT * FROM session_patterns
-    WHERE array_to_string(tool_sequence, ',') = ${seqStr}
+    WHERE organization_id = ${orgId}
+      AND array_to_string(tool_sequence, ',') = ${seqStr}
     LIMIT 1`;
 
   if (existing.length > 0) {
@@ -373,7 +379,7 @@ export async function upsertPattern(
         category = ${pattern.category ?? ex.category ?? null},
         data_context = ${updatedContext}::JSONB,
         updated_at = NOW()
-      WHERE id = ${ex.id}`;
+      WHERE id = ${ex.id} AND organization_id = ${orgId}`;
 
     const [updated] = await sql`SELECT * FROM session_patterns WHERE id = ${ex.id}`;
     return updated as SessionPattern;
@@ -384,8 +390,8 @@ export async function upsertPattern(
   const toolSeq = `{${pattern.tool_sequence.map(t => `"${t.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
 
   await sql`
-    INSERT INTO session_patterns (id, name, description, tool_sequence, avg_success_rate, occurrence_count, effectiveness, category, data_context)
-    VALUES (${id}, ${pattern.name}, ${pattern.description},
+    INSERT INTO session_patterns (id, organization_id, name, description, tool_sequence, avg_success_rate, occurrence_count, effectiveness, category, data_context)
+    VALUES (${id}, ${orgId}, ${pattern.name}, ${pattern.description},
       ${Sql.unsafe(`'${toolSeq.replace(/'/g, "''")}'`)}::TEXT[],
       ${pattern.avg_success_rate}, ${pattern.occurrence_count},
       ${pattern.effectiveness}, ${pattern.category ?? null},
@@ -413,6 +419,7 @@ export async function createPatternMatch(
 
 export async function getPatterns(
   sql: SQL,
+  orgId: string,
   opts?: {
     effectiveness?: string;
     category?: string;
@@ -426,7 +433,8 @@ export async function getPatterns(
   if (opts?.effectiveness && opts?.category) {
     return (await sql`
       SELECT * FROM session_patterns
-      WHERE effectiveness = ${opts.effectiveness}
+      WHERE organization_id = ${orgId}
+        AND effectiveness = ${opts.effectiveness}
         AND category = ${opts.category}
         AND occurrence_count >= ${minOcc}
       ORDER BY occurrence_count DESC, avg_success_rate DESC
@@ -435,7 +443,8 @@ export async function getPatterns(
   if (opts?.effectiveness) {
     return (await sql`
       SELECT * FROM session_patterns
-      WHERE effectiveness = ${opts.effectiveness}
+      WHERE organization_id = ${orgId}
+        AND effectiveness = ${opts.effectiveness}
         AND occurrence_count >= ${minOcc}
       ORDER BY occurrence_count DESC, avg_success_rate DESC
       LIMIT ${limit}`) as SessionPattern[];
@@ -443,28 +452,33 @@ export async function getPatterns(
   if (opts?.category) {
     return (await sql`
       SELECT * FROM session_patterns
-      WHERE category = ${opts.category}
+      WHERE organization_id = ${orgId}
+        AND category = ${opts.category}
         AND occurrence_count >= ${minOcc}
       ORDER BY occurrence_count DESC, avg_success_rate DESC
       LIMIT ${limit}`) as SessionPattern[];
   }
   return (await sql`
     SELECT * FROM session_patterns
-    WHERE occurrence_count >= ${minOcc}
+    WHERE organization_id = ${orgId}
+      AND occurrence_count >= ${minOcc}
     ORDER BY occurrence_count DESC, avg_success_rate DESC
     LIMIT ${limit}`) as SessionPattern[];
 }
 
 export async function getPatternById(
   sql: SQL,
+  orgId: string,
   id: string
 ): Promise<SessionPattern | null> {
-  const [row] = await sql`SELECT * FROM session_patterns WHERE id = ${id}`;
+  const [row] = await sql`
+    SELECT * FROM session_patterns WHERE id = ${id} AND organization_id = ${orgId}`;
   return (row as SessionPattern) ?? null;
 }
 
 export async function getPatternStats(
   sql: SQL,
+  orgId: string,
   days: number = 30
 ): Promise<{
   total_patterns: number;
@@ -478,18 +492,21 @@ export async function getPatternStats(
       COUNT(*)::INT as total_patterns,
       SUM(CASE WHEN effectiveness = 'effective' THEN 1 ELSE 0 END)::INT as effective_count,
       SUM(CASE WHEN effectiveness = 'ineffective' THEN 1 ELSE 0 END)::INT as ineffective_count
-    FROM session_patterns`;
+    FROM session_patterns
+    WHERE organization_id = ${orgId}`;
 
   const topPatterns = await sql`
     SELECT * FROM session_patterns
-    WHERE effectiveness = 'effective'
+    WHERE organization_id = ${orgId} AND effectiveness = 'effective'
     ORDER BY occurrence_count DESC
     LIMIT 5`;
 
   const [matchCount] = await sql`
     SELECT COUNT(*)::INT as cnt
-    FROM session_pattern_matches
-    WHERE created_at >= NOW() - make_interval(days => ${days})`;
+    FROM session_pattern_matches spm
+    JOIN session_patterns sp ON sp.id = spm.pattern_id
+    WHERE sp.organization_id = ${orgId}
+      AND spm.created_at >= NOW() - make_interval(days => ${days})`;
 
   return {
     total_patterns: (counts as any)?.total_patterns ?? 0,
@@ -502,13 +519,14 @@ export async function getPatternStats(
 
 export async function getSessionPatterns(
   sql: SQL,
+  orgId: string,
   sessionId: string
 ): Promise<(SessionPattern & { match_confidence: number })[]> {
   return (await sql`
     SELECT sp.*, spm.match_confidence
     FROM session_patterns sp
     JOIN session_pattern_matches spm ON sp.id = spm.pattern_id
-    WHERE spm.session_id = ${sessionId}
+    WHERE spm.session_id = ${sessionId} AND sp.organization_id = ${orgId}
     ORDER BY spm.match_confidence DESC`) as (SessionPattern & { match_confidence: number })[];
 }
 

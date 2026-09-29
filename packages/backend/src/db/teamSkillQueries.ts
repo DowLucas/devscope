@@ -74,15 +74,17 @@ export async function getTeamSkills(
 
 export async function getTeamSkillById(
   sql: SQL,
-  id: string
+  id: string,
+  orgId: string
 ): Promise<TeamSkill | null> {
-  const [row] = await sql`SELECT * FROM team_skills WHERE id = ${id}`;
+  const [row] = await sql`SELECT * FROM team_skills WHERE id = ${id} AND organization_id = ${orgId}`;
   return (row as TeamSkill) ?? null;
 }
 
 export async function updateTeamSkill(
   sql: SQL,
   id: string,
+  orgId: string,
   updates: Partial<{
     name: string;
     description: string;
@@ -92,44 +94,53 @@ export async function updateTeamSkill(
     effectiveness_score: number;
   }>
 ): Promise<TeamSkill | null> {
+  // Ownership gate: every UPDATE below is also scoped by organization_id
+  const existing = await getTeamSkillById(sql, id, orgId);
+  if (!existing) return null;
+
   if (updates.name !== undefined) {
-    await sql`UPDATE team_skills SET name = ${updates.name}, updated_at = NOW() WHERE id = ${id}`;
+    await sql`UPDATE team_skills SET name = ${updates.name}, updated_at = NOW() WHERE id = ${id} AND organization_id = ${orgId}`;
   }
   if (updates.description !== undefined) {
-    await sql`UPDATE team_skills SET description = ${updates.description}, updated_at = NOW() WHERE id = ${id}`;
+    await sql`UPDATE team_skills SET description = ${updates.description}, updated_at = NOW() WHERE id = ${id} AND organization_id = ${orgId}`;
   }
   if (updates.skill_body !== undefined) {
-    await sql`UPDATE team_skills SET skill_body = ${updates.skill_body}, updated_at = NOW() WHERE id = ${id}`;
+    await sql`UPDATE team_skills SET skill_body = ${updates.skill_body}, updated_at = NOW() WHERE id = ${id} AND organization_id = ${orgId}`;
   }
   if (updates.trigger_phrases !== undefined) {
     const triggerArr = `{${updates.trigger_phrases.map(t => `"${t.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
-    await sql`UPDATE team_skills SET trigger_phrases = ${Sql.unsafe(`'${triggerArr.replace(/'/g, "''")}'`)}::TEXT[], updated_at = NOW() WHERE id = ${id}`;
+    await sql`UPDATE team_skills SET trigger_phrases = ${Sql.unsafe(`'${triggerArr.replace(/'/g, "''")}'`)}::TEXT[], updated_at = NOW() WHERE id = ${id} AND organization_id = ${orgId}`;
   }
   if (updates.status !== undefined) {
-    await sql`UPDATE team_skills SET status = ${updates.status}, updated_at = NOW() WHERE id = ${id}`;
+    await sql`UPDATE team_skills SET status = ${updates.status}, updated_at = NOW() WHERE id = ${id} AND organization_id = ${orgId}`;
   }
   if (updates.effectiveness_score !== undefined) {
-    await sql`UPDATE team_skills SET effectiveness_score = ${updates.effectiveness_score}, updated_at = NOW() WHERE id = ${id}`;
+    await sql`UPDATE team_skills SET effectiveness_score = ${updates.effectiveness_score}, updated_at = NOW() WHERE id = ${id} AND organization_id = ${orgId}`;
   }
-  const [row] = await sql`SELECT * FROM team_skills WHERE id = ${id}`;
-  return (row as TeamSkill) ?? null;
+  return getTeamSkillById(sql, id, orgId);
 }
 
-export async function archiveTeamSkill(sql: SQL, id: string): Promise<void> {
-  await sql`UPDATE team_skills SET status = 'archived', updated_at = NOW() WHERE id = ${id}`;
+/** Returns false when the skill does not exist in the given org (nothing updated). */
+export async function archiveTeamSkill(sql: SQL, id: string, orgId: string): Promise<boolean> {
+  const rows = await sql`
+    UPDATE team_skills SET status = 'archived', updated_at = NOW()
+    WHERE id = ${id} AND organization_id = ${orgId}
+    RETURNING id`;
+  return rows.length > 0;
 }
 
 export async function approveTeamSkill(
   sql: SQL,
   id: string,
+  orgId: string,
   approvedBy: string
 ): Promise<TeamSkill | null> {
-  await sql`
+  const rows = await sql`
     UPDATE team_skills
     SET status = 'approved', approved_by = ${approvedBy}, approved_at = NOW(), updated_at = NOW()
-    WHERE id = ${id}`;
-  const [row] = await sql`SELECT * FROM team_skills WHERE id = ${id}`;
-  return (row as TeamSkill) ?? null;
+    WHERE id = ${id} AND organization_id = ${orgId}
+    RETURNING *`;
+  return (rows[0] as TeamSkill) ?? null;
 }
 
 // --- Pattern Links ---
@@ -153,27 +164,31 @@ export async function linkSkillToPattern(
 
 export async function getSkillPatternLinks(
   sql: SQL,
-  skillId: string
+  skillId: string,
+  orgId: string
 ): Promise<TeamSkillPatternLink[]> {
   return (await sql`
-    SELECT * FROM team_skill_pattern_links
-    WHERE skill_id = ${skillId}
-    ORDER BY created_at ASC`) as TeamSkillPatternLink[];
+    SELECT l.* FROM team_skill_pattern_links l
+      JOIN team_skills ts ON ts.id = l.skill_id
+    WHERE l.skill_id = ${skillId} AND ts.organization_id = ${orgId}
+    ORDER BY l.created_at ASC`) as TeamSkillPatternLink[];
 }
 
 // --- Version History ---
 
 export async function getSkillVersionHistory(
   sql: SQL,
-  skillId: string
+  skillId: string,
+  orgId: string
 ): Promise<TeamSkill[]> {
-  // Walk the previous_version_id chain using a recursive CTE
+  // Walk the previous_version_id chain using a recursive CTE, org-scoped at every hop
   return (await sql`
     WITH RECURSIVE chain AS (
-      SELECT * FROM team_skills WHERE id = ${skillId}
+      SELECT * FROM team_skills WHERE id = ${skillId} AND organization_id = ${orgId}
       UNION ALL
       SELECT ts.* FROM team_skills ts
         JOIN chain c ON ts.id = c.previous_version_id
+        WHERE ts.organization_id = ${orgId}
     )
     SELECT * FROM chain
     ORDER BY version DESC`) as TeamSkill[];

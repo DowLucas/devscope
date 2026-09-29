@@ -513,7 +513,7 @@ describe("POST /events", () => {
   });
 
   test("non-session.start events do not return a salt", async () => {
-    const sql = makeMockSql([{ status: "active" }], []);
+    const sql = makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], []);
     const app = buildApp(sql, { session: { activeOrganizationId: "org-abc" } });
 
     const res = await app.request("/", {
@@ -679,7 +679,7 @@ describe("POST /events", () => {
 
   test("reactivates an ended session by calling createSession", async () => {
     const sql = makeMockSql(
-      [{ status: "ended" }], // existing session is ended
+      [{ status: "ended", developer_id: ALICE_DEV_ID }], // existing session is ended
       [],
     );
     const app = buildApp(sql);
@@ -696,7 +696,7 @@ describe("POST /events", () => {
 
   test("does NOT create session when active session exists and event is not session.start", async () => {
     const sql = makeMockSql(
-      [{ status: "active" }], // existing active session
+      [{ status: "active", developer_id: ALICE_DEV_ID }], // existing active session
       [],
     );
     const app = buildApp(sql);
@@ -716,7 +716,7 @@ describe("POST /events", () => {
 
   test("calls endSession on session.end without continuation reason", async () => {
     const sql = makeMockSql(
-      [{ status: "active" }], // session exists and is active
+      [{ status: "active", developer_id: ALICE_DEV_ID }], // session exists and is active
       [],
     );
     const app = buildApp(sql);
@@ -733,11 +733,11 @@ describe("POST /events", () => {
     });
 
     expect(mockEndSession).toHaveBeenCalledTimes(1);
-    expect(mockEndSession).toHaveBeenCalledWith(sql, "sess-1");
+    expect(mockEndSession).toHaveBeenCalledWith(sql, "sess-1", ALICE_DEV_ID);
   });
 
   test("does NOT call endSession when endReason is a continuation (clear)", async () => {
-    const sql = makeMockSql([{ status: "active" }], []);
+    const sql = makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], []);
     const app = buildApp(sql);
 
     await app.request("/", {
@@ -755,7 +755,7 @@ describe("POST /events", () => {
   });
 
   test("does NOT call endSession when endReason is resume", async () => {
-    const sql = makeMockSql([{ status: "active" }], []);
+    const sql = makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], []);
     const app = buildApp(sql);
 
     await app.request("/", {
@@ -773,7 +773,7 @@ describe("POST /events", () => {
   });
 
   test("does NOT call endSession when endReason is compact", async () => {
-    const sql = makeMockSql([{ status: "active" }], []);
+    const sql = makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], []);
     const app = buildApp(sql);
 
     await app.request("/", {
@@ -842,7 +842,7 @@ describe("POST /events", () => {
 
   test("broadcasts session.update with ended status on session.end", async () => {
     const sql = makeMockSql(
-      [{ status: "active" }],
+      [{ status: "active", developer_id: ALICE_DEV_ID }],
       [{ organization_id: "org-xyz" }],
     );
     const app = buildApp(sql);
@@ -872,7 +872,7 @@ describe("POST /events", () => {
     mockBroadcastToOrg.mockClear();
     mockBroadcastByViewer.mockClear();
     mockGetSessionAudience.mockImplementation(() => Promise.resolve({ ...audience, ownerUserIds: ["user-owner"] }));
-    const sql = makeMockSql([{ status: "active" }], [{ organization_id: "org-1" }]);
+    const sql = makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], [{ organization_id: "org-1" }]);
     const app = buildApp(sql);
     await app.request("/", {
       method: "POST",
@@ -916,7 +916,7 @@ describe("POST /events", () => {
 
   test("event.new: an audience lookup failure falls back to activity-only and still stores the event", async () => {
     mockGetSessionAudience.mockImplementation(() => Promise.reject(new Error("db down")));
-    const res = await buildApp(makeMockSql([{ status: "active" }], [{ organization_id: "org-1" }])).request("/", {
+    const res = await buildApp(makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], [{ organization_id: "org-1" }])).request("/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(validEvent({ eventType: "prompt.submit", payload: { promptText: "secret", promptLength: 6 } })),
@@ -932,7 +932,7 @@ describe("POST /events", () => {
   // -----------------------------------------------------------------------
 
   test("checks alert thresholds on tool.fail event", async () => {
-    const sql = makeMockSql([{ status: "active" }], []);
+    const sql = makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], []);
     const app = buildApp(sql);
 
     await app.request("/", {
@@ -966,7 +966,7 @@ describe("POST /events", () => {
     );
 
     const sql = makeMockSql(
-      [{ status: "active" }],
+      [{ status: "active", developer_id: ALICE_DEV_ID }],
       [{ organization_id: "org-alert" }],
     );
     const app = buildApp(sql);
@@ -994,7 +994,7 @@ describe("POST /events", () => {
     mockGetSessionAudience.mockImplementation(() =>
       Promise.resolve({ shareDetails: true, privacyMode: "standard", ownerUserIds: [] }),
     );
-    await buildApp(makeMockSql([{ status: "active" }], [{ organization_id: "org-alert" }])).request("/", {
+    await buildApp(makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], [{ organization_id: "org-alert" }])).request("/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(validEvent({ eventType: "tool.fail", payload: { toolName: "Read" } })),
@@ -1004,7 +1004,7 @@ describe("POST /events", () => {
   });
 
   test("does NOT check alert thresholds for non tool.fail events", async () => {
-    const sql = makeMockSql([{ status: "active" }], []);
+    const sql = makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], []);
     const app = buildApp(sql);
 
     await app.request("/", {
@@ -1237,6 +1237,125 @@ describe("POST /events/hook", () => {
       (c: any) => (c[1] as any).type,
     );
     expect(types).toContain("event.new");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cross-tenant session injection guard
+// ---------------------------------------------------------------------------
+
+describe("session ownership (cross-tenant injection)", () => {
+  const OTHER_DEV_ID = "0".repeat(64);
+
+  beforeEach(() => {
+    mockUpsertDeveloper.mockReset();
+    mockUpsertDeveloper.mockImplementation(() => Promise.resolve());
+    mockCreateSession.mockReset();
+    mockCreateSession.mockImplementation(() => Promise.resolve());
+    mockEndSession.mockReset();
+    mockEndSession.mockImplementation(() => Promise.resolve());
+    mockInsertEvent.mockReset();
+    mockInsertEvent.mockImplementation(() => Promise.resolve({ stored: true }));
+    mockBroadcastToOrg.mockReset();
+  });
+
+  function expectNoWrites() {
+    expect(mockCreateSession).not.toHaveBeenCalled();
+    expect(mockEndSession).not.toHaveBeenCalled();
+    expect(mockInsertEvent).not.toHaveBeenCalled();
+    expect(mockBroadcastToOrg).not.toHaveBeenCalled();
+  }
+
+  for (const eventType of ["session.start", "session.end", "compact.complete", "prompt.submit"]) {
+    test(`POST / ${eventType} on a foreign session -> 403, nothing written`, async () => {
+      const sql = makeMockSql([{ status: "active", developer_id: OTHER_DEV_ID }], [{ organization_id: "org-1" }]);
+      const res = await buildApp(sql).request("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(validEvent({ eventType, payload: {} })),
+      });
+      expect(res.status).toBe(403);
+      expectNoWrites();
+    });
+  }
+
+  test("POST / on a foreign ENDED session is also rejected (no reactivation)", async () => {
+    const sql = makeMockSql([{ status: "ended", developer_id: OTHER_DEV_ID }], []);
+    const res = await buildApp(sql).request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ eventType: "prompt.submit" })),
+    });
+    expect(res.status).toBe(403);
+    expectNoWrites();
+  });
+
+  test("POST / on own session -> 200 and event inserted", async () => {
+    const sql = makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], []);
+    const res = await buildApp(sql).request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ eventType: "prompt.submit" })),
+    });
+    expect(res.status).toBe(200);
+    expect(mockInsertEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test("POST / own session.end passes the developer id to endSession", async () => {
+    const sql = makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], []);
+    const res = await buildApp(sql).request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ eventType: "session.end", payload: {} })),
+    });
+    expect(res.status).toBe(200);
+    expect(mockEndSession).toHaveBeenCalledWith(sql, "sess-1", ALICE_DEV_ID);
+  });
+
+  test("POST / with an unknown session id creates it", async () => {
+    const sql = makeMockSql([], []);
+    const res = await buildApp(sql).request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent()),
+    });
+    expect(res.status).toBe(200);
+    expect(mockCreateSession).toHaveBeenCalledTimes(1);
+    expect((mockCreateSession.mock.calls[0] as any[])[2]).toBe(ALICE_DEV_ID);
+    expect(mockInsertEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test("POST /hook on a foreign session -> 403, nothing written", async () => {
+    const sql = makeMockSql([{ status: "active", developer_id: OTHER_DEV_ID }], []);
+    const res = await buildApp(sql).request("/hook?event=notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: "sess-victim", cwd: "/x" }),
+    });
+    expect(res.status).toBe(403);
+    expectNoWrites();
+  });
+
+  test("POST /hook on own session -> 200", async () => {
+    const sql = makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }], []);
+    const res = await buildApp(sql).request("/hook?event=notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: "sess-own", cwd: "/x" }),
+    });
+    expect(res.status).toBe(200);
+    expect(mockInsertEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test("POST /hook with a new session id creates it", async () => {
+    const sql = makeMockSql([], []);
+    const res = await buildApp(sql).request("/hook?event=notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: "sess-new", cwd: "/x" }),
+    });
+    expect(res.status).toBe(200);
+    expect(mockCreateSession).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -34,6 +34,7 @@ interface DetectedInsight {
 }
 
 const InsightState = Annotation.Root({
+  orgId: Annotation<string | undefined>,
   days: Annotation<number>,
   developerIds: Annotation<string[] | undefined>,
   data: Annotation<InsightData>,
@@ -60,8 +61,8 @@ async function gatherData(
       getFailureClusters(sql, days, sharingIds),
       getTeamActivitySummary(sql, days, devIds),
       getProjectsOverview(sql, days, devIds),
-      getPatternStats(sql, days),
-      getAntiPatternTrends(sql, days),
+      state.orgId ? getPatternStats(sql, state.orgId, days) : Promise.resolve(null),
+      state.orgId ? getAntiPatternTrends(sql, state.orgId, days) : Promise.resolve([]),
     ]);
 
   return {
@@ -177,11 +178,13 @@ export function createInsightWorkflow(sql: SQL) {
 export async function runInsightWorkflow(
   sql: SQL,
   days: number = 1,
-  developerIds?: string[]
+  developerIds?: string[],
+  orgId?: string
 ): Promise<AiInsight[]> {
   const app = createInsightWorkflow(sql);
 
   const result = await app.invoke({
+    orgId,
     days,
     developerIds,
     data: {

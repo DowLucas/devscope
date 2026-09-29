@@ -3,6 +3,8 @@ import { StateGraph, Annotation, END, START } from "@langchain/langgraph";
 import { callGemini, TEMPERATURE } from "../gemini";
 import {
   getRecentSessionSequences,
+  getOrgSharingDeveloperIds,
+  getPatterns,
   upsertPattern,
   createPatternMatch,
   type SessionSequence,
@@ -27,6 +29,7 @@ interface DiscoveredPattern {
 }
 
 const PatternState = Annotation.Root({
+  orgId: Annotation<string>,
   days: Annotation<number>,
   sequences: Annotation<SessionSequence[]>,
   discoveredPatterns: Annotation<DiscoveredPattern[]>,
@@ -40,7 +43,9 @@ async function extractSequences(
   state: PatternStateType,
   sql: SQL
 ): Promise<Partial<PatternStateType>> {
-  const sequences = await getRecentSessionSequences(sql, state.days, 200);
+  // Only this org's sessions, and only from developers who share with the team
+  const devIds = await getOrgSharingDeveloperIds(sql, state.orgId);
+  const sequences = await getRecentSessionSequences(sql, state.days, 200, devIds);
   return { sequences };
 }
 
@@ -148,7 +153,7 @@ async function persistPatterns(
   sql: SQL
 ): Promise<Partial<PatternStateType>> {
   for (const pattern of state.discoveredPatterns) {
-    const persisted = await upsertPattern(sql, {
+    const persisted = await upsertPattern(sql, state.orgId, {
       name: pattern.name,
       description: pattern.description,
       tool_sequence: pattern.tool_sequence,
@@ -196,11 +201,13 @@ export function createPatternWorkflow(sql: SQL) {
 
 export async function runPatternWorkflow(
   sql: SQL,
+  orgId: string,
   days: number = 1
 ): Promise<SessionPattern[]> {
   const app = createPatternWorkflow(sql);
 
   const result = await app.invoke({
+    orgId,
     days,
     sequences: [],
     discoveredPatterns: [],
@@ -217,6 +224,5 @@ export async function runPatternWorkflow(
   );
 
   // Return all recently updated patterns
-  const { getPatterns } = await import("../../db/patternQueries");
-  return getPatterns(sql, { limit: 20 });
+  return getPatterns(sql, orgId, { limit: 20 });
 }

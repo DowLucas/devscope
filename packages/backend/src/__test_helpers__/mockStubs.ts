@@ -150,6 +150,7 @@ export function wsHandlerStubs(overrides: Record<string, unknown> = {}) {
     broadcastToOrg: mock(() => {}),
     broadcastToOrgByViewer: mock(() => {}),
     broadcast: mock(() => {}),
+    disconnectUserFromOrg: mock(() => {}),
     getClientCount: mock(() => 0),
     ...overrides,
   };
