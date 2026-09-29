@@ -73,12 +73,13 @@ export async function buildTurns(sql: SQL, limit: number): Promise<number> {
         e.session_id,
         e.created_at,
         e.payload->>'promptText' AS prompt_text,
-        LEAD(e.created_at) OVER (
-          PARTITION BY e.session_id ORDER BY e.created_at, e.id
-        ) AS next_prompt_at
+        LEAD(e.created_at) OVER w AS next_prompt_at,
+        -- prompt_origin() needs it to tell a /loop re-fire from the typed one.
+        LAG(e.payload->>'promptText') OVER w AS prev_prompt_text
       FROM events e
       WHERE e.event_type = 'prompt.submit'
         AND e.session_id IN (SELECT session_id FROM pending_sessions)
+      WINDOW w AS (PARTITION BY e.session_id ORDER BY e.created_at, e.id)
     ),
     candidates AS (
       SELECT p.*, s.ended_at
@@ -90,7 +91,7 @@ export async function buildTurns(sql: SQL, limit: number): Promise<number> {
     )
     INSERT INTO prompt_turns (
       session_id, prompt_event_id, response_event_id, prompt_at,
-      prompt_text, response_text, tool_calls, tool_failures, tools_used, duration_ms
+      prompt_text, response_text, tool_calls, tool_failures, tools_used, duration_ms, origin
     )
     SELECT
       c.session_id,
@@ -105,7 +106,8 @@ export async function buildTurns(sql: SQL, limit: number): Promise<number> {
       -- BIGINT: timestamps are client-supplied, so the gap can be arbitrary.
       CASE WHEN r.id IS NOT NULL
         THEN (EXTRACT(EPOCH FROM (r.created_at - c.created_at)) * 1000)::BIGINT
-      END
+      END,
+      prompt_origin(c.prompt_text, c.prev_prompt_text)
     FROM candidates c
     LEFT JOIN LATERAL (
       SELECT re.id, re.created_at, re.payload
