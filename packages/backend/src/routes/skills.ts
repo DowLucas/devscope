@@ -81,11 +81,12 @@ export function skillsRoutes(sql: SQL) {
 
   app.get("/coaching", async (c) => {
     const devIds = c.get("orgDeveloperIds" as never) as string[];
+    const orgId = c.get("orgId" as never) as string;
     const weeks = clampWeeks(c.req.query("weeks"), 12);
 
     const [topAntiPatterns, playbooks] = await Promise.all([
       getTeamTopAntiPatterns(sql, devIds, weeks, 5),
-      getPlaybooks(sql, { status: "active", limit: 5 }),
+      getPlaybooks(sql, orgId, { status: "active", limit: 5 }),
     ]);
 
     return c.json({ anti_patterns: topAntiPatterns, playbooks });

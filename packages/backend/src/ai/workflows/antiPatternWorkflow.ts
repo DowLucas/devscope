@@ -1,8 +1,8 @@
 import type { SQL } from "bun";
 import { StateGraph, Annotation, END, START } from "@langchain/langgraph";
 import { callGemini, TEMPERATURE } from "../gemini";
-import { getRecentSessionSequences, type SessionSequence } from "../../db/patternQueries";
-import { upsertAntiPattern, createAntiPatternMatch } from "../../db/antiPatternQueries";
+import { getRecentSessionSequences, getOrgSharingDeveloperIds, type SessionSequence } from "../../db/patternQueries";
+import { upsertAntiPattern, createAntiPatternMatch, getAntiPatterns } from "../../db/antiPatternQueries";
 import { recordTokenUsage } from "../../db";
 import { detectAllAntiPatterns, type DetectedAntiPattern } from "../detection/antiPatternRules";
 import type { AntiPattern } from "@devscope/shared";
@@ -13,6 +13,7 @@ interface SessionAntiPatternHit {
 }
 
 const AntiPatternState = Annotation.Root({
+  orgId: Annotation<string>,
   days: Annotation<number>,
   sequences: Annotation<SessionSequence[]>,
   ruleBasedHits: Annotation<SessionAntiPatternHit[]>,
@@ -27,7 +28,9 @@ async function fetchSessions(
   state: AntiPatternStateType,
   sql: SQL
 ): Promise<Partial<AntiPatternStateType>> {
-  const sequences = await getRecentSessionSequences(sql, state.days, 200);
+  // Only this org's sessions, and only from developers who share with the team
+  const devIds = await getOrgSharingDeveloperIds(sql, state.orgId);
+  const sequences = await getRecentSessionSequences(sql, state.days, 200, devIds);
   return { sequences };
 }
 
@@ -156,7 +159,7 @@ async function persist(
 ): Promise<Partial<AntiPatternStateType>> {
   for (const hit of state.classifiedHits) {
     for (const detection of hit.detections) {
-      const antiPattern = await upsertAntiPattern(sql, {
+      const antiPattern = await upsertAntiPattern(sql, state.orgId, {
         name: detection.name,
         description: detection.description,
         detection_rule: detection.rule,
@@ -193,11 +196,13 @@ export function createAntiPatternWorkflow(sql: SQL) {
 
 export async function runAntiPatternWorkflow(
   sql: SQL,
+  orgId: string,
   days: number = 1
 ): Promise<AntiPattern[]> {
   const app = createAntiPatternWorkflow(sql);
 
   const result = await app.invoke({
+    orgId,
     days,
     sequences: [],
     ruleBasedHits: [],
@@ -214,6 +219,5 @@ export async function runAntiPatternWorkflow(
     result.outputTokens
   );
 
-  const { getAntiPatterns } = await import("../../db/antiPatternQueries");
-  return getAntiPatterns(sql, { limit: 20 });
+  return getAntiPatterns(sql, orgId, { limit: 20 });
 }

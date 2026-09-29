@@ -22,7 +22,7 @@ import {
   getTodayTokenCount,
 } from "../db";
 import { broadcastSessionUpdate, filterVisibleReports, getSearchableDevIds, getViewerDevIds, visibilityForRow } from "../services/visibility";
-import { broadcast, broadcastToOrg } from "../ws/handler";
+import { broadcastToOrg } from "../ws/handler";
 import type { Content } from "@google/genai";
 import type { InsightType, InsightSeverity, ReportType } from "@devscope/shared";
 
@@ -83,6 +83,7 @@ export function aiRoutes(sql: SQL) {
       orgDevIds: devIds,
       viewerDevIds,
       searchableDevIds: await getSearchableDevIds(sql, devIds ?? [], viewerDevIds),
+      orgId,
     });
 
     // Collect full answer for saving
@@ -192,15 +193,11 @@ export function aiRoutes(sql: SQL) {
     const days = Math.min(Number(c.req.query("days") ?? 1), 30);
     const devIds = c.get("orgDeveloperIds" as never) as string[] | undefined;
     const orgId = c.get("orgId" as never) as string | undefined;
-    const insights = await runInsightWorkflow(sql, days, devIds);
+    const insights = await runInsightWorkflow(sql, days, devIds, orgId);
 
     // Broadcast new insights via WebSocket
     for (const insight of insights) {
-      if (orgId) {
-        broadcastToOrg(orgId, { type: "ai.insight.new", data: insight });
-      } else {
-        broadcast({ type: "ai.insight.new", data: insight });
-      }
+      if (orgId) broadcastToOrg(orgId, { type: "ai.insight.new", data: insight });
     }
 
     return c.json(insights);
@@ -256,11 +253,7 @@ export function aiRoutes(sql: SQL) {
       devIds
     );
 
-    if (orgId) {
-      broadcastToOrg(orgId, { type: "ai.report.completed", data: report });
-    } else {
-      broadcast({ type: "ai.report.completed", data: report });
-    }
+    if (orgId) broadcastToOrg(orgId, { type: "ai.report.completed", data: report });
 
     return c.json(report);
   });

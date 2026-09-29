@@ -172,8 +172,8 @@ export async function gatherReportData(
     getConcreteToolDetails(sql, days, sharingIds),
     getSessionStatsSummary(sql, undefined, days, devIds),
     getFailureClusters(sql, days, sharingIds),
-    getPatterns(sql, { effectiveness: "effective", limit: 10 }),
-    getAntiPatternStats(sql, days),
+    getPatterns(sql, state.orgId, { effectiveness: "effective", limit: 10 }),
+    getAntiPatternStats(sql, state.orgId, days),
   ]);
 
   // Create the report record. orgId is required (DEV-43): every report row

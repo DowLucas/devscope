@@ -6,10 +6,19 @@ import { runHallucinatedSuccessDetection } from "../ai/workflows/hallucinatedSuc
 import { runPlaybookWorkflow } from "../ai/workflows/playbookWorkflow";
 import { runSkillGenerationWorkflow } from "../ai/workflows/skillGenerationWorkflow";
 import { runSkillRefinementWorkflow } from "../ai/workflows/skillRefinementWorkflow";
+import { withoutContext } from "../db/utils";
 import { getTeamSkills } from "../db/teamSkillQueries";
-import { broadcast } from "../ws/handler";
+import { broadcastToOrg } from "../ws/handler";
 
 const CHECK_INTERVAL_MS = 60_000;
+
+/** Orgs that have developers; pattern analysis runs once per org, never across orgs. */
+async function listOrgIds(sql: SQL): Promise<string[]> {
+  const orgs = await sql`
+    SELECT DISTINCT organization_id FROM organization_developer
+    WHERE organization_id IS NOT NULL`;
+  return (orgs as any[]).map((o) => o.organization_id as string);
+}
 
 export function startPatternAnalysis(sql: SQL) {
   const g = globalThis as any;
@@ -43,32 +52,40 @@ export function startPatternAnalysis(sql: SQL) {
       lastRunDate = todayStr;
 
       try {
-        // 1. Pattern analysis
-        console.log("[pattern-analysis] Running daily pattern analysis...");
-        const patterns = await runPatternWorkflow(sql, 1);
-        console.log(`[pattern-analysis] Discovered/updated ${patterns.length} patterns`);
+        const orgIds = await listOrgIds(sql);
 
-        for (const pattern of patterns) {
-          broadcast({ type: "ai.pattern.new", data: pattern });
-        }
+        for (const orgId of orgIds) {
+          try {
+            // 1. Pattern analysis
+            console.log(`[pattern-analysis] Running daily pattern analysis for org ${orgId}...`);
+            const patterns = await runPatternWorkflow(sql, orgId, 1);
+            console.log(`[pattern-analysis] Discovered/updated ${patterns.length} patterns for org ${orgId}`);
 
-        // 2. Anti-pattern detection
-        console.log("[pattern-analysis] Running daily anti-pattern detection...");
-        const antiPatterns = await runAntiPatternWorkflow(sql, 1);
-        console.log(`[pattern-analysis] Detected ${antiPatterns.length} anti-patterns`);
+            for (const pattern of patterns) {
+              broadcastToOrg(orgId, { type: "ai.pattern.new", data: withoutContext(pattern) });
+            }
 
-        for (const ap of antiPatterns) {
-          broadcast({ type: "ai.antipattern.new", data: ap });
-        }
+            // 2. Anti-pattern detection
+            console.log(`[pattern-analysis] Running daily anti-pattern detection for org ${orgId}...`);
+            const antiPatterns = await runAntiPatternWorkflow(sql, orgId, 1);
+            console.log(`[pattern-analysis] Detected ${antiPatterns.length} anti-patterns for org ${orgId}`);
 
-        // 2b. Hallucinated-success audit (rule-based, no LLM)
-        try {
-          const hallucinated = await runHallucinatedSuccessDetection(sql, 1);
-          if (hallucinated > 0) {
-            console.log(`[pattern-analysis] Flagged ${hallucinated} hallucinated-success sessions`);
+            for (const ap of antiPatterns) {
+              broadcastToOrg(orgId, { type: "ai.antipattern.new", data: withoutContext(ap) });
+            }
+
+            // 2b. Hallucinated-success audit (rule-based, no LLM)
+            try {
+              const hallucinated = await runHallucinatedSuccessDetection(sql, orgId, 1);
+              if (hallucinated > 0) {
+                console.log(`[pattern-analysis] Flagged ${hallucinated} hallucinated-success sessions for org ${orgId}`);
+              }
+            } catch (err) {
+              console.error(`[pattern-analysis] Hallucinated-success detection failed for org ${orgId}:`, err);
+            }
+          } catch (err) {
+            console.error(`[pattern-analysis] Daily analysis failed for org ${orgId}:`, err);
           }
-        } catch (err) {
-          console.error("[pattern-analysis] Hallucinated-success detection failed:", err);
         }
       } catch (err) {
         console.error("[pattern-analysis] Daily analysis failed:", err);
@@ -85,11 +102,17 @@ export function startPatternAnalysis(sql: SQL) {
 
         try {
           console.log("[pattern-analysis] Running weekly playbook generation...");
-          const playbooks = await runPlaybookWorkflow(sql);
-          console.log(`[pattern-analysis] Generated ${playbooks.length} playbooks`);
+          for (const orgId of await listOrgIds(sql)) {
+            try {
+              const playbooks = await runPlaybookWorkflow(sql, orgId);
+              console.log(`[pattern-analysis] Generated ${playbooks.length} playbooks for org ${orgId}`);
 
-          for (const pb of playbooks) {
-            broadcast({ type: "ai.playbook.new", data: pb });
+              for (const pb of playbooks) {
+                broadcastToOrg(orgId, { type: "ai.playbook.new", data: pb });
+              }
+            } catch (err) {
+              console.error(`[pattern-analysis] Playbook generation failed for org ${orgId}:`, err);
+            }
           }
         } catch (err) {
           console.error("[pattern-analysis] Playbook generation failed:", err);
@@ -99,20 +122,14 @@ export function startPatternAnalysis(sql: SQL) {
         try {
           console.log("[pattern-analysis] Running weekly team skill generation...");
 
-          // Get all organization IDs that have developers
-          const orgs = await sql`
-            SELECT DISTINCT organization_id FROM organization_developer
-            WHERE organization_id IS NOT NULL`;
-
-          for (const org of orgs) {
-            const orgId = (org as any).organization_id;
+          for (const orgId of await listOrgIds(sql)) {
             try {
               // Generate new skills
               const skills = await runSkillGenerationWorkflow(sql, orgId);
               console.log(`[pattern-analysis] Generated ${skills.length} skills for org ${orgId}`);
 
               for (const skill of skills) {
-                broadcast({ type: "ai.skill.new", data: skill });
+                broadcastToOrg(orgId, { type: "ai.skill.new", data: skill });
               }
 
               // Refine existing active/approved skills
@@ -124,7 +141,7 @@ export function startPatternAnalysis(sql: SQL) {
                 try {
                   const refined = await runSkillRefinementWorkflow(sql, skill.id, orgId);
                   if (refined && refined.id !== skill.id) {
-                    broadcast({ type: "ai.skill.updated", data: refined });
+                    broadcastToOrg(orgId, { type: "ai.skill.updated", data: refined });
                   }
                 } catch (err) {
                   console.error(`[pattern-analysis] Skill refinement failed for ${skill.id}:`, err);

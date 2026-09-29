@@ -45,7 +45,7 @@ export function startAiInsightGeneration(sql: SQL) {
           if (devIds.length === 0) continue;
 
           console.log(`[ai-insights] Running daily insight generation for org ${orgId}...`);
-          const insights = await runInsightWorkflow(sql, 1, devIds);
+          const insights = await runInsightWorkflow(sql, 1, devIds, orgId);
           console.log(`[ai-insights] Generated ${insights.length} insights for org ${orgId}`);
 
           for (const insight of insights) {

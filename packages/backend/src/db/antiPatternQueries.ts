@@ -6,6 +6,7 @@ import { inList } from "./utils";
 
 export async function upsertAntiPattern(
   sql: SQL,
+  orgId: string,
   ap: {
     name: string;
     description: string;
@@ -16,10 +17,10 @@ export async function upsertAntiPattern(
     data_context?: Record<string, unknown>;
   }
 ): Promise<AntiPattern> {
-  // Try to find existing by name + rule
+  // Try to find existing by name + rule, within this org only
   const existing = await sql`
     SELECT * FROM anti_patterns
-    WHERE name = ${ap.name} AND detection_rule = ${ap.detection_rule}
+    WHERE organization_id = ${orgId} AND name = ${ap.name} AND detection_rule = ${ap.detection_rule}
     LIMIT 1`;
 
   if (existing.length > 0) {
@@ -31,7 +32,7 @@ export async function upsertAntiPattern(
         severity = ${ap.severity},
         suggestion = ${ap.suggestion},
         updated_at = NOW()
-      WHERE id = ${ex.id}`;
+      WHERE id = ${ex.id} AND organization_id = ${orgId}`;
 
     const [updated] = await sql`SELECT * FROM anti_patterns WHERE id = ${ex.id}`;
     return updated as AntiPattern;
@@ -41,8 +42,8 @@ export async function upsertAntiPattern(
   const dataContext = ap.data_context ?? {};
 
   await sql`
-    INSERT INTO anti_patterns (id, name, description, detection_rule, severity, suggestion, occurrence_count, data_context)
-    VALUES (${id}, ${ap.name}, ${ap.description}, ${ap.detection_rule},
+    INSERT INTO anti_patterns (id, organization_id, name, description, detection_rule, severity, suggestion, occurrence_count, data_context)
+    VALUES (${id}, ${orgId}, ${ap.name}, ${ap.description}, ${ap.detection_rule},
       ${ap.severity}, ${ap.suggestion}, ${ap.occurrence_count ?? 1},
       ${dataContext}::JSONB)`;
 
@@ -68,6 +69,7 @@ export async function createAntiPatternMatch(
 
 export async function getAntiPatterns(
   sql: SQL,
+  orgId: string,
   opts?: {
     severity?: string;
     detection_rule?: string;
@@ -79,40 +81,45 @@ export async function getAntiPatterns(
   if (opts?.severity && opts?.detection_rule) {
     return (await sql`
       SELECT * FROM anti_patterns
-      WHERE severity = ${opts.severity} AND detection_rule = ${opts.detection_rule}
+      WHERE organization_id = ${orgId}
+        AND severity = ${opts.severity} AND detection_rule = ${opts.detection_rule}
       ORDER BY occurrence_count DESC
       LIMIT ${limit}`) as AntiPattern[];
   }
   if (opts?.severity) {
     return (await sql`
       SELECT * FROM anti_patterns
-      WHERE severity = ${opts.severity}
+      WHERE organization_id = ${orgId} AND severity = ${opts.severity}
       ORDER BY occurrence_count DESC
       LIMIT ${limit}`) as AntiPattern[];
   }
   if (opts?.detection_rule) {
     return (await sql`
       SELECT * FROM anti_patterns
-      WHERE detection_rule = ${opts.detection_rule}
+      WHERE organization_id = ${orgId} AND detection_rule = ${opts.detection_rule}
       ORDER BY occurrence_count DESC
       LIMIT ${limit}`) as AntiPattern[];
   }
   return (await sql`
     SELECT * FROM anti_patterns
+    WHERE organization_id = ${orgId}
     ORDER BY occurrence_count DESC
     LIMIT ${limit}`) as AntiPattern[];
 }
 
 export async function getAntiPatternById(
   sql: SQL,
+  orgId: string,
   id: string
 ): Promise<AntiPattern | null> {
-  const [row] = await sql`SELECT * FROM anti_patterns WHERE id = ${id}`;
+  const [row] = await sql`
+    SELECT * FROM anti_patterns WHERE id = ${id} AND organization_id = ${orgId}`;
   return (row as AntiPattern) ?? null;
 }
 
 export async function getAntiPatternStats(
   sql: SQL,
+  orgId: string,
   days: number = 30
 ): Promise<{
   total_anti_patterns: number;
@@ -127,21 +134,26 @@ export async function getAntiPatternStats(
       COUNT(*)::INT as total_anti_patterns,
       SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END)::INT as critical_count,
       SUM(CASE WHEN severity = 'warning' THEN 1 ELSE 0 END)::INT as warning_count
-    FROM anti_patterns`;
+    FROM anti_patterns
+    WHERE organization_id = ${orgId}`;
 
   const topAntiPatterns = await sql`
     SELECT * FROM anti_patterns
+    WHERE organization_id = ${orgId}
     ORDER BY occurrence_count DESC
     LIMIT 5`;
 
   const [matchCount] = await sql`
     SELECT COUNT(*)::INT as cnt
-    FROM session_anti_pattern_matches
-    WHERE created_at >= NOW() - make_interval(days => ${days})`;
+    FROM session_anti_pattern_matches sapm
+    JOIN anti_patterns ap ON ap.id = sapm.anti_pattern_id
+    WHERE ap.organization_id = ${orgId}
+      AND sapm.created_at >= NOW() - make_interval(days => ${days})`;
 
   const byRule = await sql`
     SELECT detection_rule, COUNT(*)::INT as count
     FROM anti_patterns
+    WHERE organization_id = ${orgId}
     GROUP BY detection_rule
     ORDER BY count DESC`;
 
@@ -157,6 +169,7 @@ export async function getAntiPatternStats(
 
 export async function getAntiPatternTrends(
   sql: SQL,
+  orgId: string,
   days: number = 30
 ): Promise<{
   day: string;
@@ -170,7 +183,8 @@ export async function getAntiPatternTrends(
       COUNT(*)::INT as count
     FROM session_anti_pattern_matches sapm
     JOIN anti_patterns ap ON sapm.anti_pattern_id = ap.id
-    WHERE sapm.created_at >= NOW() - make_interval(days => ${days})
+    WHERE ap.organization_id = ${orgId}
+      AND sapm.created_at >= NOW() - make_interval(days => ${days})
     GROUP BY day, ap.detection_rule
     ORDER BY day ASC`) as any[];
 }

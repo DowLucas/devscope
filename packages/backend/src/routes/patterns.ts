@@ -5,6 +5,7 @@ import {
   getPatternById,
   getPatternStats,
 } from "../db/patternQueries";
+import { withoutContext } from "../db/utils";
 import {
   getAntiPatterns,
   getAntiPatternById,
@@ -21,6 +22,9 @@ const VALID_SEVERITY = new Set(["info", "warning", "critical"]);
 export function patternsRoutes(sql: SQL) {
   const app = new Hono();
 
+  // Patterns are owned by one org (organization_id); every read and analysis is scoped to the caller's.
+  const orgOf = (c: { get: (k: never) => unknown }) => c.get("orgId" as never) as string;
+
   // --- Patterns ---
 
   app.get("/", async (c) => {
@@ -32,18 +36,18 @@ export function patternsRoutes(sql: SQL) {
       return c.json({ error: "Invalid effectiveness parameter" }, 400);
     }
 
-    const patterns = await getPatterns(sql, {
+    const patterns = await getPatterns(sql, orgOf(c), {
       effectiveness: effectiveness || undefined,
       category: category || undefined,
       limit,
     });
-    return c.json(patterns);
+    return c.json(patterns.map(withoutContext));
   });
 
   app.get("/stats", async (c) => {
     const days = Math.min(Math.max(Number(c.req.query("days") ?? 30), 1), 365);
-    const stats = await getPatternStats(sql, days);
-    return c.json(stats);
+    const stats = await getPatternStats(sql, orgOf(c), days);
+    return c.json({ ...stats, top_patterns: stats.top_patterns.map(withoutContext) });
   });
 
   app.get("/anti", async (c) => {
@@ -55,30 +59,30 @@ export function patternsRoutes(sql: SQL) {
       return c.json({ error: "Invalid severity parameter" }, 400);
     }
 
-    const antiPatterns = await getAntiPatterns(sql, {
+    const antiPatterns = await getAntiPatterns(sql, orgOf(c), {
       severity: severity || undefined,
       detection_rule: detection_rule || undefined,
       limit,
     });
-    return c.json(antiPatterns);
+    return c.json(antiPatterns.map(withoutContext));
   });
 
   app.get("/anti/stats", async (c) => {
     const days = Math.min(Math.max(Number(c.req.query("days") ?? 30), 1), 365);
-    const stats = await getAntiPatternStats(sql, days);
-    return c.json(stats);
+    const stats = await getAntiPatternStats(sql, orgOf(c), days);
+    return c.json({ ...stats, top_anti_patterns: stats.top_anti_patterns.map(withoutContext) });
   });
 
   app.get("/anti/trends", async (c) => {
     const days = Math.min(Math.max(Number(c.req.query("days") ?? 30), 1), 365);
-    const trends = await getAntiPatternTrends(sql, days);
+    const trends = await getAntiPatternTrends(sql, orgOf(c), days);
     return c.json(trends);
   });
 
   app.get("/anti/:id", async (c) => {
-    const ap = await getAntiPatternById(sql, c.req.param("id"));
+    const ap = await getAntiPatternById(sql, orgOf(c), c.req.param("id"));
     if (!ap) return c.json({ error: "Not found" }, 404);
-    return c.json(ap);
+    return c.json(withoutContext(ap));
   });
 
   app.post("/analyze", async (c) => {
@@ -87,9 +91,12 @@ export function patternsRoutes(sql: SQL) {
     }
 
     try {
-      const patterns = await runPatternWorkflow(sql, 7);
-      const antiPatterns = await runAntiPatternWorkflow(sql, 7);
-      return c.json({ patterns, antiPatterns });
+      const patterns = await runPatternWorkflow(sql, orgOf(c), 7);
+      const antiPatterns = await runAntiPatternWorkflow(sql, orgOf(c), 7);
+      return c.json({
+        patterns: patterns.map(withoutContext),
+        antiPatterns: antiPatterns.map(withoutContext),
+      });
     } catch (err) {
       console.error("[patterns] Manual analysis failed:", err);
       return c.json({ error: "Analysis failed" }, 500);
@@ -97,9 +104,9 @@ export function patternsRoutes(sql: SQL) {
   });
 
   app.get("/:id", async (c) => {
-    const pattern = await getPatternById(sql, c.req.param("id"));
+    const pattern = await getPatternById(sql, orgOf(c), c.req.param("id"));
     if (!pattern) return c.json({ error: "Not found" }, 404);
-    return c.json(pattern);
+    return c.json(withoutContext(pattern));
   });
 
   return app;

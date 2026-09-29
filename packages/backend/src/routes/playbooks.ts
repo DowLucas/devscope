@@ -33,28 +33,32 @@ const updatePlaybookSchema = z.object({
 export function playbooksRoutes(sql: SQL) {
   const app = new Hono();
 
+  // Playbooks are owned by one org; another org's id is indistinguishable from a missing one (404).
+  const orgOf = (c: { get: (k: never) => unknown }) => c.get("orgId" as never) as string;
+
   app.get("/", async (c) => {
     const status = c.req.query("status") ?? "active";
     const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 50), 1), 500);
-    const playbooks = await getPlaybooks(sql, { status, limit });
+    const playbooks = await getPlaybooks(sql, orgOf(c), { status, limit });
     return c.json(playbooks);
   });
 
   app.get("/:id", async (c) => {
-    const playbook = await getPlaybookById(sql, c.req.param("id"));
+    const orgId = orgOf(c);
+    const playbook = await getPlaybookById(sql, orgId, c.req.param("id"));
     if (!playbook) return c.json({ error: "Not found" }, 404);
 
     const days = Math.min(Math.max(Number(c.req.query("days") ?? 30), 1), 365);
-    const adoption = await getPlaybookAdoption(sql, playbook.id, days);
+    const adoption = await getPlaybookAdoption(sql, orgId, playbook.id, days);
 
     return c.json({ ...playbook, adoption });
   });
 
   app.post("/", zValidator("json", createPlaybookSchema), async (c) => {
     const body = c.req.valid("json");
-    const orgId = c.get("orgId" as never) as string;
+    const orgId = orgOf(c);
 
-    const playbook = await createPlaybook(sql, {
+    const playbook = await createPlaybook(sql, orgId, {
       name: body.name,
       description: body.description,
       tool_sequence: body.tool_sequence,
@@ -69,30 +73,30 @@ export function playbooksRoutes(sql: SQL) {
   app.put("/:id", zValidator("json", updatePlaybookSchema), async (c) => {
     const id = c.req.param("id");
     const body = c.req.valid("json");
-    const orgId = c.get("orgId" as never) as string;
+    const orgId = orgOf(c);
 
-    // Verify playbook exists before mutation
-    const existing = await getPlaybookById(sql, id);
+    // Verify playbook exists in this org before mutation
+    const existing = await getPlaybookById(sql, orgId, id);
     if (!existing) {
       return c.json({ error: "Playbook not found" }, 404);
     }
 
-    const playbook = await updatePlaybook(sql, id, body);
+    const playbook = await updatePlaybook(sql, orgId, id, body);
     if (!playbook) return c.json({ error: "Not found" }, 404);
     return c.json(playbook);
   });
 
   app.delete("/:id", async (c) => {
     const id = c.req.param("id");
-    const orgId = c.get("orgId" as never) as string;
+    const orgId = orgOf(c);
 
-    // Verify playbook exists before mutation
-    const existing = await getPlaybookById(sql, id);
+    // Verify playbook exists in this org before mutation
+    const existing = await getPlaybookById(sql, orgId, id);
     if (!existing) {
       return c.json({ error: "Playbook not found" }, 404);
     }
 
-    await archivePlaybook(sql, id);
+    await archivePlaybook(sql, orgId, id);
     return c.json({ ok: true });
   });
 
@@ -102,7 +106,7 @@ export function playbooksRoutes(sql: SQL) {
     }
 
     try {
-      const playbooks = await runPlaybookWorkflow(sql);
+      const playbooks = await runPlaybookWorkflow(sql, orgOf(c));
       return c.json(playbooks);
     } catch (err) {
       console.error("[playbooks] Generation failed:", err);

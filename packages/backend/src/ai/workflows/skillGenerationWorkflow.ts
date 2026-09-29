@@ -3,7 +3,7 @@ import { StateGraph, Annotation, END, START } from "@langchain/langgraph";
 import { callGemini, TEMPERATURE } from "../gemini";
 import { getPatterns } from "../../db/patternQueries";
 import { getAntiPatterns } from "../../db/antiPatternQueries";
-import { getRecentSessionSequences, type SessionSequence } from "../../db/patternQueries";
+import { getRecentSessionSequences, getOrgSharingDeveloperIds, type SessionSequence } from "../../db/patternQueries";
 import {
   createTeamSkill,
   linkSkillToPattern,
@@ -42,11 +42,12 @@ async function gatherData(
   state: SkillGenStateType,
   sql: SQL
 ): Promise<Partial<SkillGenStateType>> {
+  const sharingIds = await getOrgSharingDeveloperIds(sql, state.orgId);
   const [effectivePatterns, antiPatterns, sessionSequences, existingSkillNames] =
     await Promise.all([
-      getPatterns(sql, { effectiveness: "effective", minOccurrences: 3, limit: 15 }),
-      getAntiPatterns(sql, { limit: 10 }),
-      getRecentSessionSequences(sql, 14, 100),
+      getPatterns(sql, state.orgId, { effectiveness: "effective", minOccurrences: 3, limit: 15 }),
+      getAntiPatterns(sql, state.orgId, { limit: 10 }),
+      getRecentSessionSequences(sql, 14, 100, sharingIds),
       getActiveSkillNames(sql, state.orgId),
     ]);
 

@@ -2,7 +2,7 @@ import type { SQL } from "bun";
 import { StateGraph, Annotation, END, START } from "@langchain/langgraph";
 import { callGemini, TEMPERATURE } from "../gemini";
 import { getPatterns } from "../../db/patternQueries";
-import { createPlaybook } from "../../db/playbookQueries";
+import { createPlaybook, getPlaybooks } from "../../db/playbookQueries";
 import { recordTokenUsage } from "../../db";
 import type { SessionPattern, Playbook } from "@devscope/shared";
 
@@ -16,6 +16,7 @@ interface GeneratedPlaybook {
 }
 
 const PlaybookState = Annotation.Root({
+  orgId: Annotation<string>,
   topPatterns: Annotation<SessionPattern[]>,
   generatedPlaybooks: Annotation<GeneratedPlaybook[]>,
   inputTokens: Annotation<number>,
@@ -28,7 +29,7 @@ async function gatherTopPatterns(
   state: PlaybookStateType,
   sql: SQL
 ): Promise<Partial<PlaybookStateType>> {
-  const patterns = await getPatterns(sql, {
+  const patterns = await getPatterns(sql, state.orgId, {
     effectiveness: "effective",
     minOccurrences: 3,
     limit: 15,
@@ -119,7 +120,7 @@ async function persistPlaybooks(
     );
 
     try {
-      await createPlaybook(sql, {
+      await createPlaybook(sql, state.orgId, {
         name: pb.name,
         description: pb.description,
         tool_sequence: pb.tool_sequence,
@@ -149,10 +150,11 @@ export function createPlaybookWorkflow(sql: SQL) {
   return workflow.compile();
 }
 
-export async function runPlaybookWorkflow(sql: SQL): Promise<Playbook[]> {
+export async function runPlaybookWorkflow(sql: SQL, orgId: string): Promise<Playbook[]> {
   const app = createPlaybookWorkflow(sql);
 
   const result = await app.invoke({
+    orgId,
     topPatterns: [],
     generatedPlaybooks: [],
     inputTokens: 0,
@@ -167,6 +169,5 @@ export async function runPlaybookWorkflow(sql: SQL): Promise<Playbook[]> {
     result.outputTokens
   );
 
-  const { getPlaybooks } = await import("../../db/playbookQueries");
-  return getPlaybooks(sql);
+  return getPlaybooks(sql, orgId);
 }
