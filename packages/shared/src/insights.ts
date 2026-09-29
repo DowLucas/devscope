@@ -110,6 +110,11 @@ export interface AlertEvent {
   failure_count: number;
   triggered_at: string;
   acknowledged: boolean;
+  /** Set on org-wide tooling-health alerts, which have no session. */
+  alert_type?: "tooling_health_spike";
+  project_name?: string | null;
+  failure_rate?: number;
+  baseline_rate?: number;
 }
 
 export interface TeamHealthData {
