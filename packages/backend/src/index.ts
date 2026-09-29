@@ -395,8 +395,18 @@ app.get(
     if (!session) {
       return c.text("Unauthorized", 401);
     }
-    // Per-org connection limit
     const orgId = (session.session as any).activeOrganizationId as string | undefined;
+    // activeOrganizationId can outlive membership (removed members, cookie cache)
+    if (orgId) {
+      const [membership] = await sql`
+        SELECT 1 FROM member
+        WHERE "organizationId" = ${orgId} AND "userId" = ${session.user.id}
+        LIMIT 1`;
+      if (!membership) {
+        return c.text("Forbidden", 403);
+      }
+    }
+    // Per-org connection limit
     if (orgId && getOrgClientCount(orgId) >= MAX_WS_CLIENTS_PER_ORG) {
       console.log("[ws] Rejected: org", orgId, "has", getOrgClientCount(orgId), "connections (limit:", MAX_WS_CLIENTS_PER_ORG + ")");
       return c.text("Too many connections for this organization", 503);

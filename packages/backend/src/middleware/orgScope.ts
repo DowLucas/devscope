@@ -10,10 +10,24 @@ import { getOrgDeveloperIds } from "../services/developerLink";
 export function orgScopeMiddleware(sql: SQL) {
   return async (c: Context, next: Next) => {
     const session = c.get("session" as never) as any;
+    const user = c.get("user" as never) as any;
     const orgId = session?.activeOrganizationId;
 
     if (!orgId) {
       return c.json({ error: "No active organization" }, 403);
+    }
+
+    // activeOrganizationId is only a session hint (and may be cookie-cached);
+    // membership in the member table is the source of truth.
+    if (!user?.id) {
+      return c.json({ error: "No active organization" }, 403);
+    }
+    const [membership] = await sql`
+      SELECT 1 FROM member
+      WHERE "organizationId" = ${orgId} AND "userId" = ${user.id}
+      LIMIT 1`;
+    if (!membership) {
+      return c.json({ error: "Not a member of this organization" }, 403);
     }
 
     const devIds = await getOrgDeveloperIds(sql, orgId);

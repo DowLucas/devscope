@@ -3,6 +3,7 @@ import { apiKey } from "@better-auth/api-key";
 import { organization } from "better-auth/plugins/organization";
 import { Pool } from "pg";
 import { sendInviteEmail, sendVerificationEmail, sendWelcomeEmail } from "./services/email";
+import { disconnectUserFromOrg } from "./ws/handler";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -37,7 +38,9 @@ export const auth = betterAuth({
   verification: { modelName: "auth_verification" },
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: false,
+    // Account emails are otherwise trusted as identity (developerId =
+    // sha256(email), invitation matching), so they must be proven first.
+    requireEmailVerification: true,
     minPasswordLength: 12,
     maxPasswordLength: 128,
   },
@@ -60,10 +63,39 @@ export const auth = betterAuth({
       });
     },
     sendOnSignUp: true,
+    // A sign-in blocked by requireEmailVerification re-sends the link.
+    sendOnSignIn: true,
     autoSignInAfterVerification: true,
     expiresIn: 3600,
   },
   databaseHooks: {
+    account: {
+      create: {
+        // Pre-account-takeover guard. Better Auth implicitly links a verified
+        // Google/GitHub identity onto an existing user with the same email and
+        // then marks that user verified -- without checking that the local
+        // account was ever verified. If the existing user is unverified, whoever
+        // registered the address first (possibly an attacker) holds a password
+        // and sessions. Purge both before the OAuth identity is attached, so the
+        // real owner ends up as the only party in control.
+        before: async (account) => {
+          const providerId = (account as { providerId?: string }).providerId;
+          const userId = (account as { userId?: string }).userId;
+          if (!userId || !providerId || providerId === "credential") return;
+          const { rows } = await pool.query(
+            'SELECT "emailVerified" FROM auth_user WHERE id = $1',
+            [userId],
+          );
+          // No row = brand-new OAuth signup; verified = legitimate link.
+          if (!rows[0] || rows[0].emailVerified) return;
+          await pool.query(
+            `DELETE FROM auth_account WHERE "userId" = $1 AND "providerId" = 'credential'`,
+            [userId],
+          );
+          await pool.query('DELETE FROM auth_session WHERE "userId" = $1', [userId]);
+        },
+      },
+    },
     user: {
       create: {
         after: async (user) => {
@@ -98,6 +130,20 @@ export const auth = betterAuth({
       allowUserToCreateOrganization: true,
       creatorRole: "owner",
       invitationExpiresIn: 7 * 24 * 60 * 60,
+      // Invitations match on the email string only; without this, anyone who
+      // registers the invitee's (unverified) address can accept the invite.
+      requireEmailVerificationOnInvitation: true,
+      organizationHooks: {
+        // removeMember only clears activeOrganizationId on the caller's own
+        // session, so drop it from the removed user's sessions for that org.
+        afterRemoveMember: async ({ member }) => {
+          await pool.query(
+            'UPDATE auth_session SET "activeOrganizationId" = NULL WHERE "userId" = $1 AND "activeOrganizationId" = $2',
+            [member.userId, member.organizationId],
+          );
+          disconnectUserFromOrg(member.organizationId, member.userId);
+        },
+      },
       async sendInvitationEmail(data) {
         const baseUrl = process.env.BETTER_AUTH_URL || "http://localhost:5173";
         const acceptUrl = `${baseUrl}/invite/${data.id}`;

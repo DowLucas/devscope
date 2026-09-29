@@ -111,10 +111,11 @@ describe("orgScopeMiddleware", () => {
     const devIds = ["dev-aaa", "dev-bbb"];
     mockGetOrgDeveloperIds.mockImplementation(() => Promise.resolve(devIds));
 
-    const sql = makeMockSql();
+    const sql = makeMockSql([{ "?column?": 1 }]);
     const mw = orgScopeMiddleware(sql as any);
     const c = makeContext({
       session: { activeOrganizationId: "org-123" },
+      user: { id: "user-1" },
     });
     const next = mock(() => Promise.resolve());
 
@@ -125,11 +126,41 @@ describe("orgScopeMiddleware", () => {
     expect(c._store.get("orgDeveloperIds")).toEqual(devIds);
   });
 
+  test("returns 403 when user is no longer a member of the active org", async () => {
+    const sql = makeMockSql([]); // membership row gone
+    const mw = orgScopeMiddleware(sql as any);
+    const c = makeContext({
+      session: { activeOrganizationId: "org-123" },
+      user: { id: "removed-user" },
+    });
+    const next = mock(() => Promise.resolve());
+
+    const result = await mw(c as any, next);
+
+    expect(result.status).toBe(403);
+    expect(result.body).toEqual({ error: "Not a member of this organization" });
+    expect(next).not.toHaveBeenCalled();
+    expect(mockGetOrgDeveloperIds).not.toHaveBeenCalled();
+  });
+
+  test("returns 403 when no user on context", async () => {
+    const sql = makeMockSql([{ "?column?": 1 }]);
+    const mw = orgScopeMiddleware(sql as any);
+    const c = makeContext({ session: { activeOrganizationId: "org-123" } });
+    const next = mock(() => Promise.resolve());
+
+    const result = await mw(c as any, next);
+
+    expect(result.status).toBe(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
   test("passes sql to getOrgDeveloperIds", async () => {
-    const sql = makeMockSql();
+    const sql = makeMockSql([{ "?column?": 1 }]);
     const mw = orgScopeMiddleware(sql as any);
     const c = makeContext({
       session: { activeOrganizationId: "org-456" },
+      user: { id: "user-1" },
     });
     const next = mock(() => Promise.resolve());
 
