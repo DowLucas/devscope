@@ -14,12 +14,22 @@
 
     # API reverse proxy
     handle /api/* {
-        reverse_proxy backend:6767
+        reverse_proxy backend:6767 {
+            # The backend keys rate limits on these. Overwrite X-Real-IP with the
+            # TCP peer and drop CF-Connecting-IP so a client cannot choose its own.
+            header_up X-Real-IP {remote_host}
+            header_up -CF-Connecting-IP
+        }
     }
 
     # WebSocket reverse proxy
     handle /ws {
-        reverse_proxy backend:6767
+        reverse_proxy backend:6767 {
+            # The backend keys rate limits on these. Overwrite X-Real-IP with the
+            # TCP peer and drop CF-Connecting-IP so a client cannot choose its own.
+            header_up X-Real-IP {remote_host}
+            header_up -CF-Connecting-IP
+        }
     }
 
     # Static asset caching (Vite content-hashed filenames)

@@ -328,4 +328,25 @@ describe("rateLimitMiddleware", () => {
     const allowed = await requestWithIp(app, ip);
     expect(allowed.status).toBe(200);
   });
+
+  // cf-connecting-ip (set by Cloudflare, cannot be forged through the tunnel)
+  test("cf-connecting-ip takes precedence over a client-sent x-real-ip", async () => {
+    const app = createApp({ maxRequests: 1, windowMs: 60_000 });
+
+    await app.request("/test", {
+      headers: { "cf-connecting-ip": "10.0.10.1", "x-real-ip": "10.0.10.50" },
+    });
+
+    // Rotating a spoofed x-real-ip does not escape the bucket behind Cloudflare
+    const res = await app.request("/test", {
+      headers: { "cf-connecting-ip": "10.0.10.1", "x-real-ip": "10.0.10.51" },
+    });
+    expect(res.status).toBe(429);
+
+    // A different real client is its own bucket
+    const res2 = await app.request("/test", {
+      headers: { "cf-connecting-ip": "10.0.10.2", "x-real-ip": "10.0.10.51" },
+    });
+    expect(res2.status).toBe(200);
+  });
 });
