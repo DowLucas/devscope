@@ -48,7 +48,7 @@ d("semanticQueries — turns, embeddings, org-scoped search", () => {
   const devB = `t-sem-b-${run}`;
   const s = (n: string) => `t-sem-${n}-${run}`;
   const ev = (n: string) => `t-sem-ev-${n}-${run}`;
-  const sessionIds = ["ended", "active", "private", "other", "twin", "skew", "fresh", "settled", "flip"].map(s);
+  const sessionIds = ["ended", "active", "private", "other", "twin", "skew", "fresh", "settled", "flip", "origin"].map(s);
   const t = (min: number) => new Date(Date.UTC(2026, 0, 1, 0, min)).toISOString();
   const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 
@@ -86,6 +86,7 @@ d("semanticQueries — turns, embeddings, org-scoped search", () => {
       [s("fresh"), devA, "open", null],
       [s("settled"), devA, "open", null],
       [s("flip"), devA, "open", t(60)],
+      [s("origin"), devA, "open", t(60)],
     ];
     for (const [id, dev, mode, ended] of sessions) {
       await sql`
@@ -125,6 +126,13 @@ d("semanticQueries — turns, embeddings, org-scoped search", () => {
       // later switches to private
       ["p12", s("flip"), "prompt.submit", t(1), { promptText: "was open" }],
       ["r12", s("flip"), "response.complete", t(2), { responseText: "then private" }],
+      // one prompt per origin; the second identical /loop is the timer re-firing it
+      ["o1", s("origin"), "prompt.submit", t(1), { promptText: "/loop 5m check the deploy" }],
+      ["o2", s("origin"), "prompt.submit", t(2), { promptText: "/loop 5m check the deploy" }],
+      ["o3", s("origin"), "prompt.submit", t(3), { promptText: "<task-notification>\n<task-id>b1</task-id>" }],
+      ["o4", s("origin"), "prompt.submit", t(4), { promptText: "- ## Paperclip Wake Payload\nTreat this wake payload as..." }],
+      ["o5", s("origin"), "prompt.submit", t(5), { promptText: "LINEAR AUTO-TRIAGE TICK. Work quietly." }],
+      ["o6", s("origin"), "prompt.submit", t(6), { promptText: "why does <task-notification> show up in my prompts?" }],
     ];
     for (const [id, session, type, at, payload] of events) {
       await sql`
@@ -157,6 +165,12 @@ d("semanticQueries — turns, embeddings, org-scoped search", () => {
     // Private and whitespace-only prompts never become turns.
     expect(await turnFor("p5")).toBeUndefined();
     expect(await turnFor("p8")).toBeUndefined();
+  });
+
+  test("buildTurns classifies who wrote each prompt", async () => {
+    const origins = await Promise.all(["o1", "o2", "o3", "o4", "o5", "o6"].map(async (e) => (await turnFor(e)).origin));
+    expect(origins).toEqual(["human", "scheduled", "harness", "agent", "scheduled", "human"]);
+    expect((await turnFor("p1")).origin).toBe("human");
   });
 
   test("buildTurns survives client clock skew beyond INT milliseconds", async () => {
