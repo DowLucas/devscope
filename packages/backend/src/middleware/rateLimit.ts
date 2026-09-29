@@ -23,12 +23,20 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 export function getClientIp(c: Context): string {
-  // X-Real-IP is set by the trusted proxy (Cloudflare Tunnel / Caddy) from the TCP connection
-  // and cannot be spoofed by clients — prefer it over X-Forwarded-For.
+  // Only headers our own front proxy sets or overwrites can be trusted; anything
+  // else is client-controlled and would let a caller pick their own rate-limit
+  // bucket. The two supported front doors:
+  //   - Cloudflare Tunnel (production): Cloudflare always overwrites
+  //     CF-Connecting-IP, but passes a client-sent X-Real-IP through untouched.
+  //   - Caddy / nginx (self-hosted compose): they overwrite X-Real-IP with the
+  //     TCP peer and strip CF-Connecting-IP (docker/Caddyfile, docker/nginx).
+  const cfIp = c.req.header("cf-connecting-ip");
+  if (cfIp) return cfIp;
+
   const realIp = c.req.header("x-real-ip");
   if (realIp) return realIp;
 
-  // Fallback: X-Forwarded-For for environments without X-Real-IP.
+  // Fallback: X-Forwarded-For for environments without either header.
   // Take the rightmost entry, which is what our trusted proxy recorded from the TCP connection.
   const xff = c.req.header("x-forwarded-for");
   if (xff) {

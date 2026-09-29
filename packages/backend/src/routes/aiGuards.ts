@@ -2,6 +2,7 @@ import type { SQL } from "bun";
 import type { Context, Next } from "hono";
 import { isAiAvailable } from "../ai/gemini";
 import { getTodayTokenCount } from "../db";
+import { getClientIp } from "../middleware/rateLimit";
 
 export const AI_DAILY_TOKEN_BUDGET = Number(process.env.AI_DAILY_TOKEN_BUDGET ?? 1_000_000);
 
@@ -15,7 +16,7 @@ export function rateLimitKey(c: Context): string {
   const session = c.get("session" as never) as any;
   // API-key requests carry the key owner in `user`, not `session.user`.
   const user = c.get("user" as never) as any;
-  return session?.user?.id ?? user?.id ?? c.req.header("x-forwarded-for") ?? "default";
+  return session?.user?.id ?? user?.id ?? getClientIp(c);
 }
 
 export function checkRateLimit(key: string): boolean {
