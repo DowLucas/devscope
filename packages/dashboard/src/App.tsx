@@ -27,6 +27,7 @@ import { PrivacyDashboard } from "@/components/privacy/PrivacyDashboard";
 import { ClaudeMdEvolutionView } from "@/components/claudemd/ClaudeMdEvolutionView";
 import { WorkflowProfileView } from "@/components/workflow/WorkflowProfileView";
 import { CoachingPage } from "@/components/coaching/CoachingPage";
+import { SearchPage } from "@/components/search/SearchPage";
 import { useDevscopeSocket } from "@/hooks/useWebSocket";
 import { useActivityStore, type ActiveAgent, type ActivityState } from "@/stores/activityStore";
 import { apiFetch } from "@/lib/api";
@@ -84,6 +85,7 @@ function AppContent() {
           {(params) => <SessionDetail sessionId={params.id} />}
         </Route>
         <Route path="/dashboard/sessions" component={SessionTimeline} />
+        <Route path="/dashboard/search" component={SearchPage} />
         <Route path="/dashboard/topology" component={FlowView} />
         <Route path="/dashboard/metrics/*?" component={InsightsView} />
         <Route path="/dashboard/incidents" component={FailuresView} />

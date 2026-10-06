@@ -4,12 +4,12 @@ import { MessageSquare, ChevronDown, ChevronRight, Bot } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ToolChainTimeline } from "./ToolChainTimeline";
 import type { SessionTurn } from "@devscope/shared";
-import { parseUTC } from "@/lib/utils";
+import { cn, parseUTC } from "@/lib/utils";
 
 const PREVIEW_LENGTH = 300;
 
-function ResponseTextBlock({ text }: { text: string }) {
-  const [showFull, setShowFull] = useState(false);
+function ResponseTextBlock({ text, defaultFull = false }: { text: string; defaultFull?: boolean }) {
+  const [showFull, setShowFull] = useState(defaultFull);
   const isLong = text.length > PREVIEW_LENGTH;
   const displayed = isLong && !showFull ? text.slice(0, PREVIEW_LENGTH) + "…" : text;
 
@@ -42,10 +42,12 @@ interface SessionTurnCardProps {
   index: number;
   /** Owner, or a teammate the owner opted in to sharing with. */
   showContent?: boolean;
+  /** The turn a search result linked to: starts expanded and is outlined. */
+  highlighted?: boolean;
 }
 
-export function SessionTurnCard({ turn, index, showContent = false }: SessionTurnCardProps) {
-  const [expanded, setExpanded] = useState(index === 0);
+export function SessionTurnCard({ turn, index, showContent = false, highlighted = false }: SessionTurnCardProps) {
+  const [expanded, setExpanded] = useState(index === 0 || highlighted);
 
   const successCount = turn.toolCalls.filter((t) => t.success === true).length;
   const failCount = turn.toolCalls.filter((t) => t.success === false).length;
@@ -55,7 +57,11 @@ export function SessionTurnCard({ turn, index, showContent = false }: SessionTur
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.03 }}
-      className="border border-border rounded-lg bg-card"
+      id={turn.prompt ? `turn-${turn.prompt.eventId}` : undefined}
+      className={cn(
+        "border border-border rounded-lg bg-card scroll-mt-4",
+        highlighted && "ring-2 ring-primary/60",
+      )}
     >
       <button
         onClick={() => setExpanded(!expanded)}
@@ -142,7 +148,7 @@ export function SessionTurnCard({ turn, index, showContent = false }: SessionTur
                 <span className="ml-auto">{parseUTC(turn.response.timestamp).toLocaleTimeString()}</span>
               </div>
               {showContent && turn.response.responseText && (
-                <ResponseTextBlock text={turn.response.responseText} />
+                <ResponseTextBlock text={turn.response.responseText} defaultFull={highlighted} />
               )}
             </div>
           )}

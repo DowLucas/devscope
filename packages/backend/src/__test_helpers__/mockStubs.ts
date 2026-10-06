@@ -128,6 +128,12 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     purgePrivateTurns: noop,
     recordEmbeddingFailure: noop,
     withSemanticIndexLock: mock((_sql: unknown, fn: () => Promise<unknown>) => fn()),
+    setScanOptions: noop,
+    // sessionSearchQueries.ts
+    keywordSearchTurns: noopArr,
+    vectorSearchTurns: noopArr,
+    fetchSearchHits: noopArr,
+    getSearchableProjects: noopArr,
     // errorRecallQueries.ts
     MIN_ERROR_CHARS: 20,
     getPendingErrors: noopArr,

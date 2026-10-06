@@ -77,6 +77,8 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/privacy/consent/preferences` | GET/PUT | The caller's own `share_details` ("Share my sessions with my team") |
 | `/api/similar/prompts?q=&kind=prompt\|response&limit=` | GET | Semantically similar past turns from the caller's and opted-in teammates' sessions, with outcomes |
 | `/api/similar/sessions/:id?limit=` | GET | Sessions similar to a given session |
+| `/api/similar/search?q=&mode=hybrid\|keyword\|semantic&field=both\|prompt\|response&project=&from=&to=&all_origins=&limit=` | GET | Session search (dashboard `/dashboard/search`, plugin `/devscope:search`): keyword ranking over `prompt_turns.search_tsv` fused with prompt and response KNN by reciprocal rank; snippets mark matches with « »; degrades to keyword-only when embeddings are down. Same scope as `/prompts` |
+| `/api/similar/search/projects` | GET | Project names with searchable turns, for the search filter |
 | `/api/similar/error` | POST | "This error came up before" recall for the plugin's PostToolUseFailure hook: caller's own earlier sessions, similarity ≥ 0.92, and the input of the first same-tool call that succeeded within 30 min (often the fix); fails open |
 | `/api/similar/skill-chains` | GET | Caller's learned skill sequences, cached by the plugin at session start for next-skill hints |
 | `/api/similar/preflight` | POST | "You've asked this before" recall for the plugin's prompt hook: caller's own sessions only, similarity ≥ 0.9, earlier than 2 h ago, fails open to an empty result |
@@ -193,6 +195,7 @@ Every prompt and response is embedded so similar past work can be found by meani
 - **Postgres image:** pgvector needs `docker/postgres.Dockerfile` (`postgres:17.9-alpine` + pgvector), published as `ghcr.io/dowlucas/devscope-postgres` by `.github/workflows/postgres-image.yml`. It must stay on Alpine: the prod data directory has `en_US.utf8` collation under musl, and a Debian/glibc image (e.g. `pgvector/pgvector`) sorts text differently and silently invalidates existing text indexes. Migration 045 is a guarded no-op when pgvector is missing, so an out-of-order deploy boots fine but the feature stays off; roll out the database image first, then set `EMBEDDING_URL`.
 - **Error recall** (`error_embeddings`, migration 047): every non-private `tool.fail` with an `errorMessage` of 20+ chars is embedded by the same job, after turns. `prepareErrorText` masks directories (keeps the file name), hex ids and long numbers so the same failure in another file or run lands close by. Rejected messages go to `error_embedding_failures`.
 - **Skill chains:** `getSkillChains` learns "after skill A the user next runs B" from the order of `Skill` tool calls per session (count ≥ 3, share ≥ 0.25, top 2 per skill). Computed on request; no table.
+- **Session search** (`/api/similar/search`, `db/sessionSearchQueries.ts`): migration 053 adds a generated `search_tsv` (`'simple'` config, prompt weighted A, response B; 054 is its GIN index). Each lexeme of 3+ characters becomes a prefix match, so half-typed identifiers hit. Semantic hits are cut at similarity 0.6 and 0.12 below the best hit (`SEARCH` in `routes/similar.ts`): KNN always returns neighbours, and nonsense queries score 0.55-0.64 with `qwen3-embedding:0.6b`. Results deep-link to `/dashboard/sessions/:id?turn=<prompt event id>`.
 - **Pairing caveat:** turns are paired by order within a session, not by `promptId` (only newer plugin versions send it). `response.complete` is main-thread only, so this is reliable.
 
 ## Server voice
@@ -229,7 +232,7 @@ It is evaluated at read time with the owner's current setting, so turning sharin
 
 `orgDeveloperIds` of `[]` means an org with no developers and matches nothing; only `undefined` (internal jobs) is unscoped. Tokens and cost may show on a shared session's own page but never in lists, leaderboards or rankings.
 
-**Semantic retrieval:** `/api/similar/prompts` and `/api/similar/sessions/:id` search the caller's own sessions plus those of teammates who opted in (`getSearchableDevIds`). Results carry session, project and outcome only, never developer identity. `private` sessions are never indexed.
+**Semantic retrieval:** `/api/similar/prompts`, `/api/similar/search` and `/api/similar/sessions/:id` search the caller's own sessions plus those of teammates who opted in (`getSearchableDevIds`). Results carry session, project and outcome only, never developer identity. `private` sessions are never indexed.
 
 When in doubt, ask: "Does this feature help the team improve their tools and workflow, or does it enable monitoring individuals?" Only build the former.
 
