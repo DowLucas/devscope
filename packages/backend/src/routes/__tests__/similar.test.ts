@@ -8,6 +8,10 @@ const mockInOrg = mock(() => Promise.resolve(true));
 const mockSearchErrors = mock(() => Promise.resolve([] as any[]));
 const mockChains = mock(() => Promise.resolve([] as any[]));
 const mockSharing = mock(() => Promise.resolve([] as string[]));
+const mockKeyword = mock(() => Promise.resolve([] as any[]));
+const mockVector = mock(() => Promise.resolve([] as any[]));
+const mockHits = mock(() => Promise.resolve([] as any[]));
+const mockProjects = mock(() => Promise.resolve(["proj"] as string[]));
 
 mock.module("../../db", () =>
   dbStubs({
@@ -17,6 +21,10 @@ mock.module("../../db", () =>
     searchSimilarErrors: mockSearchErrors,
     getSkillChains: mockChains,
     getSharingDeveloperIds: mockSharing,
+    keywordSearchTurns: mockKeyword,
+    vectorSearchTurns: mockVector,
+    fetchSearchHits: mockHits,
+    getSearchableProjects: mockProjects,
   }),
 );
 
@@ -128,6 +136,117 @@ describe("GET /similar/prompts", () => {
     const res = await buildApp().request("/similar/prompts?q=x");
     expect(res.status).toBe(503);
     expect(mockSearchTurns).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /similar/search", () => {
+  const hitRow = (id: string) => ({
+    turn_id: id,
+    session_id: `s-${id}`,
+    prompt_event_id: `e-${id}`,
+    prompt_at: "2026-01-01T00:00:00Z",
+    prompt_snippet: "fix «withSemanticIndexLock»",
+    response_snippet: null,
+    tool_calls: 2,
+    tool_failures: 0,
+    tools_used: ["Edit"],
+    duration_ms: "1500",
+    session_title: "Lock fix",
+    project_name: "proj",
+  });
+
+  beforeEach(() => {
+    mockKeyword.mockReset();
+    mockVector.mockReset();
+    mockHits.mockReset();
+    mockKeyword.mockImplementation(() => Promise.resolve([]));
+    mockVector.mockImplementation(() => Promise.resolve([]));
+    mockHits.mockImplementation((_sql: unknown, opts: { turnIds: string[] }) =>
+      Promise.resolve(opts.turnIds.map(hitRow)),
+    );
+  });
+
+  test("hybrid fuses keyword and both semantic rankings", async () => {
+    mockKeyword.mockImplementation(() => Promise.resolve([{ turn_id: "1", score: 0.5 }, { turn_id: "2", score: 0.1 }]));
+    mockVector.mockImplementation((_sql: unknown, opts: { kind: string }) =>
+      Promise.resolve(opts.kind === "prompt" ? [{ turn_id: "2", score: 0.8 }] : [{ turn_id: "3", score: 0.6 }]),
+    );
+    const res = await buildApp().request("/similar/search?q=lock");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ mode: "hybrid", semanticAvailable: true });
+    expect(body.results.map((r: any) => r.turnId)).toEqual(["2", "1", "3"]);
+    expect(body.results[0]).toMatchObject({
+      sessionId: "s-2",
+      promptEventId: "e-2",
+      matchedBy: ["keyword", "semantic"],
+      outcome: { toolCalls: 2, durationMs: 1500 },
+    });
+    expect(JSON.stringify(body)).not.toContain("developer");
+    expect(mockVector.mock.calls.map((c: any) => c[1].kind).sort()).toEqual(["prompt", "response"]);
+  });
+
+  test("passes filters and searchable dev ids through", async () => {
+    await buildApp(["dev-a", "dev-c"]).request(
+      "/similar/search?q=x&field=prompt&project=proj&from=2026-01-01T00:00:00Z&all_origins=true",
+    );
+    const call = (mockKeyword.mock.calls[0] as any[])[1];
+    expect(call).toMatchObject({
+      query: "x",
+      field: "prompt",
+      devIds: ["dev-a"],
+      filters: { project: "proj", from: "2026-01-01T00:00:00Z", allOrigins: true },
+    });
+    expect(mockVector.mock.calls.map((c: any) => c[1].kind)).toEqual(["prompt"]);
+  });
+
+  test("keyword mode never embeds", async () => {
+    const res = await buildApp().request("/similar/search?q=x&mode=keyword");
+    expect((await res.json()).mode).toBe("keyword");
+    expect(mockEmbedQuery).not.toHaveBeenCalled();
+    expect(mockVector).not.toHaveBeenCalled();
+  });
+
+  test("semantic mode skips the keyword ranking", async () => {
+    await buildApp().request("/similar/search?q=x&mode=semantic");
+    expect(mockKeyword).not.toHaveBeenCalled();
+    expect(mockVector).toHaveBeenCalled();
+  });
+
+  test("falls back to keyword-only when embeddings are unavailable", async () => {
+    available = false;
+    mockKeyword.mockImplementation(() => Promise.resolve([{ turn_id: "1", score: 0.5 }]));
+    const res = await buildApp().request("/similar/search?q=x&mode=semantic");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ mode: "keyword", semanticAvailable: false });
+    expect(body.results[0].matchedBy).toEqual(["keyword"]);
+  });
+
+  test("falls back to keyword-only when the embedder fails", async () => {
+    mockEmbedQuery.mockImplementation(() => Promise.resolve(null));
+    const res = await buildApp().request("/similar/search?q=x");
+    expect((await res.json()).semanticAvailable).toBe(false);
+    expect(mockKeyword).toHaveBeenCalled();
+  });
+
+  test("lists projects from the searchable sessions only", async () => {
+    const res = await buildApp(["dev-a", "dev-c"]).request("/similar/search/projects");
+    expect(await res.json()).toEqual({ projects: ["proj"] });
+    expect((mockProjects.mock.calls.at(-1) as any[])[1]).toEqual(["dev-a"]);
+  });
+
+  test.each([
+    ["missing q", "/similar/search"],
+    ["blank q", "/similar/search?q=%20"],
+    ["bad mode", "/similar/search?q=x&mode=fuzzy"],
+    ["bad field", "/similar/search?q=x&field=tools"],
+    ["bad date", "/similar/search?q=x&from=yesterday"],
+    ["limit too high", "/similar/search?q=x&limit=500"],
+  ])("rejects %s with 400", async (_label, url) => {
+    const res = await buildApp().request(url);
+    expect(res.status).toBe(400);
+    expect(mockKeyword).not.toHaveBeenCalled();
   });
 });
 

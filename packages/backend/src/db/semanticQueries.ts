@@ -305,7 +305,7 @@ export async function isSessionInOrg(
 }
 
 /** Scan settings for KNN over the post-filtered (org-scoped) HNSW indexes. */
-async function setScanOptions(tx: SQL): Promise<void> {
+export async function setScanOptions(tx: SQL): Promise<void> {
   // The org filter is applied after the index scan; iterative scan keeps
   // walking the graph until enough rows survive it.
   await tx`SET LOCAL hnsw.iterative_scan = relaxed_order`;

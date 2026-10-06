@@ -27,6 +27,7 @@ export function buildTurns(events: RawEvent[]): SessionTurn[] {
         // Start a new turn
         current = {
           prompt: {
+            eventId: event.id,
             content: (p.promptText as string) || `Prompt (${p.promptLength ?? 0} chars)`,
             timestamp: event.created_at,
           },

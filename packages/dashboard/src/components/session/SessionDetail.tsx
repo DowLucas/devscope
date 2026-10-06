@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearch } from "wouter";
 import { motion } from "motion/react";
 import { ArrowLeft, Clock, Wrench, MessageSquare, User, Sparkles, Lock, Zap, DollarSign } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,8 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
   const loading = loadedSessionId !== sessionId;
   const [now, setNow] = useState(() => Date.now());
+  // ?turn=<prompt event id>: the turn a search result linked to.
+  const highlightTurn = new URLSearchParams(useSearch()).get("turn");
 
   useEffect(() => {
     const currentId = sessionId;
@@ -49,6 +52,15 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
     const id = setInterval(() => setNow(Date.now()), 10_000);
     return () => clearInterval(id);
   }, [endTime]);
+
+  useEffect(() => {
+    if (loading || !highlightTurn) return;
+    // Wait a frame so the turn cards have mounted.
+    const id = requestAnimationFrame(() =>
+      document.getElementById(`turn-${highlightTurn}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [loading, highlightTurn]);
 
   if (loading) {
     return (
@@ -221,7 +233,13 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           Conversation ({turns.length} turns)
         </h3>
         {[...turns].reverse().map((turn, i) => (
-          <SessionTurnCard key={i} turn={turn} index={i} showContent={showDetails} />
+          <SessionTurnCard
+            key={turn.prompt?.eventId ?? i}
+            turn={turn}
+            index={i}
+            showContent={showDetails}
+            highlighted={!!highlightTurn && turn.prompt?.eventId === highlightTurn}
+          />
         ))}
         {turns.length === 0 && (
           <div className="text-muted-foreground text-center py-8 text-sm">

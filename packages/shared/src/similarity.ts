@@ -38,3 +38,34 @@ export interface SimilarSession {
   toolFailures: number;
   similarity: number;
 }
+
+// Hybrid keyword + semantic search over turns (GET /api/similar/search).
+
+export type SearchMode = "hybrid" | "keyword" | "semantic";
+export type SearchField = "prompt" | "response" | "both";
+export type SearchMatch = "keyword" | "semantic";
+
+export interface SearchHit {
+  turnId: string;
+  sessionId: string;
+  /** The turn's prompt.submit event id; deep-links to the turn in the session view. */
+  promptEventId: string;
+  promptAt: string;
+  /** Excerpt with matched terms wrapped in « »; plain opening text when nothing matched. */
+  promptSnippet: string;
+  responseSnippet: string | null;
+  outcome: TurnOutcome;
+  sessionTitle: string | null;
+  projectName: string;
+  /** Which rankings found this turn. */
+  matchedBy: SearchMatch[];
+  /** Fused reciprocal-rank score; only meaningful for ordering. */
+  score: number;
+}
+
+export interface SearchResponse {
+  mode: SearchMode;
+  /** False when embeddings are unavailable and the search ran keyword-only. */
+  semanticAvailable: boolean;
+  results: SearchHit[];
+}

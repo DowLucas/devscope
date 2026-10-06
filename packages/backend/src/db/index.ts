@@ -10,4 +10,5 @@ export * from "./claudeMdQueries";
 export * from "./topologyQueries";
 export * from "./workflowProfileQueries";
 export * from "./semanticQueries";
+export * from "./sessionSearchQueries";
 export * from "./errorRecallQueries";

@@ -96,6 +96,8 @@ export interface ToolCallEntry {
 
 export interface SessionTurn {
   prompt?: {
+    /** The prompt.submit event id; search results deep-link to it. */
+    eventId: string;
     content: string;
     timestamp: string;
   };

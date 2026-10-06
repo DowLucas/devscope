@@ -19,6 +19,7 @@ import {
   Fingerprint,
   Shield,
   Lightbulb,
+  Search,
 } from "lucide-react";
 import { useActivityStore } from "@/stores/activityStore";
 import { authClient } from "@/lib/auth-client";
@@ -146,6 +147,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     group: "Operations",
     items: [
       { path: "/dashboard/sessions", label: "Sessions", icon: Clock },
+      { path: "/dashboard/search", label: "Search", icon: Search },
       {
         path: "/dashboard/incidents",
         label: "Incidents",
