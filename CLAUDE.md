@@ -82,6 +82,13 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/similar/error` | POST | "This error came up before" recall for the plugin's PostToolUseFailure hook: caller's own earlier sessions, similarity ≥ 0.92, and the input of the first same-tool call that succeeded within 30 min (often the fix); fails open |
 | `/api/similar/skill-chains` | GET | Caller's learned skill sequences, cached by the plugin at session start for next-skill hints |
 | `/api/similar/preflight` | POST | "You've asked this before" recall for the plugin's prompt hook: caller's own sessions only, similarity ≥ 0.9, earlier than 2 h ago, fails open to an empty result |
+| `/api/live/team-skills` | GET | Active team skills of the caller's org (`triggerPhrases`, rendered SKILL.md `content`), for the devscope-live mod to match typed prompts |
+| `/api/live/nudge?session_id=` | GET | Takes the friction nudge event ingestion recorded for the caller's session (held 2 min, in memory); the mod shows it as a band |
+| `/api/live/next-prompts` | POST | `{session_id, after?, project?, limit?}`: next prompts that worked after similar prompts (own + opted-in sessions, next human turn with no tool failures and not labelled down; `up` labels and merged PRs boost), or a project's opening prompts without `after`. Project and outcome only; empty without embeddings |
+| `/api/live/labels` | POST | `{session_id, turn_started_at, label: up\|partial\|down, source: explicit\|implicit}`: a turn outcome label (`turn_labels`, matched to the nearest turn within 2 min at read time) |
+| `/api/live/vcs` | POST | `{session_id, kind: commit\|pr, ref, repo_remote?}`: a commit or PR the session produced (`session_vcs_links`) |
+| `/api/live/vcs/open-prs?repo_remote=` | GET | The caller's PR links in that repo still unknown/open and not checked for an hour; the mod resolves them with `gh` |
+| `/api/live/vcs/status` | POST | `{ref, state: open\|merged\|closed, merged_at?, closed_at?}`: PR state for the caller's own links |
 | `/api/ai/voice-summary` | POST | One spoken sentence for the plugin's voice announcer (`trigger`, `project`, optional `tool`/`detail`/`last_message`); stateless, only token usage is recorded as `voice_summary`. The plugin never calls it for `private` sessions |
 | `/api/ai/voice-audio` | POST | That sentence as WAV (`text`, optional Kokoro `voice`/`speed`/`volume`), voiced by the homelab TTS service; 503 when `TTS_URL` is unset or the service fails, so the plugin falls back to a local voice. Own 20/min bucket, no Gemini budget |
 | `/api/health` | GET | Health check + WS client count |
@@ -91,7 +98,7 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 
 Two flavors of auth — pick one per route:
 
-- **API key (`x-api-key` header)** — the plugin path. Required by `/api/events` and the plugin-accessible routes (`/api/ai`, `/api/insights`, `/api/patterns`, `/api/playbooks`, `/api/skills`, `/api/topology`, `/api/workflow-profiles`, `/api/friction`, `/api/sessions`, `/api/similar`). Keys are minted via better-auth's `auth.api.createApiKey({ body: { userId, name } })`; the dashboard exposes this at Settings → API Keys, but there's no UI before you have a session.
+- **API key (`x-api-key` header)** — the plugin path. Required by `/api/events` and the plugin-accessible routes (`/api/ai`, `/api/insights`, `/api/patterns`, `/api/playbooks`, `/api/skills`, `/api/topology`, `/api/workflow-profiles`, `/api/friction`, `/api/sessions`, `/api/similar`, `/api/live`). Keys are minted via better-auth's `auth.api.createApiKey({ body: { userId, name } })`; the dashboard exposes this at Settings → API Keys, but there's no UI before you have a session.
 - **Session cookie** — what the dashboard uses. Sign-in via `/api/auth/sign-in/email` returns a session cookie. Most dashboard routes go through `orgScopeMiddleware`, which reads `session.activeOrganizationId` to scope queries.
 
 Two traps that bite manual testers:
@@ -232,7 +239,7 @@ It is evaluated at read time with the owner's current setting, so turning sharin
 
 `orgDeveloperIds` of `[]` means an org with no developers and matches nothing; only `undefined` (internal jobs) is unscoped. Tokens and cost may show on a shared session's own page but never in lists, leaderboards or rankings.
 
-**Semantic retrieval:** `/api/similar/prompts`, `/api/similar/search` and `/api/similar/sessions/:id` search the caller's own sessions plus those of teammates who opted in (`getSearchableDevIds`). Results carry session, project and outcome only, never developer identity. `private` sessions are never indexed.
+**Semantic retrieval:** `/api/similar/prompts`, `/api/similar/search`, `/api/similar/sessions/:id` and `/api/live/next-prompts` search the caller's own sessions plus those of teammates who opted in (`getSearchableDevIds`). Results carry session, project and outcome only, never developer identity. `private` sessions are never indexed.
 
 When in doubt, ask: "Does this feature help the team improve their tools and workflow, or does it enable monitoring individuals?" Only build the former.
 

@@ -27,6 +27,7 @@ import {
   shouldDedupNudge,
   clearStuckState,
   recentToolSummary,
+  setPendingNudge,
 } from "../services/sessionStuckState";
 import { phraseNudge } from "../ai/workflows/nudgeWorkflow";
 import { assessStuckness } from "../ai/detection/stuckness";
@@ -293,6 +294,11 @@ export function eventsRoutes(sql: SQL) {
               message,
               signals: { rule_type: firstTrippedAlert.rule_type, ...ctx },
             };
+            setPendingNudge(event.sessionId, {
+              rule: firstTrippedAlert.rule_type,
+              severity: firstTrippedAlert.severity,
+              message,
+            });
           }
         } catch (err) {
           console.error("[nudge] phrasing failed:", (err as Error).message);

@@ -27,7 +27,7 @@ import {
   prepareErrorText,
   toVectorLiteral,
 } from "../ai/embeddings";
-import { getSearchableDevIds, getViewerDevIds } from "../services/visibility";
+import { getOwnOrgDevIds, getSearchableDevIdsFor } from "../services/visibility";
 import { RECALL, formatRecall, selectMatches, wordCount } from "../services/promptRecall";
 import { ERROR_RECALL, formatErrorRecall, selectErrorMatches } from "../services/errorRecall";
 
@@ -140,24 +140,10 @@ function mapSession(r: SimilarSessionRow): SimilarSession {
   };
 }
 
-function orgDevIds(c: { get: (k: never) => unknown }): string[] {
-  return (c.get("orgDeveloperIds" as never) as string[] | undefined) ?? [];
-}
-
 export function similarRoutes(sql: SQL) {
   const app = new Hono();
-
-  // Hook endpoints only look at the caller's own history, never teammates'.
-  async function ownDevIds(c: { get: (k: never) => unknown }): Promise<string[]> {
-    const own = await getViewerDevIds(sql, c);
-    const org = new Set(orgDevIds(c));
-    return own.filter((d) => org.has(d));
-  }
-
-  // Dashboard search: own sessions plus teammates who opted in to sharing.
-  async function searchableDevIds(c: { get: (k: never) => unknown }): Promise<string[]> {
-    return getSearchableDevIds(sql, orgDevIds(c), await getViewerDevIds(sql, c));
-  }
+  // Hook endpoints only look at the caller's own history (getOwnOrgDevIds);
+  // dashboard search adds teammates who opted in (getSearchableDevIdsFor).
 
   app.get("/prompts", zValidator("query", promptsQuery), async (c) => {
     if (!isEmbeddingAvailable()) {
@@ -172,7 +158,7 @@ export function similarRoutes(sql: SQL) {
       vector: toVectorLiteral(vector),
       model: EMBEDDING_MODEL,
       kind: q.kind,
-      devIds: await searchableDevIds(c),
+      devIds: await getSearchableDevIdsFor(sql, c),
       limit: q.limit,
       excludeSessionId: q.exclude_session_id ?? null,
     });
@@ -185,12 +171,12 @@ export function similarRoutes(sql: SQL) {
   // unavailable instead of failing.
   // Project names for the search filter, scoped exactly like /search.
   app.get("/search/projects", async (c) => {
-    return c.json({ projects: await getSearchableProjects(sql, await searchableDevIds(c)) });
+    return c.json({ projects: await getSearchableProjects(sql, await getSearchableDevIdsFor(sql, c)) });
   });
 
   app.get("/search", zValidator("query", searchQuery), async (c) => {
     const q = c.req.valid("query");
-    const devIds = await searchableDevIds(c);
+    const devIds = await getSearchableDevIdsFor(sql, c);
     const filters = { project: q.project, from: q.from, to: q.to, allOrigins: q.all_origins };
 
     const wantSemantic = q.mode !== "keyword";
@@ -251,7 +237,7 @@ export function similarRoutes(sql: SQL) {
       const { prompt, session_id } = c.req.valid("json");
       if (wordCount(prompt) < RECALL.minWords) return c.json(empty);
 
-      const devIds = await ownDevIds(c);
+      const devIds = await getOwnOrgDevIds(sql, c);
       if (devIds.length === 0) return c.json(empty);
 
       // Document-side embedding: the same space and scale as stored prompts.
@@ -282,7 +268,7 @@ export function similarRoutes(sql: SQL) {
     try {
       if (!isEmbeddingAvailable()) return c.json(empty);
       const { tool, error, session_id } = c.req.valid("json");
-      const devIds = await ownDevIds(c);
+      const devIds = await getOwnOrgDevIds(sql, c);
       if (devIds.length === 0) return c.json(empty);
 
       const vectors = await embedDocuments([prepareErrorText(tool, error)], ERROR_RECALL.embedTimeoutMs);
@@ -306,7 +292,7 @@ export function similarRoutes(sql: SQL) {
   // The caller's learned skill sequences; the plugin caches these at session
   // start and hints the usual next skill after a Skill tool call.
   app.get("/skill-chains", async (c) => {
-    const devIds = await ownDevIds(c);
+    const devIds = await getOwnOrgDevIds(sql, c);
     return c.json({ chains: await getSkillChains(sql, devIds, SKILL_CHAINS) });
   });
 
@@ -315,7 +301,7 @@ export function similarRoutes(sql: SQL) {
       return c.json({ available: false, error: "Semantic retrieval is not configured" }, 503);
     }
     const id = c.req.param("id");
-    const devIds = await searchableDevIds(c);
+    const devIds = await getSearchableDevIdsFor(sql, c);
     // Same 404 for "missing", "other org" and "not shared with you" so ids
     // can't be probed.
     if (id.length > 200 || !(await isSessionInOrg(sql, id, devIds))) {

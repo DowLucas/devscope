@@ -46,6 +46,7 @@ import { waitlistRoutes } from "./routes/waitlist";
 import { nudgesRoutes } from "./routes/nudges";
 import { promptSimilarityRoutes } from "./routes/promptSimilarity";
 import { similarRoutes } from "./routes/similar";
+import { liveRoutes } from "./routes/live";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware, getClientIp } from "./middleware/rateLimit";
 import { apiKeyRateLimitRetryAfter } from "./middleware/apiKeyRateLimit";
@@ -222,7 +223,7 @@ app.use("/api/events", requireApiKeyOrSession);
 
 // Plugin-facing routes: accept API keys or session cookies
 // This allows plugin commands (e.g. /devscope:ask, /devscope:review) to call these endpoints
-const pluginAccessiblePrefixes = ["/api/ai", "/api/insights", "/api/patterns", "/api/playbooks", "/api/skills", "/api/topology", "/api/workflow-profiles", "/api/friction", "/api/sessions", "/api/nudges", "/api/prompts", "/api/similar"];
+const pluginAccessiblePrefixes = ["/api/ai", "/api/insights", "/api/patterns", "/api/playbooks", "/api/skills", "/api/topology", "/api/workflow-profiles", "/api/friction", "/api/sessions", "/api/nudges", "/api/prompts", "/api/similar", "/api/live"];
 for (const prefix of pluginAccessiblePrefixes) {
   app.use(`${prefix}/*`, requireApiKeyOrSession);
   app.use(prefix, requireApiKeyOrSession);
@@ -323,6 +324,14 @@ app.use("/api/similar/*", rateLimitMiddleware({
   keyFn: (c) => (c.get("user" as never) as any)?.id ?? getClientIp(c),
 }));
 app.use("/api/similar/*", orgScopeMiddleware(sql));
+// next-prompts embeds the developer's last prompt, like /api/similar.
+app.use("/api/live/next-prompts", rateLimitMiddleware({
+  maxRequests: 60,
+  windowMs: 60_000,
+  prefix: "live-prompts",
+  keyFn: (c) => (c.get("user" as never) as any)?.id ?? getClientIp(c),
+}));
+app.use("/api/live/*", orgScopeMiddleware(sql));
 
 app.route("/api/events", eventsRoutes(sql));
 app.route("/api/sessions", sessionsRoutes(sql));
@@ -348,6 +357,7 @@ app.route("/api/coaching", coachingRoutes(sql));
 app.route("/api/nudges", nudgesRoutes(sql));
 app.route("/api/prompts", promptSimilarityRoutes(sql));
 app.route("/api/similar", similarRoutes(sql));
+app.route("/api/live", liveRoutes(sql));
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", clients: getClientCount() })

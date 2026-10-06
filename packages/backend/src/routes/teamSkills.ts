@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { SQL } from "bun";
-import type { TeamSkill } from "@devscope/shared";
+import { renderSkillMd } from "../services/teamSkillMd";
 import {
   getTeamSkills,
   getTeamSkillById,
@@ -27,21 +27,6 @@ const updateSkillSchema = z
   })
   .partial()
   .strict();
-
-function renderSkillMd(skill: TeamSkill): string {
-  const frontmatter = [
-    '---',
-    `name: ${skill.name.toLowerCase().replace(/\s+/g, '-')}`,
-    `description: ${skill.description}`,
-    '---',
-  ].join('\n');
-
-  const triggers = skill.trigger_phrases.length > 0
-    ? `\n## Trigger Phrases\n\n${skill.trigger_phrases.map(t => `- "${t}"`).join('\n')}\n`
-    : '';
-
-  return `${frontmatter}\n${triggers}\n${skill.skill_body}\n`;
-}
 
 export function teamSkillsRoutes(sql: SQL) {
   const app = new Hono();
