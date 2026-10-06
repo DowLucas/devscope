@@ -1,9 +1,11 @@
-import { describe, expect, test, beforeEach } from "bun:test";
+import { describe, expect, test, beforeEach, setSystemTime } from "bun:test";
 import {
   recordToolResult,
   identicalFailCount,
   shouldDedupNudge,
   clearStuckState,
+  setPendingNudge,
+  takePendingNudge,
   __resetAllStuckState,
 } from "../sessionStuckState";
 
@@ -61,5 +63,33 @@ describe("clearStuckState", () => {
     expect(identicalFailCount("s1", "Bash", "h1")).toBe(1);
     clearStuckState("s1");
     expect(identicalFailCount("s1", "Bash", "h1")).toBe(0);
+  });
+});
+
+describe("pending nudge", () => {
+  const nudge = { rule: "repeated_failure", severity: "warning", message: "Read the error first" };
+
+  test("taken once", () => {
+    setPendingNudge("s1", nudge);
+    expect(takePendingNudge("s1")).toEqual(nudge);
+    expect(takePendingNudge("s1")).toBeNull();
+  });
+
+  test("null for an unknown session", () => {
+    expect(takePendingNudge("nope")).toBeNull();
+  });
+
+  test("stale after two minutes", () => {
+    setSystemTime(new Date("2026-10-06T10:00:00Z"));
+    setPendingNudge("s1", nudge);
+    setSystemTime(new Date("2026-10-06T10:02:01Z"));
+    expect(takePendingNudge("s1")).toBeNull();
+    setSystemTime();
+  });
+
+  test("cleared with the session's stuck state", () => {
+    setPendingNudge("s1", nudge);
+    clearStuckState("s1");
+    expect(takePendingNudge("s1")).toBeNull();
   });
 });

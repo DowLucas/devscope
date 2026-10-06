@@ -109,6 +109,26 @@ export async function getViewerDevIds(sql: SQL, c: { get: (k: never) => unknown 
   return user?.id ? await getAllDeveloperIdsForUser(sql, user.id) : [];
 }
 
+/** The active org's developer ids, as `orgScopeMiddleware` set them. */
+export function getOrgDevIds(c: { get: (k: never) => unknown }): string[] {
+  return (c.get("orgDeveloperIds" as never) as string[] | undefined) ?? [];
+}
+
+/**
+ * The caller's own developer ids within the active org. Plugin hook endpoints
+ * look only at these, never at teammates'.
+ */
+export async function getOwnOrgDevIds(sql: SQL, c: { get: (k: never) => unknown }): Promise<string[]> {
+  const own = await getViewerDevIds(sql, c);
+  const org = new Set(getOrgDevIds(c));
+  return own.filter((d) => org.has(d));
+}
+
+/** `getSearchableDevIds` for the caller of this request. */
+export async function getSearchableDevIdsFor(sql: SQL, c: { get: (k: never) => unknown }): Promise<string[]> {
+  return getSearchableDevIds(sql, getOrgDevIds(c), await getViewerDevIds(sql, c));
+}
+
 /**
  * The org developers whose content this viewer may search: their own ids plus
  * everyone who opted in. Private sessions are excluded by the search queries.

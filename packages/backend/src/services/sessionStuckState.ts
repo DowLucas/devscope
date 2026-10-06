@@ -8,6 +8,8 @@
 
 const MAX_EVENTS_PER_SESSION = 30;
 const NUDGE_DEDUP_TTL_MS = 5 * 60 * 1000; // 5 min
+/** A recorded nudge nobody took within this long is stale. */
+const PENDING_NUDGE_TTL_MS = 2 * 60 * 1000;
 
 interface ToolEvent {
   toolName: string;
@@ -16,9 +18,17 @@ interface ToolEvent {
   timestamp: number;
 }
 
+export interface PendingNudge {
+  rule: string;
+  severity: string;
+  message: string;
+}
+
 interface StuckState {
   events: ToolEvent[];
   recentNudges: Map<string, number>; // ruleKey -> timestamp
+  // The latest nudge, held for the devscope-live mod (GET /api/live/nudge).
+  pendingNudge: { nudge: PendingNudge; at: number } | null;
 }
 
 const states: Map<string, StuckState> = ((globalThis as any).__stuckStates ??=
@@ -27,7 +37,7 @@ const states: Map<string, StuckState> = ((globalThis as any).__stuckStates ??=
 function getOrCreate(sessionId: string): StuckState {
   let s = states.get(sessionId);
   if (!s) {
-    s = { events: [], recentNudges: new Map() };
+    s = { events: [], recentNudges: new Map(), pendingNudge: null };
     states.set(sessionId, s);
   }
   return s;
@@ -112,6 +122,20 @@ export function recentToolSummary(
       repeat_of: prior === undefined ? null : prior,
     };
   });
+}
+
+/** Hold `nudge` for the session until it is taken or goes stale. */
+export function setPendingNudge(sessionId: string, nudge: PendingNudge): void {
+  getOrCreate(sessionId).pendingNudge = { nudge, at: Date.now() };
+}
+
+/** Returns the session's held nudge and clears it; null when none or stale. */
+export function takePendingNudge(sessionId: string): PendingNudge | null {
+  const s = states.get(sessionId);
+  const held = s?.pendingNudge ?? null;
+  if (!s || !held) return null;
+  s.pendingNudge = null;
+  return Date.now() - held.at <= PENDING_NUDGE_TTL_MS ? held.nudge : null;
 }
 
 export function clearStuckState(sessionId: string): void {
