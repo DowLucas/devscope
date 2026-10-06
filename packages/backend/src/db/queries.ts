@@ -2640,8 +2640,15 @@ export interface TokenUsageInput {
 }
 
 /**
- * Update session token usage from a response.complete or session.end event.
- * Uses segment peaks to correctly accumulate across compaction boundaries.
+ * LEGACY (plugins before 0.23.0): update session token usage from the
+ * tokenUsage on a response.complete or session.end event.
+ *
+ * That tokenUsage is the usage of the transcript's LAST API call, not a
+ * running total, so keeping its per-segment peak stores roughly one call per
+ * session: a ~40x undercount. Kept only so old plugins still produce a number;
+ * sessions written here are marked token_source = 'legacy' and the token
+ * estimator (db/tokenUsageQueries.ts) replaces them once they end. Sessions
+ * with v2 figures (exact or estimated) are never touched.
  *
  * Cost is computed from the `token_pricing` table by matching `sessions.model`
  * against `token_pricing.model_pattern` via SQL LIKE. The most-specific match
@@ -2665,6 +2672,7 @@ export async function updateSessionTokens(
       segment_peak_output = GREATEST(segment_peak_output, ${usage.outputTokens}),
       segment_peak_cache_creation = GREATEST(segment_peak_cache_creation, ${usage.cacheCreationTokens}),
       segment_peak_cache_read = GREATEST(segment_peak_cache_read, ${usage.cacheReadTokens}),
+      token_source = 'legacy',
       estimated_cost_usd = (
         SELECT
           ((s.total_input_tokens - s.segment_peak_input) + GREATEST(s.segment_peak_input, ${usage.inputTokens})) * p.input_price_per_mtok / 1000000.0 +
@@ -2682,7 +2690,11 @@ export async function updateSessionTokens(
         ) p
         WHERE s.id = ${sessionId}
       )
-    WHERE id = ${sessionId}`;
+    WHERE id = ${sessionId}
+      AND (token_source IS NULL OR token_source = 'legacy')`;
+  // An estimated session that an old plugin reactivated: hand it back to the
+  // estimator, which re-reads all its events once it ends again.
+  await sql`UPDATE sessions SET token_source = 'legacy' WHERE id = ${sessionId} AND token_source = 'estimated'`;
 }
 
 /**
@@ -2713,6 +2725,8 @@ export async function getSessionTokenUsageSummary(
       COALESCE(SUM(total_cache_read_tokens), 0)::BIGINT AS total_cache_read_tokens,
       COALESCE(SUM(estimated_cost_usd), 0)::NUMERIC AS total_estimated_cost_usd,
       COUNT(*) FILTER (WHERE total_input_tokens > 0 OR total_output_tokens > 0) AS sessions_with_token_data,
+      COUNT(*) FILTER (WHERE token_source = 'estimated') AS sessions_estimated,
+      COUNT(*) FILTER (WHERE token_source = 'legacy') AS sessions_legacy,
       COALESCE(AVG(
         CASE WHEN ended_at IS NOT NULL AND EXTRACT(EPOCH FROM (ended_at - started_at)) > 60
              AND (total_input_tokens + total_output_tokens) > 0
@@ -2750,6 +2764,8 @@ export async function getSessionTokenUsageSummary(
     avg_cost_per_session_usd: sessionsWithData > 0 ? totalCost / sessionsWithData : 0,
     cache_hit_rate: totalTokensForCache > 0 ? (totalCacheRead / totalTokensForCache) * 100 : 0,
     sessions_with_token_data: sessionsWithData,
+    sessions_estimated: Number(row.sessions_estimated ?? 0),
+    sessions_legacy: Number(row.sessions_legacy ?? 0),
     avg_burn_rate: Math.round(Number(row.avg_burn_rate ?? 0)),
     max_burn_rate: Math.round(Number(row.max_burn_rate ?? 0)),
     sessions_compacted: Number(row.sessions_compacted ?? 0),

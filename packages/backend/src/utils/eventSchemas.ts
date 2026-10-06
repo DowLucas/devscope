@@ -36,6 +36,33 @@ const tokenUsageSchema = z
   })
   .strict();
 
+const tokenCount = z.number().int().min(0).max(1e13);
+
+/**
+ * Exact cumulative usage summed from one Claude Code transcript (and its
+ * subagent transcripts), per model. Plugin 0.23.0+; see migration 055.
+ */
+export const usageSnapshotSchema = z
+  .object({
+    transcriptId: z.string().min(1).max(200),
+    byModel: z
+      .record(
+        z.string().max(200),
+        z
+          .object({
+            input: tokenCount,
+            output: tokenCount,
+            cacheWrite5m: tokenCount,
+            cacheWrite1h: tokenCount,
+            cacheRead: tokenCount,
+            calls: z.number().int().min(0).max(1e9).optional(),
+          })
+          .strict(),
+      )
+      .refine((m) => Object.keys(m).length <= 20, "at most 20 models"),
+  })
+  .strict();
+
 const claudeMdFileSchema = z
   .object({
     path: z.string(),
@@ -101,6 +128,7 @@ const sessionEndPayloadSchema = z
     gitBranch: z.string().optional(),
     gitCommit: z.string().optional(),
     tokenUsage: tokenUsageSchema.optional(),
+    usageSnapshot: usageSnapshotSchema.optional(),
     ...privacyAnnotations,
   })
   .strict();
@@ -156,6 +184,7 @@ const responsePayloadSchema = z
     toolsUsed: z.array(z.string()).optional(),
     responseText: z.string().optional(),
     tokenUsage: tokenUsageSchema.optional(),
+    usageSnapshot: usageSnapshotSchema.optional(),
     ...privacyAnnotations,
   })
   .strict();

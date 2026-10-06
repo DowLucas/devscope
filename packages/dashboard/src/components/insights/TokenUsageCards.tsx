@@ -9,6 +9,18 @@ interface TokenUsageCardsProps {
   loading: boolean;
 }
 
+/**
+ * API list prices for the tokens used, not what a subscription plan pays.
+ * Says when part of the figure is reconstructed rather than counted.
+ */
+function costLabel(data: TokenUsageSummary | null): string {
+  const base = "API-equivalent cost";
+  if (!data) return base;
+  if (data.sessions_legacy > 0) return `${base} (${data.sessions_legacy} sessions pending re-estimate)`;
+  if (data.sessions_estimated > 0) return `${base} (${data.sessions_estimated} sessions estimated)`;
+  return base;
+}
+
 export function TokenUsageCards({ data, loading }: TokenUsageCardsProps) {
   if (loading) {
     return (
@@ -33,7 +45,7 @@ export function TokenUsageCards({ data, loading }: TokenUsageCardsProps) {
         icon={Zap}
       />
       <MetricCard
-        label="Estimated Cost"
+        label={costLabel(data)}
         value={hasData ? formatCost(data.total_estimated_cost_usd) : "—"}
         icon={DollarSign}
       />

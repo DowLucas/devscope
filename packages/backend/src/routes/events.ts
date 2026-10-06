@@ -15,7 +15,9 @@ import {
   upsertClaudeMdSnapshot,
   updateSessionTokens,
   finalizeTokenSegment,
+  applyUsageSnapshot,
 } from "../db";
+import { usageSnapshotSchema } from "../utils/eventSchemas";
 import { broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg, autoLinkUserToDeveloper, computeDeveloperId } from "../services/developerLink";
 import { broadcastSessionUpdate, getViewerDevIds, redactEvent, visibilityForRow } from "../services/visibility";
@@ -155,15 +157,23 @@ export function eventsRoutes(sql: SQL) {
       }
     }
 
-    // Update session token usage on response.complete or session.end
+    // Update session token usage on response.complete or session.end.
+    // Plugin 0.23.0+ sends usageSnapshot: exact per-model totals summed from
+    // the transcript, which replace everything else. Older plugins only send
+    // tokenUsage (the last API call's usage), kept on the legacy path until
+    // the token estimator replaces it (see migration 055).
     if (event.eventType === "response.complete" || event.eventType === "session.end") {
-      const tokenUsage = (event.payload as any).tokenUsage;
-      if (tokenUsage && typeof tokenUsage.inputTokens === "number") {
-        try {
-          await updateSessionTokens(sql, event.sessionId, tokenUsage);
-        } catch (e) {
-          console.error("[tokens] updateSessionTokens failed:", (e as Error).message);
+      const payload = event.payload as Record<string, unknown>;
+      const snapshot = usageSnapshotSchema.safeParse(payload.usageSnapshot);
+      const tokenUsage = payload.tokenUsage as { inputTokens?: unknown } | undefined;
+      try {
+        if (snapshot.success) {
+          await applyUsageSnapshot(sql, event.sessionId, snapshot.data);
+        } else if (tokenUsage && typeof tokenUsage.inputTokens === "number") {
+          await updateSessionTokens(sql, event.sessionId, tokenUsage as Parameters<typeof updateSessionTokens>[2]);
         }
+      } catch (e) {
+        console.error("[tokens] usage update failed:", (e as Error).message);
       }
     }
 

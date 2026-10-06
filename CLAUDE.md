@@ -84,6 +84,7 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/similar/preflight` | POST | "You've asked this before" recall for the plugin's prompt hook: caller's own sessions only, similarity ≥ 0.9, earlier than 2 h ago, fails open to an empty result |
 | `/api/ai/voice-summary` | POST | One spoken sentence for the plugin's voice announcer (`trigger`, `project`, optional `tool`/`detail`/`last_message`); stateless, only token usage is recorded as `voice_summary`. The plugin never calls it for `private` sessions |
 | `/api/ai/voice-audio` | POST | That sentence as WAV (`text`, optional Kokoro `voice`/`speed`/`volume`), voiced by the homelab TTS service; 503 when `TTS_URL` is unset or the service fails, so the plugin falls back to a local voice. Own 20/min bucket, no Gemini budget |
+| `/api/sessions/usage/backfill` | POST | Exact token usage per transcript and model from `/devscope:backfill-usage` (`{items: [{transcriptId, sessionId?, byModel}]}`, max 500); only the caller's own sessions are updated, the rest are counted as `skipped` |
 | `/api/health` | GET | Health check + WS client count |
 | `/ws` | WS | Real-time event stream |
 
@@ -188,7 +189,7 @@ Verify against the live API with `bun run scripts/typesafe-smoke.ts`.
 
 Every prompt and response is embedded so similar past work can be found by meaning, not keywords.
 
-- **Turns** (`prompt_turns`, migration 045) are derived from events: one `prompt.submit` plus the last `response.complete` before the next prompt, with the tool activity in between as the outcome (`tool_calls`, `tool_failures`, `tools_used`, `duration_ms`). A turn is built only once settled (a later prompt, session end, or 10 minutes after its last response), cascades away when retention purges its prompt event, and is purged if its session later switches to private. Per-turn tokens are deliberately absent: `tokenUsage` is cumulative per session.
+- **Turns** (`prompt_turns`, migration 045) are derived from events: one `prompt.submit` plus the last `response.complete` before the next prompt, with the tool activity in between as the outcome (`tool_calls`, `tool_failures`, `tools_used`, `duration_ms`). A turn is built only once settled (a later prompt, session end, or 10 minutes after its last response), cascades away when retention purges its prompt event, and is purged if its session later switches to private. Per-turn tokens are deliberately absent (see Token accounting).
 - **Embeddings** (`turn_embeddings`, `session_embeddings`) come from a local model on the homelab's Ollama (`ai/embeddings.ts`, default `qwen3-embedding:0.6b`, 1024-dim). Nothing leaves the box. A session vector is the mean of its prompt vectors. `model` is part of the key, so switching models re-embeds alongside rather than mixing incomparable vectors; changing `EMBEDDING_DIM` needs a migration.
 - **Indexing** runs in `jobs/semanticIndexing.ts` every 60 s off the hook path; `scripts/semantic-backfill.ts --write` runs the same idempotent pass in a loop for history. Both take one Postgres advisory lock, so they never index concurrently. A text the embedder rejects on its own is recorded in `turn_embedding_failures` and skipped. The embed client never throws: when Ollama is down the job retries next tick and the API answers 503.
 - **Env:** `EMBEDDING_URL` (unset disables the feature), `EMBEDDING_MODEL`, `DISABLE_SEMANTIC_INDEXING=1`.
@@ -197,6 +198,17 @@ Every prompt and response is embedded so similar past work can be found by meani
 - **Skill chains:** `getSkillChains` learns "after skill A the user next runs B" from the order of `Skill` tool calls per session (count ≥ 3, share ≥ 0.25, top 2 per skill). Computed on request; no table.
 - **Session search** (`/api/similar/search`, `db/sessionSearchQueries.ts`): migration 053 adds a generated `search_tsv` (`'simple'` config, prompt weighted A, response B; 054 is its GIN index). Each lexeme of 3+ characters becomes a prefix match, so half-typed identifiers hit. Semantic hits are cut at similarity 0.6 and 0.12 below the best hit (`SEARCH` in `routes/similar.ts`): KNN always returns neighbours, and nonsense queries score 0.55-0.64 with `qwen3-embedding:0.6b`. Results deep-link to `/dashboard/sessions/:id?turn=<prompt event id>`.
 - **Pairing caveat:** turns are paired by order within a session, not by `promptId` (only newer plugin versions send it). `response.complete` is main-thread only, so this is reliable.
+
+## Token accounting
+
+Session tokens and cost (migration 055, `db/tokenUsageQueries.ts`). Costs are **API-equivalent list prices**, not what a subscription plan pays; a heavy Max user runs thousands of dollars a month on this measure.
+
+- **Exact path (plugin 0.23.0+):** `scripts/token_usage.py` in the plugin sums every API call in the transcript and its subagent transcripts, per model, splitting 5-minute and 1-hour cache writes. The totals ride on `response.complete` / `session.end` as `usageSnapshot` and land in `session_token_usage` per (session, transcript, model). A DevScope session spans several Claude Code transcripts across `/clear`, resume and compact, hence the transcript key. Values are cumulative, so each field only moves up (`GREATEST`).
+- **Legacy path (older plugins):** `tokenUsage` is the usage of the transcript's **last API call only**, not a running total. `updateSessionTokens` kept its per-segment peak, which stored roughly one call per session, ~40x below the real figure (measured 2026-10-06). It still runs for old plugins, marks the session `token_source = 'legacy'` and never touches exact or estimated sessions.
+- **Estimates:** `estimateUsage` rebuilds a legacy session from the per-turn `tokenUsage` (context size at the end of each turn) and tool counts per turn. Calibrated against 24 transcripts: total within 2%, single sessions 0.4x-2.2x, main thread only. `jobs/tokenEstimation.ts` estimates legacy sessions that ended in the last 2 days (`DISABLE_TOKEN_ESTIMATION=1` turns it off); `scripts/token-backfill.ts` (dry run by default, `--write`) does history. Exact data always replaces an estimate.
+- **`sessions.token_source`:** `exact` | `estimated` | `legacy` | NULL (no usage). `sessions.total_*` / `estimated_cost_usd` are the roll-up every query reads; `total_cache_creation_tokens` is 5m + 1h writes.
+- **Backfill from disk:** `/devscope:backfill-usage` uploads exact totals for transcripts still on the developer's machine. Claude Code deletes transcripts after `cleanupPeriodDays` (30 by default), so older sessions keep the estimate.
+- **Pricing:** `token_cost_usd()` and the rows in 055; runbook in `packages/backend/docs/token-pricing.md`. Sessions with no `model` (pre-037) are priced at the `*` fallback (Sonnet-4 rates), which understates Opus-era usage.
 
 ## Server voice
 

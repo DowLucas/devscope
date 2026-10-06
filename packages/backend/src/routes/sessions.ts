@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import type { SQL } from "bun";
-import { getActiveSessions, getActiveAgents, getAllSessions, getSessionDetail, getSessionTitleHistory } from "../db";
+import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
+import { getActiveSessions, getActiveAgents, getAllSessions, getSessionDetail, getSessionTitleHistory, backfillExactUsage } from "../db";
+import { usageSnapshotSchema } from "../utils/eventSchemas";
 import { getViewerDevIds, redactEvent, redactSessionListRow, redactSessionRow, visibilityForRow } from "../services/visibility";
 
 function clampInt(val: string | undefined, def: number, max: number): number {
@@ -31,8 +34,19 @@ function mapSession(row: any) {
     totalCacheCreationTokens: Number(row.total_cache_creation_tokens ?? 0),
     totalCacheReadTokens: Number(row.total_cache_read_tokens ?? 0),
     estimatedCostUsd: Number(row.estimated_cost_usd ?? 0),
+    tokenSource: row.token_source ?? null,
   };
 }
+
+// Exact usage from transcripts still on disk (/devscope:backfill-usage).
+const backfillBody = z
+  .object({
+    items: z
+      .array(usageSnapshotSchema.extend({ sessionId: z.string().min(1).max(200).optional() }).strict())
+      .min(1)
+      .max(500),
+  })
+  .strict();
 
 /**
  * Map a session row after redacting it for this viewer; carries `visibility`.
@@ -46,6 +60,13 @@ function mapSessionFor(row: any, viewerDevIds: string[], opts: { list: boolean }
 
 export function sessionsRoutes(sql: SQL) {
   const app = new Hono();
+
+  // Only the caller's own sessions are updated; anything else is skipped.
+  app.post("/usage/backfill", zValidator("json", backfillBody), async (c) => {
+    const devIds = await getViewerDevIds(sql, c);
+    const { items } = c.req.valid("json");
+    return c.json(await backfillExactUsage(sql, devIds, items));
+  });
 
   app.get("/", async (c) => {
     const limit = clampInt(c.req.query("limit"), 50, 500);

@@ -8,10 +8,17 @@ import { SessionTurnCard } from "./SessionTurnCard";
 import { SessionFeedbackPanel } from "./SessionFeedbackPanel";
 import { buildTurns } from "@/lib/buildTurns";
 import type { SessionDetail as SessionDetailType, SessionTitle, SessionVisibility } from "@devscope/shared";
-import type { SessionTurn } from "@devscope/shared";
+import type { SessionTurn, TokenSource } from "@devscope/shared";
 import { parseUTC, formatTokenCount, formatCost } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
 import { ProjectLabel } from "@/components/ProjectLabel";
+
+// Costs are API list prices for the tokens used, not what a subscription plan pays.
+const COST_SOURCE_HINT: Record<TokenSource, string> = {
+  exact: "API-equivalent cost, summed from the session transcript",
+  estimated: "API-equivalent cost, estimated from the session's events (recorded by an older plugin)",
+  legacy: "Recorded by a plugin before 0.23.0, which counted only one API call. Replaced by an estimate once the session ends.",
+};
 
 interface SessionDetailProps {
   sessionId: string;
@@ -165,9 +172,18 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
                 </div>
               )}
               {sessionCost > 0 && (
-                <div className="flex items-center gap-2">
+                <div
+                  className="flex items-center gap-2"
+                  title={COST_SOURCE_HINT[session.tokenSource ?? "exact"]}
+                >
                   <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>{formatCost(sessionCost)}</span>
+                  <span>
+                    {session.tokenSource === "estimated" ? "~" : ""}
+                    {formatCost(sessionCost)}
+                    {session.tokenSource === "legacy" && (
+                      <span className="text-muted-foreground"> (undercounted)</span>
+                    )}
+                  </span>
                 </div>
               )}
               </>)}

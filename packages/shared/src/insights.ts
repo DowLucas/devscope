@@ -233,6 +233,10 @@ export interface TokenUsageSummary {
   avg_cost_per_session_usd: number;
   cache_hit_rate: number;
   sessions_with_token_data: number;
+  /** Sessions whose figures are a server-side estimate (pre-0.23.0 plugins). */
+  sessions_estimated: number;
+  /** Sessions still carrying the pre-0.23.0 undercount, awaiting estimation. */
+  sessions_legacy: number;
   avg_burn_rate: number;          // tokens/min across all sessions
   max_burn_rate: number;          // highest single-session tokens/min
   // Context health

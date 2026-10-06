@@ -30,9 +30,15 @@ export interface Session {
   totalOutputTokens?: number;
   totalCacheCreationTokens?: number;
   totalCacheReadTokens?: number;
+  /** API-equivalent list-price cost, not what a subscription plan pays. */
   estimatedCostUsd?: number;
+  /** Where the token figures come from; see migration 055. */
+  tokenSource?: TokenSource | null;
   visibility?: SessionVisibility;
 }
+
+/** exact: summed from the transcript. estimated: rebuilt from events. legacy: pre-0.23.0 undercount. */
+export type TokenSource = "exact" | "estimated" | "legacy";
 
 export type WsMessageType =
   | "event.new"
@@ -72,6 +78,7 @@ export interface SessionDetail {
     totalCacheCreationTokens?: number;
     totalCacheReadTokens?: number;
     estimatedCostUsd?: number;
+    tokenSource?: TokenSource | null;
   };
   events: Array<{
     id: string;
