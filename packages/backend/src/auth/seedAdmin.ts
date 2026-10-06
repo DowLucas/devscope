@@ -2,6 +2,17 @@ import type { SQL } from "bun";
 import { auth } from "../auth";
 import { linkUserToDeveloper } from "../services/developerLink";
 
+/**
+ * Marks an operator-configured account (the seeded admin, the dev bootstrap
+ * user) as verified. Password sign-in requires a verified email, and these
+ * accounts never get to click the link: a fresh install may have no mail
+ * transport, and migration 051 only grandfathered accounts that existed when
+ * it ran.
+ */
+export async function markEmailVerified(sql: SQL, userId: string): Promise<void> {
+  await sql`UPDATE auth_user SET "emailVerified" = TRUE, "updatedAt" = NOW() WHERE id = ${userId}`;
+}
+
 export async function seedDefaultAdmin(sql: SQL): Promise<void> {
   const [row] = await sql`SELECT COUNT(*)::INT AS cnt FROM auth_user`;
   if ((row as any)?.cnt > 0) return;
@@ -25,6 +36,7 @@ export async function seedDefaultAdmin(sql: SQL): Promise<void> {
     const signupRes = await auth.api.signUpEmail({ body: { email, password: adminPassword, name } });
     const userId = signupRes?.user?.id;
     if (!userId) throw new Error("No user ID returned from signup");
+    await markEmailVerified(sql, userId);
     console.log(`[devscope] Default admin seeded (${email})`);
 
     // Create organization directly via SQL — the better-auth server-side API

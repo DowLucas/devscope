@@ -6,7 +6,8 @@
  *   bun run packages/backend/scripts/dev-bootstrap.ts [--email=<e>] [--password=<p>] [--org=<name>]
  *
  * What it does (idempotent):
- *   1. Ensures an admin user exists (re-uses an existing one by email if found).
+ *   1. Ensures an admin user exists (re-uses an existing one by email if found),
+ *      with its email marked verified so it can sign in to the dashboard.
  *   2. Ensures that user owns an organization with `member` row + `organization_settings`.
  *   3. Sets `activeOrganizationId` on every existing `auth_session` row for that user
  *      so any browser session you already have starts receiving WS broadcasts.
@@ -33,6 +34,7 @@
 
 import { SQL } from "bun";
 import { auth } from "../src/auth";
+import { markEmailVerified } from "../src/auth/seedAdmin";
 
 interface Args {
   email: string;
@@ -58,6 +60,7 @@ async function ensureUser(sql: SQL, args: Args, name = "Admin"): Promise<string>
   `) as Array<{ id: string }>;
   if (existing.length > 0) {
     console.log(`[bootstrap] user exists  email=${args.email} id=${existing[0]!.id}`);
+    await markEmailVerified(sql, existing[0]!.id);
     return existing[0]!.id;
   }
   const res = await auth.api.signUpEmail({
@@ -65,6 +68,7 @@ async function ensureUser(sql: SQL, args: Args, name = "Admin"): Promise<string>
   });
   const userId = (res as any)?.user?.id;
   if (!userId) throw new Error("signUpEmail returned no user id");
+  await markEmailVerified(sql, userId);
   console.log(`[bootstrap] user created  email=${args.email} id=${userId}`);
   return userId;
 }
