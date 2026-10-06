@@ -28,6 +28,7 @@ import { startWorkflowProfileComputation } from "./jobs/workflowProfileComputati
 import { startSessionIntentClassification } from "./jobs/sessionIntentClassification";
 import { startCoachingCardGeneration } from "./jobs/coachingCards";
 import { startSemanticIndexing } from "./jobs/semanticIndexing";
+import { startTokenEstimation } from "./jobs/tokenEstimation";
 import { aiRoutes } from "./routes/ai";
 import { voiceRoutes } from "./routes/voice";
 import { coachingRoutes } from "./routes/coaching";
@@ -87,6 +88,7 @@ startWorkflowProfileComputation(sql);
 startSessionIntentClassification(sql);
 startCoachingCardGeneration(sql);
 startSemanticIndexing(sql);
+startTokenEstimation(sql);
 
 // Seed default friction rules
 await seedDefaultFrictionRules(sql);

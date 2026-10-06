@@ -15,6 +15,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { initializeDatabase } from "../schema";
 import { updateSessionTokens } from "../queries";
+import { inList } from "../utils";
 
 const dbUrl = process.env.TEST_DATABASE_URL;
 const d = dbUrl ? describe : describe.skip;
@@ -37,10 +38,7 @@ d("token_pricing — model_pattern matching (DEV-99)", () => {
     if (!sqlPromise) return;
     const sql = await sqlPromise;
     if (sessionIds.length > 0) {
-      await sql.unsafe(
-        `DELETE FROM sessions WHERE id = ANY($1::text[])`,
-        [sessionIds]
-      );
+      await sql`DELETE FROM sessions WHERE id IN (${inList(sessionIds)})`;
     }
     await sql`DELETE FROM developers WHERE id = ${devId}`;
   });
@@ -77,14 +75,30 @@ d("token_pricing — model_pattern matching (DEV-99)", () => {
     expect(cost).toBeCloseTo(3.0, 4);
   });
 
-  test("an Opus-4 session uses the opus-4 row ($15 / Mtok input)", async () => {
-    const cost = await costFor("claude-opus-4-6", 1_000_000);
+  test("Opus 4.0 keeps the original Opus price ($15 / Mtok input)", async () => {
+    const cost = await costFor("claude-opus-4-20250514", 1_000_000);
     expect(cost).toBeCloseTo(15.0, 4);
   });
 
+  test("Opus 4.6 uses its own row ($5 / Mtok input), not the Opus 4.0 one", async () => {
+    const cost = await costFor("claude-opus-4-6", 1_000_000);
+    expect(cost).toBeCloseTo(5.0, 4);
+  });
+
+  test("Claude Code's [1m] suffix still matches (Opus 5.5 at $4 / Mtok input)", async () => {
+    const cost = await costFor("claude-opus-5-5[1m]", 1_000_000);
+    expect(cost).toBeCloseTo(4.0, 4);
+  });
+
+  test("Fable 5.1 and Sonnet 5 have their own rows", async () => {
+    expect(await costFor("claude-fable-5-1", 1_000_000)).toBeCloseTo(10.0, 4);
+    expect(await costFor("claude-sonnet-5", 1_000_000)).toBeCloseTo(2.0, 4);
+  });
+
   test("a Haiku-4.5 session uses the haiku-4-5 row ($1 / Mtok input)", async () => {
-    const cost = await costFor("claude-haiku-4-5-20251001", 1_000_000);
-    expect(cost).toBeCloseTo(1.0, 4);
+    expect(await costFor("claude-haiku-4-5-20251001", 1_000_000)).toBeCloseTo(1.0, 4);
+    // The undated id, which 038's 'claude-haiku-4-5-%' pattern missed.
+    expect(await costFor("claude-haiku-4-5", 1_000_000)).toBeCloseTo(1.0, 4);
   });
 
   test("an unknown model falls back to the '*' row (Sonnet-4 fallback rates)", async () => {

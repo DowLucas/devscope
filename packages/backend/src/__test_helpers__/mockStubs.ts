@@ -134,6 +134,14 @@ export function dbStubs(overrides: Record<string, unknown> = {}) {
     vectorSearchTurns: noopArr,
     fetchSearchHits: noopArr,
     getSearchableProjects: noopArr,
+    // tokenUsageQueries.ts
+    applyUsageSnapshot: noop,
+    rollupSessions: noop,
+    getTokenSource: noop,
+    estimateUsage: mock(() => null),
+    estimateSession: noop,
+    getLegacySessions: noopArr,
+    backfillExactUsage: mock(() => Promise.resolve({ applied: 0, skipped: 0 })),
     // errorRecallQueries.ts
     MIN_ERROR_CHARS: 20,
     getPendingErrors: noopArr,

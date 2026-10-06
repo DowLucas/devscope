@@ -12,6 +12,8 @@ const mockEndSession = mock(() => Promise.resolve());
 const mockInsertEvent = mock(() => Promise.resolve({ stored: true }));
 const mockGetRecentEvents = mock(() => Promise.resolve([] as any[]));
 const mockCheckAlertThresholds = mock(() => Promise.resolve(null as any));
+const mockApplyUsageSnapshot = mock(() => Promise.resolve());
+const mockUpdateSessionTokens = mock(() => Promise.resolve());
 const mockGetSessionAudience = mock(() =>
   Promise.resolve({ shareDetails: false, privacyMode: null as string | null, ownerUserIds: [] as string[] }),
 );
@@ -24,6 +26,8 @@ mock.module("../../db", () => dbStubs({
   getRecentEvents: mockGetRecentEvents,
   checkAlertThresholds: mockCheckAlertThresholds,
   getSessionAudience: mockGetSessionAudience,
+  applyUsageSnapshot: mockApplyUsageSnapshot,
+  updateSessionTokens: mockUpdateSessionTokens,
 }));
 
 const mockBroadcastToOrg = mock(() => {});
@@ -1568,5 +1572,50 @@ describe("GET /events/recent", () => {
     expect(body[0].developerId).toBe("");
     // project_path null → fallback to ""
     expect(body[0].projectPath).toBe("");
+  });
+});
+
+describe("token usage on response.complete", () => {
+  const snapshot = {
+    transcriptId: "cc-1",
+    byModel: {
+      "claude-opus-5-5": { input: 10, output: 500, cacheWrite5m: 0, cacheWrite1h: 2000, cacheRead: 90000, calls: 3 },
+    },
+  };
+  const legacy = { inputTokens: 2, outputTokens: 50, cacheCreationTokens: 10, cacheReadTokens: 40000 };
+
+  beforeEach(() => {
+    mockApplyUsageSnapshot.mockClear();
+    mockUpdateSessionTokens.mockClear();
+  });
+
+  const post = (payload: Record<string, unknown>) => {
+    const sql = makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }]);
+    return buildApp(sql).request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ eventType: "response.complete", payload })),
+    });
+  };
+
+  test("an exact snapshot is stored and the legacy figure ignored", async () => {
+    const res = await post({ responseLength: 10, tokenUsage: legacy, usageSnapshot: snapshot });
+    expect(res.status).toBe(200);
+    expect(mockApplyUsageSnapshot).toHaveBeenCalledTimes(1);
+    expect((mockApplyUsageSnapshot.mock.calls[0] as any[]).slice(1)).toEqual(["sess-1", snapshot]);
+    expect(mockUpdateSessionTokens).not.toHaveBeenCalled();
+  });
+
+  test("an old plugin's tokenUsage still takes the legacy path", async () => {
+    await post({ responseLength: 10, tokenUsage: legacy });
+    expect(mockUpdateSessionTokens).toHaveBeenCalledTimes(1);
+    expect(mockApplyUsageSnapshot).not.toHaveBeenCalled();
+  });
+
+  test("a malformed snapshot falls back to the legacy path and never breaks ingestion", async () => {
+    const res = await post({ responseLength: 10, tokenUsage: legacy, usageSnapshot: { transcriptId: "x", byModel: { m: { input: -1 } } } });
+    expect(res.status).toBe(200);
+    expect(mockApplyUsageSnapshot).not.toHaveBeenCalled();
+    expect(mockUpdateSessionTokens).toHaveBeenCalledTimes(1);
   });
 });

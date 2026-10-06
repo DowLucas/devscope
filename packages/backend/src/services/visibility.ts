@@ -63,7 +63,7 @@ function pick(obj: Record<string, unknown>, keys: readonly string[]): Record<str
 // or exports of other people's sessions (no per-developer comparisons).
 const USAGE_SESSION_KEYS = [
   "total_input_tokens", "total_output_tokens", "total_cache_creation_tokens",
-  "total_cache_read_tokens", "estimated_cost_usd", "peak_context_tokens",
+  "total_cache_read_tokens", "estimated_cost_usd", "peak_context_tokens", "token_source",
   "segment_peak_input", "segment_peak_output", "segment_peak_cache_creation", "segment_peak_cache_read",
 ] as const;
 

@@ -156,6 +156,7 @@ describe("GET /sessions", () => {
       totalCacheCreationTokens: 0,
       totalCacheReadTokens: 0,
       estimatedCostUsd: 0,
+      tokenSource: null,
       visibility: "shared",
     });
   });
