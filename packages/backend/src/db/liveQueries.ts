@@ -165,7 +165,6 @@ export interface SuggestionRow {
   prompt_at: string;
   tool_calls: number;
   tool_failures: number;
-  session_title: string | null;
   project_name: string;
   /** The session owner's label on this turn, if any. */
   label: TurnLabel | null;
@@ -191,7 +190,6 @@ export async function getTurnSuggestionRows(
       t.prompt_at,
       t.tool_calls,
       t.tool_failures,
-      s.current_title AS session_title,
       s.project_name,
       lbl.label,
       EXISTS (

@@ -62,8 +62,5 @@ export function rankSuggestions(
     .map(({ row }) => ({
       text: row.prompt_text.slice(0, NEXT_PROMPTS.maxChars),
       project: row.project_name,
-      sessionTitle: row.session_title,
-      toolCalls: row.tool_calls,
-      label: row.label,
     }));
 }

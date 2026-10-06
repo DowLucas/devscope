@@ -25,7 +25,7 @@ import {
 } from "../ai/embeddings";
 import { getOwnOrgDevIds, getSearchableDevIdsFor } from "../services/visibility";
 import { takePendingNudge } from "../services/sessionStuckState";
-import { renderSkillMd } from "../services/teamSkillMd";
+import { oneLine, renderSkillMd } from "../services/teamSkillMd";
 import { NEXT_PROMPTS, RECENCY_STEP, rankSuggestions } from "../services/nextPrompts";
 
 // In-session endpoints for the devscope-live mod (Claude Code function hooks).
@@ -88,9 +88,9 @@ const SESSION_NOT_FOUND = { error: "Session not found" } as const;
 function toLiveSkill(skill: Awaited<ReturnType<typeof getTeamSkills>>[number]): LiveTeamSkill {
   return {
     id: skill.id,
-    name: skill.name,
-    description: skill.description,
-    triggerPhrases: skill.trigger_phrases,
+    name: oneLine(skill.name, 100),
+    description: oneLine(skill.description, 1024),
+    triggerPhrases: skill.trigger_phrases.map((t) => oneLine(t, 500)),
     content: renderSkillMd(skill),
   };
 }

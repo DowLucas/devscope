@@ -8,7 +8,6 @@ const row = (over: Partial<SuggestionRow> = {}): SuggestionRow => ({
   prompt_at: "2026-10-01T00:00:00Z",
   tool_calls: 3,
   tool_failures: 0,
-  session_title: "Title",
   project_name: "proj",
   label: null,
   has_merged_pr: false,
@@ -51,7 +50,7 @@ describe("rankSuggestions", () => {
       { limit: 5, exclude: "Fix the  bug" },
     );
     expect(out).toHaveLength(1);
-    expect(out[0]).toEqual({ text: "run the tests", project: "proj", sessionTitle: "Title", toolCalls: 3, label: "up" });
+    expect(out[0]).toEqual({ text: "run the tests", project: "proj" });
   });
 
   test("limits and trims", () => {

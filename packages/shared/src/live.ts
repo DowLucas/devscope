@@ -26,8 +26,4 @@ export interface NextPromptSuggestion {
   /** Up to 500 characters. */
   text: string;
   project: string;
-  sessionTitle: string | null;
-  toolCalls: number;
-  /** The session owner's label on that turn, if any. */
-  label: TurnLabel | null;
 }

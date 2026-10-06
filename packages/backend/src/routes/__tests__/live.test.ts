@@ -98,7 +98,6 @@ const row = (over: Record<string, unknown> = {}) => ({
   prompt_at: "2026-10-01T10:00:00Z",
   tool_calls: 4,
   tool_failures: 0,
-  session_title: "Auth fix",
   project_name: "proj",
   label: null,
   has_merged_pr: false,
@@ -223,7 +222,8 @@ describe("POST /next-prompts", () => {
     // The current DevScope session is excluded from the search.
     expect((mockSearchTurns.mock.calls[0] as any[])[1].excludeSessionId).toBe("ds-1");
     expect(body.suggestions.map((s: any) => s.text)).toEqual(["commit it", "add a test"]);
-    expect(Object.keys(body.suggestions[0]).sort()).toEqual(["label", "project", "sessionTitle", "text", "toolCalls"]);
+    // Only what the mod shows: a teammate's own label and session title stay on the server.
+    expect(Object.keys(body.suggestions[0]).sort()).toEqual(["project", "text"]);
   });
 
   test("opening prompts of the project when there is no previous prompt", async () => {
