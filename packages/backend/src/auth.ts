@@ -120,11 +120,13 @@ export const auth = betterAuth({
     .map((o) => o.trim()),
   plugins: [
     apiKey({
-      rateLimit: {
-        enabled: true,
-        maxRequests: 15,
-        timeWindow: 1000, // 15 requests per second
-      },
+      // Off: better-auth resets a key's count only after a full window with no
+      // request, so a session sending events steadily (even 2/s) ran into "15
+      // per second" over and over, and better-auth 1.5 throws that as a 401,
+      // which the plugin drops. Our own per-route limits (rateLimitMiddleware:
+      // 300/min per key owner, /api/events 120/min, /api/ai, /api/similar)
+      // are fixed windows and answer 429, which the plugin retries.
+      rateLimit: { enabled: false },
     }),
     organization({
       allowUserToCreateOrganization: true,

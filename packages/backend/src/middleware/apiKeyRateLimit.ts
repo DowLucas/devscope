@@ -13,6 +13,16 @@
  * than the window since the *previous* request, so it caps an unbroken run of
  * requests less than a window apart, not requests per window.
  */
+/**
+ * The same for the APIError better-auth 1.5 *throws* when a key is over its
+ * limit (`body: { code: "RATE_LIMITED", details: { tryAgainIn } }`): without
+ * this the catch fell through to the session check and answered 401.
+ */
+export function apiKeyRateLimitRetryAfterFromError(err: unknown): number | null {
+  const body = (err as { body?: unknown } | null)?.body;
+  return body && typeof body === "object" ? apiKeyRateLimitRetryAfter({ error: body }) : null;
+}
+
 export function apiKeyRateLimitRetryAfter(result: unknown): number | null {
   const error = (result as { error?: { code?: unknown; details?: { tryAgainIn?: unknown } } } | null)
     ?.error;
