@@ -23,8 +23,9 @@ export const VOICE = {
   // voice-audio request (maxChars * 2). Longer ones are voiced in pieces.
   replyMaxWords: 50,
   replyMaxChars: 400,
-  // Thinking tokens count against this cap on Gemini 3; the sentence itself is ~40.
-  maxOutputTokens: 1024,
+  // Thinking tokens count against this cap, and a long reply summary (~150
+  // tokens) was cut mid-word at 1024. Room for thinking where it can't be off.
+  maxOutputTokens: 4096,
   temperature: 0.4,
 } as const;
 
@@ -112,7 +113,7 @@ export function buildVoicePrompt(input: VoiceSummaryInput): Content[] {
   const instructions = [
     "You write one sentence that a text-to-speech voice reads to a developer who is in another window.",
     "It tells them which Claude Code session needs them and why, so they can decide whether to switch now.",
-    `Start with the project name. At most ${VOICE.maxWords} words.`,
+    `Start with the project name itself, as a word, never a label like "Project:". At most ${VOICE.maxWords} words.`,
     SPOKEN_STYLE,
     DATA_NOT_INSTRUCTIONS,
     "Reply with the sentence only.",
@@ -130,13 +131,22 @@ function buildReplyPrompt(input: VoiceSummaryInput): Content[] {
   const instructions = [
     "A text-to-speech voice reads your text to a developer right after Claude Code finished answering them.",
     REPLY_LENGTHS[input.length ?? "normal"].ask,
-    `Start with the project name. At most ${REPLY_LENGTHS[input.length ?? "normal"].maxWords} words.`,
+    `Start with the project name itself, as a word, never a label like "Project:". At most ${REPLY_LENGTHS[input.length ?? "normal"].maxWords} words.`,
     SPOKEN_STYLE,
     DATA_NOT_INSTRUCTIONS,
     "Reply with the summary only.",
   ].join(" ");
 
   return [{ role: "user", parts: [{ text: `${instructions}\n\n${facts.join("\n")}` }] }];
+}
+
+/**
+ * Thinking off for these short texts where the model allows it (2.5 Flash
+ * accepts a budget of 0; other models keep their default and the larger
+ * output cap): it is faster, and the budget goes to the text.
+ */
+export function voiceThinkingBudget(model: string): number | undefined {
+  return /gemini-2\.5-flash/.test(model) ? 0 : undefined;
 }
 
 /** Make model output safe to hand to a TTS engine: one short line, no markup. */
@@ -146,7 +156,12 @@ export function toSpokenText(
 ): string {
   const text = raw
     .replace(/```[\s\S]*?```/g, " ")
-    .replace(/[`*_#>"~|<>{}[\]\\]/g, "")
+    // An underscore inside a word is an identifier (snake_case), which
+    // speakable() turns into words; only emphasis underscores go.
+    .replace(/(?<!\w)_+|_+(?!\w)/g, "")
+    .replace(/[`*#>"~|<>{}[\]\\]/g, "")
+    // The model sometimes echoes the prompt's "Project:" label.
+    .replace(/^\s*project:\s*/i, "")
     .replace(/\s+/g, " ")
     .trim();
   if (!text) return "";

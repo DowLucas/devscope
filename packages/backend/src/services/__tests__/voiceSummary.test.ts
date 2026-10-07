@@ -7,6 +7,7 @@ import {
   toSpokenText,
   voiceAudioBody,
   voiceSummaryBody,
+  voiceThinkingBudget,
 } from "../voiceSummary";
 
 describe("voiceSummaryBody", () => {
@@ -88,6 +89,15 @@ describe("reply length (verbosity)", () => {
   });
 });
 
+describe("voiceThinkingBudget", () => {
+  test("off for 2.5 Flash, the model's default elsewhere", () => {
+    expect(voiceThinkingBudget("gemini-2.5-flash")).toBe(0);
+    expect(voiceThinkingBudget("gemini-2.5-flash-lite")).toBe(0);
+    expect(voiceThinkingBudget("gemini-2.5-pro")).toBeUndefined();
+    expect(voiceThinkingBudget("gemini-3-flash")).toBeUndefined();
+  });
+});
+
 describe("spokenLimits", () => {
   test("replies may run longer than announcements but fit one audio request", () => {
     expect(spokenLimits("permission")).toEqual({ maxWords: VOICE.maxWords, maxChars: VOICE.maxChars });
@@ -120,6 +130,12 @@ describe("toSpokenText", () => {
       spokenLimits("reply"),
     );
     expect(out.split(" ").length).toBe(VOICE.replyMaxWords);
+  });
+
+  test("keeps identifiers' underscores for speakable, drops emphasis and an echoed label", () => {
+    expect(toSpokenText("Project: devscope _really_ fixed __init__ and _ds_voice_speak")).toBe(
+      "devscope really fixed init and ds_voice_speak",
+    );
   });
 
   test("returns empty for empty model output", () => {
