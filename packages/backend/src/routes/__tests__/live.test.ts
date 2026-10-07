@@ -210,10 +210,20 @@ describe("POST /next-prompts", () => {
       Promise.resolve([
         { source_turn_id: "s1", turn_id: "n1" },
         { source_turn_id: "s2", turn_id: "n2" },
+        { source_turn_id: "s1", turn_id: "n3" },
+        { source_turn_id: "s2", turn_id: "n4" },
+        { source_turn_id: "s1", turn_id: "n5" },
       ]),
     );
     mockSuggestionRows.mockImplementation(() =>
-      Promise.resolve([row({ turn_id: "n1", prompt_text: "add a test" }), row({ turn_id: "n2", prompt_text: "commit it", label: "up" })]),
+      Promise.resolve([
+        row({ turn_id: "n1", session_id: "a", prompt_text: "add a test" }),
+        row({ turn_id: "n3", session_id: "b", prompt_text: "Add a  test" }),
+        row({ turn_id: "n2", session_id: "c", prompt_text: "commit it", label: "up" }),
+        row({ turn_id: "n4", session_id: "d", prompt_text: "commit it" }),
+        // Came next only once, and far too long to suggest anyway.
+        row({ turn_id: "n5", session_id: "e", prompt_text: "please rewrite the whole auth module with tests" }),
+      ]),
     );
     const res = await post(buildApp(), "/live/next-prompts", { session_id: "cc-1", after: "fix the auth bug" });
     const body = await res.json();
@@ -227,15 +237,19 @@ describe("POST /next-prompts", () => {
   });
 
   test("opening prompts of the project when there is no previous prompt", async () => {
-    mockOpeningIds.mockImplementation(() => Promise.resolve(["o1", "o2"]));
+    mockOpeningIds.mockImplementation(() => Promise.resolve(["o1", "o2", "o3", "o4", "o5"]));
     mockSuggestionRows.mockImplementation(() =>
       Promise.resolve([
-        row({ turn_id: "o1", prompt_text: "older", prompt_at: "2026-09-01T00:00:00Z" }),
-        row({ turn_id: "o2", prompt_text: "newer", prompt_at: "2026-10-01T00:00:00Z" }),
+        row({ turn_id: "o1", session_id: "a", prompt_text: "start backend", prompt_at: "2026-09-01T00:00:00Z" }),
+        row({ turn_id: "o2", session_id: "b", prompt_text: "start backend", prompt_at: "2026-09-02T00:00:00Z" }),
+        row({ turn_id: "o3", session_id: "c", prompt_text: "start backend", prompt_at: "2026-09-03T00:00:00Z" }),
+        // Newer, but opened only two sessions: below the opening bar of three.
+        row({ turn_id: "o4", session_id: "d", prompt_text: "pull latest", prompt_at: "2026-10-01T00:00:00Z" }),
+        row({ turn_id: "o5", session_id: "e", prompt_text: "pull latest", prompt_at: "2026-10-02T00:00:00Z" }),
       ]),
     );
     const res = await post(buildApp(), "/live/next-prompts", { session_id: "cc-1", project: "proj", limit: 1 });
-    expect((await res.json()).suggestions.map((s: any) => s.text)).toEqual(["newer"]);
+    expect((await res.json()).suggestions.map((s: any) => s.text)).toEqual(["start backend"]);
     expect(mockEmbedDocs).not.toHaveBeenCalled();
   });
 
