@@ -5,6 +5,9 @@ import { parseUTC } from "@/lib/utils";
 export interface ActiveAgent {
   agentId: string;
   agentType: string;
+  /** The Agent tool call's description; plugin 0.31.0+, never for private sessions. */
+  description?: string | null;
+  model?: string | null;
   sessionId: string;
   startedAt: string;
 }

@@ -208,11 +208,9 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
     // Session + agent nodes (placeholder event data — filled in stage 2)
     for (const session of activeSessions) {
       const devId = session.developerId;
-      const dev = developers.find((d) => d.id === devId);
 
       const data: SessionNodeData = {
         session,
-        developerName: dev?.name ?? "Unknown",
         recentEvents: [],
         latestEvent: null,
         isToolRunning: false,
@@ -244,6 +242,8 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
         const agentData: AgentNodeData = {
           agentId: agent.agentId,
           agentType: agent.agentType,
+          description: agent.description ?? null,
+          model: agent.model ?? null,
           sessionId: agent.sessionId,
           startedAt: agent.startedAt,
           latestEvent: null,

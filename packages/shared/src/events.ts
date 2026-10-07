@@ -131,6 +131,10 @@ export interface AgentEventPayload {
   agentType: string;
   agentId: string;
   parentAgentId?: string | null;
+  // SubagentStart only (plugin 0.31.0+): what the Agent tool call asked for.
+  // `description` is never sent from private sessions.
+  description?: string;
+  model?: string;
   // SubagentStop only: length of the agent's last assistant message in chars.
   // We never store the raw message body — privacy-preserving signal that lets
   // us reason about subagent verbosity/output volume without surfacing content.

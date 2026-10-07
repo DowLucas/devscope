@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Tell topology sessions and subagents apart.** Session cards show the git
+  branch (new `sessions.git_branch`, migration 057, from `session.start`; never
+  stored for `private` sessions) in place of the developer name the parent node
+  already shows. Subagent cards show what they were asked to do and their model
+  (`description` / `model` on `agent.start`, sent by plugin 0.31.0+, returned on
+  `activeAgents`; activity-only viewers still get no agents).
+
 - **Topology shows what each session is actually doing.** A session whose turn
   finished reads "Your turn" instead of "Idle", turns a dimmed "Inactive" after
   2 minutes without events, and shows "active 3m ago" instead of its start time.

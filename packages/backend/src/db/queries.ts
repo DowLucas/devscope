@@ -59,6 +59,7 @@ export async function createSession(
   privacyMode: string | null = null,
   saltVersion: number = 1,
   model: string | null = null,
+  gitBranch: string | null = null,
 ) {
   // DEV-76: salt_version is set on first INSERT and intentionally NOT
   // updated on conflict — once a session has been stamped with a version,
@@ -67,12 +68,13 @@ export async function createSession(
   // conflict so a later session.start without `model` (older plugin) does
   // not blank out a previously-stamped value.
   await sql`
-    INSERT INTO sessions (id, developer_id, project_path, project_name, permission_mode, privacy_mode, salt_version, model)
-    VALUES (${id}, ${developerId}, ${projectPath}, ${projectName}, ${permissionMode}, ${privacyMode}, ${saltVersion}, ${model})
+    INSERT INTO sessions (id, developer_id, project_path, project_name, permission_mode, privacy_mode, salt_version, model, git_branch)
+    VALUES (${id}, ${developerId}, ${projectPath}, ${projectName}, ${permissionMode}, ${privacyMode}, ${saltVersion}, ${model}, ${gitBranch})
     ON CONFLICT(id) DO UPDATE SET
       permission_mode = COALESCE(EXCLUDED.permission_mode, sessions.permission_mode),
       privacy_mode = COALESCE(EXCLUDED.privacy_mode, sessions.privacy_mode),
       model = COALESCE(EXCLUDED.model, sessions.model),
+      git_branch = COALESCE(EXCLUDED.git_branch, sessions.git_branch),
       status = 'active',
       ended_at = NULL
     WHERE sessions.developer_id = EXCLUDED.developer_id`;
@@ -117,6 +119,8 @@ export async function getActiveAgents(sql: SQL) {
     SELECT
       e.payload->>'agentId'   AS agent_id,
       e.payload->>'agentType' AS agent_type,
+      e.payload->>'description' AS description,
+      e.payload->>'model' AS model,
       e.session_id,
       e.created_at AS started_at
     FROM events e

@@ -27,6 +27,8 @@ export interface Session {
   status: "active" | "ended";
   permissionMode: string | null;
   privacyMode: PrivacyMode;
+  /** Branch at session start; null for private sessions and older plugins. */
+  gitBranch?: string | null;
   currentTitle?: string | null;
   totalInputTokens?: number;
   totalOutputTokens?: number;

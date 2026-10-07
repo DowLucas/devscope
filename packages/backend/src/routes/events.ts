@@ -396,9 +396,12 @@ export function eventsRoutes(sql: SQL) {
     const model = event.eventType === "session.start"
       ? (event.payload as { model?: string }).model ?? null
       : null;
+    const gitBranch = event.eventType === "session.start" && privacyMode !== "private"
+      ? (event.payload as { gitBranch?: string }).gitBranch ?? null
+      : null;
     const shouldCreateOrReactivate = !existingSession || wasEnded || event.eventType === "session.start";
     if (shouldCreateOrReactivate) {
-      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode, CURRENT_SALT_VERSION, model);
+      await createSession(sql, event.sessionId, event.developerId, event.projectPath, event.projectName, permissionMode, privacyMode, CURRENT_SALT_VERSION, model, gitBranch);
     }
 
     // DEV-76: Defense-in-depth — never persist a `salt` value into events.payload.

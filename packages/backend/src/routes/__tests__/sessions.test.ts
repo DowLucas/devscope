@@ -147,6 +147,7 @@ describe("GET /sessions", () => {
       permissionMode: "default",
       privacyMode: "standard",
       model: null,
+      gitBranch: null,
       developerName: "Alice",
       developerEmail: "alice@example.com",
       eventCount: 5,
@@ -273,6 +274,8 @@ describe("GET /sessions/active", () => {
     expect(s1.activeAgents[0]).toEqual({
       agentId: "agent-1",
       agentType: "sub",
+      description: null,
+      model: null,
       sessionId: "sess-1",
       startedAt: "2026-03-01T10:05:00Z",
     });
@@ -302,6 +305,24 @@ describe("GET /sessions/active", () => {
     const s2 = body.find((s: any) => s.id === "sess-2");
     expect(s2.lastEventAt).toBe("2026-03-01T10:08:00Z");
     expect(s2.projectName).toBeNull();
+  });
+
+  test("returns agent description and model, but no agents for an activity-only session", async () => {
+    const own = makeSessionRow({ id: "sess-1" });
+    const teammate = makeSessionRow({ id: "sess-2", developer_id: "dev-bbb", owner_share_details: false });
+    mockGetActiveSessions.mockImplementation(() => Promise.resolve([own, teammate]));
+    mockGetActiveAgents.mockImplementation(() => Promise.resolve([
+      { agent_id: "a1", agent_type: "Explore", description: "Map the code", model: "haiku", session_id: "sess-1", started_at: "2026-03-01T10:05:00Z" },
+      { agent_id: "a2", agent_type: "Explore", description: "Their task", model: "haiku", session_id: "sess-2", started_at: "2026-03-01T10:05:00Z" },
+    ]));
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-aaa"]));
+
+    const app = buildApp({ orgDeveloperIds: ["dev-aaa", "dev-bbb"], user: { id: "user-1" } });
+    const body = await (await app.request("/sessions/active")).json();
+
+    const s1 = body.find((s: any) => s.id === "sess-1");
+    expect(s1.activeAgents[0]).toMatchObject({ description: "Map the code", model: "haiku" });
+    expect(body.find((s: any) => s.id === "sess-2").activeAgents).toEqual([]);
   });
 
   test("passes orgDeveloperIds to getActiveSessions", async () => {

@@ -376,6 +376,7 @@ describe("POST /events", () => {
       null, // privacyMode not set in default payload
       1, // DEV-76: CURRENT_SALT_VERSION stamped on the session row
       null, // DEV-93: model not set in default payload
+      null, // git branch not set in default payload
     );
   });
 
@@ -401,6 +402,7 @@ describe("POST /events", () => {
       "private",
       1, // DEV-76: CURRENT_SALT_VERSION
       null, // DEV-93: model not set in this payload
+      null, // private sessions never store the git branch
     );
   });
 
@@ -426,7 +428,34 @@ describe("POST /events", () => {
       null,
       1,
       "claude-sonnet-4-20250514", // DEV-93: model id round-trips from payload to createSession
+      null,
     );
+  });
+
+  test("passes gitBranch from session.start payload to createSession", async () => {
+    const sql = makeMockSql([], []);
+    const app = buildApp(sql);
+
+    await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ payload: { gitBranch: "feat/topology" } })),
+    });
+
+    expect(mockCreateSession.mock.calls.at(-1)?.[9]).toBe("feat/topology");
+  });
+
+  test("drops gitBranch from a private session.start", async () => {
+    const sql = makeMockSql([], []);
+    const app = buildApp(sql);
+
+    await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ payload: { gitBranch: "feat/secret", privacyMode: "private" } })),
+    });
+
+    expect(mockCreateSession.mock.calls.at(-1)?.[9]).toBeNull();
   });
 
   // -----------------------------------------------------------------------
