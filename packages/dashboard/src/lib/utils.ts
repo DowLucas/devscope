@@ -27,6 +27,21 @@ export function formatCost(usd: number): string {
   return `$${usd.toFixed(2)}`;
 }
 
+/** All tokens a session used: input, output and cache writes and reads. */
+export function sessionTokenTotal(session: {
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalCacheCreationTokens?: number;
+  totalCacheReadTokens?: number;
+}): number {
+  return (
+    (session.totalInputTokens ?? 0) +
+    (session.totalOutputTokens ?? 0) +
+    (session.totalCacheCreationTokens ?? 0) +
+    (session.totalCacheReadTokens ?? 0)
+  );
+}
+
 /** Human-friendly relative time string. */
 export function timeAgo(timestamp: string): string {
   const diff = Date.now() - parseUTC(timestamp).getTime();

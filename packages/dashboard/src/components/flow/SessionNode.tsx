@@ -7,7 +7,7 @@ import type { PromptEventPayload, AgentEventPayload } from "@devscope/shared";
 import { ShieldOff, Lock, GitBranch } from "lucide-react";
 import { ActivityBadge } from "./ActivityBadge";
 import { useDebouncedToolState } from "@/hooks/useDebouncedToolState";
-import { timeAgo } from "@/lib/utils";
+import { formatCost, formatTokenCount, sessionTokenTotal, timeAgo } from "@/lib/utils";
 import { ProjectLabel } from "@/components/ProjectLabel";
 
 const EVENT_LABELS: Record<string, string> = {
@@ -58,8 +58,18 @@ const EVENT_COLORS: Record<string, string> = {
   "teammate.idle": "text-gray-400 bg-gray-500/15",
 };
 
+/** "claude-opus-5-5" → "opus-5-5", short enough for a card. */
+function shortModel(model: string | null | undefined): string | null {
+  return model ? model.replace(/^claude-/, "") : null;
+}
+
 export function SessionNode({ data, selected }: NodeProps & { data: SessionNodeData }) {
-  const { session, latestEvent, isToolRunning, currentToolName, activityState, lastActivityAt } = data;
+  const { session, latestEvent, isToolRunning, currentToolName, activityState, lastActivityAt, toolCalls, toolFailures } = data;
+  // Usage is only returned for the viewer's own sessions.
+  const usage = session.tokenSource != null
+    ? `${formatTokenCount(sessionTokenTotal(session))} tok · ${formatCost(session.estimatedCostUsd ?? 0)}`
+    : null;
+  const meta = [shortModel(session.model), usage].filter(Boolean).join(" · ");
   const isDangerousMode = session.permissionMode === "dangerously-skip-permissions";
   const isRedactedMode = session.privacyMode === "private";
 
@@ -143,9 +153,16 @@ export function SessionNode({ data, selected }: NodeProps & { data: SessionNodeD
         </span>
       </div>
 
-      <div className="mt-1 text-xs text-gray-600">
-        active {timeAgo(lastActivityAt)}
+      <div className="mt-1 flex items-center justify-between gap-2 text-xs text-gray-600">
+        <span>active {timeAgo(lastActivityAt)}</span>
+        {toolCalls != null ? (
+          <span>
+            {toolCalls} tools
+            {toolFailures ? <span className="text-red-400"> · {toolFailures} failed</span> : null}
+          </span>
+        ) : null}
       </div>
+      {meta ? <div className="truncate text-xs text-gray-500">{meta}</div> : null}
 
       <ActivityBadge
         isToolRunning={debounced.isToolRunning}

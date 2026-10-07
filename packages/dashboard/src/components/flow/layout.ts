@@ -8,6 +8,8 @@ const NODE_HEIGHT_SESSION = 160;
 const NODE_WIDTH_AGENT = 240;
 const NODE_HEIGHT_AGENT = 110;
 const NODE_HEIGHT_AGENT_SUMMARY = 64;
+const NODE_WIDTH_PROJECT = 200;
+const NODE_HEIGHT_PROJECT = 48;
 
 function getNodeDimensions(type: string): { width: number; height: number } {
   switch (type) {
@@ -15,6 +17,8 @@ function getNodeDimensions(type: string): { width: number; height: number } {
       return { width: NODE_WIDTH_DEVELOPER, height: NODE_HEIGHT_DEVELOPER };
     case "agent":
       return { width: NODE_WIDTH_AGENT, height: NODE_HEIGHT_AGENT };
+    case "project":
+      return { width: NODE_WIDTH_PROJECT, height: NODE_HEIGHT_PROJECT };
     case "agentSummary":
       return { width: NODE_WIDTH_AGENT, height: NODE_HEIGHT_AGENT_SUMMARY };
     default:

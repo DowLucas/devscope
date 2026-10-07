@@ -136,6 +136,8 @@ export function buildDemoLayout(): { nodes: Node[]; edges: Edge[] } {
       currentToolName: null,
       activityState: "idle",
       lastActivityAt: minutesAgo(0),
+      toolCalls: null,
+      toolFailures: null,
     };
     nodes.push({ id: `session-${s.session.id}`, type: "session", position: { x: 0, y: 0 }, data });
     edges.push({

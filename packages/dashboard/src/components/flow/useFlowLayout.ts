@@ -7,9 +7,10 @@ import type {
   SessionNodeData,
   AgentNodeData,
   AgentSummaryNodeData,
+  ProjectNodeData,
   SessionActivityState,
 } from "./flowTypes";
-import type { FeedEvent, ToolEventPayload, AgentEventPayload } from "@devscope/shared";
+import type { FeedEvent, Session, ToolEventPayload, AgentEventPayload } from "@devscope/shared";
 import { useNow } from "@/hooks/useNow";
 import { parseUTC } from "@/lib/utils";
 import { getLayoutedElements } from "./layout";
@@ -161,8 +162,26 @@ function summarizeAgentTypes(agents: ActiveAgent[]): AgentSummaryNodeData["types
     .sort((a, b) => b.count - a.count);
 }
 
-export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
-  const { developers, activeSessions, activeAgents, stoppedAgents, events, latestSessionEvents } =
+export interface FlowFilters {
+  hideInactive: boolean;
+  hideDoneAgents: boolean;
+}
+
+interface SessionActivity {
+  ownEvents: FeedEvent[];
+  latestEvent: FeedEvent | null;
+  lastActivityAt: string;
+  state: SessionActivityState;
+}
+
+/** Edges carry the sessions below them, so an edge animates while any of them works. */
+interface FlowEdgeData {
+  [key: string]: unknown;
+  sessionIds: string[];
+}
+
+export function useFlowLayout(filters: FlowFilters): { nodes: Node[]; edges: Edge[] } {
+  const { developers, activeSessions, activeAgents, stoppedAgents, events, latestSessionEvents, toolCounts } =
     useActivityStore(
       useShallow((s) => ({
         developers: s.developers,
@@ -171,6 +190,7 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
         stoppedAgents: s.stoppedAgents,
         events: s.events,
         latestSessionEvents: s.latestSessionEvents,
+        toolCounts: s.toolCounts,
       })),
     );
   const now = useNow(NOW_REFRESH_MS);
@@ -184,9 +204,52 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
     [activeAgents, stoppedAgents],
   );
 
+  // Stage 0: each session's own events and state. Feeds both the filters and stage 2.
+  const sessionActivity = useMemo(() => {
+    const activity = new Map<string, SessionActivity>();
+    for (const session of activeSessions) {
+      const allSessionEvents = events.filter((e) => e.sessionId === session.id);
+      const sessionAgents = allAgents.filter(
+        (a) => a.sessionId === session.id && a.agentId != null,
+      );
+      const { sessionEvents: ownEvents } =
+        attributeEventsToAgents(allSessionEvents, sessionAgents, events);
+      const latestEvent = ownEvents[0] ?? latestSessionEvents[session.id] ?? null;
+      const lastActivityAt = clampToNow(
+        latestTimestamp(
+          session.startedAt,
+          session.lastEventAt,
+          allSessionEvents[0]?.timestamp,
+          latestSessionEvents[session.id]?.timestamp,
+        ),
+        now,
+      );
+      activity.set(session.id, {
+        ownEvents,
+        latestEvent,
+        lastActivityAt,
+        state: deriveSessionState(session, latestEvent, lastActivityAt, now),
+      });
+    }
+    return activity;
+  }, [activeSessions, events, latestSessionEvents, allAgents, now]);
+
+  // A string, so the layout re-runs only when the set of hidden sessions changes.
+  const hiddenSessionKey = filters.hideInactive
+    ? activeSessions
+        .filter((s) => sessionActivity.get(s.id)?.state === "inactive")
+        .map((s) => s.id)
+        .sort()
+        .join(",")
+    : "";
+  const { hideDoneAgents } = filters;
+
   // Stage 1: Build graph structure and run dagre layout.
   // Only re-runs when the topology changes (nodes added/removed), not on every event.
   const { positionedNodes, layoutEdges } = useMemo(() => {
+    const hidden = new Set(hiddenSessionKey ? hiddenSessionKey.split(",") : []);
+    const visibleSessions = activeSessions.filter((s) => !hidden.has(s.id));
+    // Developers stay visible with their counts even when every session is hidden.
     const developerIds = new Set(activeSessions.map((s) => s.developerId));
     const activeDevelopers = developers.filter((d) => developerIds.has(d.id));
 
@@ -208,10 +271,36 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
       });
     }
 
-    // Session + agent nodes (placeholder event data — filled in stage 2)
-    for (const session of activeSessions) {
-      const devId = session.developerId;
+    // A developer's sessions sharing a project hang under one project node.
+    const projectGroups = new Map<string, Session[]>();
+    for (const session of visibleSessions) {
+      if (!session.projectName) continue;
+      const key = `project-${session.developerId}-${session.projectName}`;
+      projectGroups.set(key, [...(projectGroups.get(key) ?? []), session]);
+    }
+    const parentNodeId = new Map<string, string>();
+    for (const [projectNodeId, sessions] of projectGroups) {
+      if (sessions.length < 2) continue;
+      const devId = sessions[0].developerId;
+      const data: ProjectNodeData = {
+        projectName: sessions[0].projectName!,
+        sessionCount: sessions.length,
+      };
+      nodes.push({ id: projectNodeId, type: "project", position: { x: 0, y: 0 }, data });
+      const edgeData: FlowEdgeData = { sessionIds: sessions.map((s) => s.id) };
+      edges.push({
+        id: `edge-${devId}-${projectNodeId}`,
+        source: `dev-${devId}`,
+        target: projectNodeId,
+        type: "smoothstep",
+        data: edgeData,
+        style: { stroke: "#4b5563" },
+      });
+      for (const session of sessions) parentNodeId.set(session.id, projectNodeId);
+    }
 
+    // Session + agent nodes (placeholder event data — filled in stage 2)
+    for (const session of visibleSessions) {
       const data: SessionNodeData = {
         session,
         recentEvents: [],
@@ -220,6 +309,8 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
         currentToolName: null,
         activityState: "idle",
         lastActivityAt: session.startedAt,
+        toolCalls: null,
+        toolFailures: null,
       };
 
       nodes.push({
@@ -229,12 +320,14 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
         data,
       });
 
+      const source = parentNodeId.get(session.id) ?? `dev-${session.developerId}`;
+      const edgeData: FlowEdgeData = { sessionIds: [session.id] };
       edges.push({
-        id: `edge-${devId}-${session.id}`,
-        source: `dev-${devId}`,
+        id: `edge-${source}-${session.id}`,
+        source,
         target: `session-${session.id}`,
         type: "smoothstep",
-        data: { sessionId: session.id },
+        data: edgeData,
         style: { stroke: "#4b5563" },
       });
 
@@ -273,7 +366,7 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
       }
 
       const doneAgents = sessionAgents.filter((a) => a.stopped);
-      if (doneAgents.length > 0) {
+      if (doneAgents.length > 0 && !hideDoneAgents) {
         const summaryData: AgentSummaryNodeData = {
           sessionId: session.id,
           total: doneAgents.length,
@@ -303,7 +396,7 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
 
     const laid = getLayoutedElements(nodes, edges);
     return { positionedNodes: laid.nodes, layoutEdges: laid.edges };
-  }, [developers, activeSessions, allAgents]);
+  }, [developers, activeSessions, allAgents, hiddenSessionKey, hideDoneAgents]);
 
   // Stage 2: Decorate positioned nodes with event- and time-derived data.
   // Runs on event changes and clock ticks but skips the expensive dagre layout.
@@ -312,24 +405,13 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
       return { nodes: [], edges: layoutEdges };
     }
 
-    const sessionStates = new Map<string, SessionActivityState>();
-
-    const decorated = positionedNodes.map((node) => {
+    const nodes = positionedNodes.map((node) => {
       if (node.type === "session") {
         const data = node.data as SessionNodeData;
         const sessionId = data.session.id;
-
-        const allSessionEvents = events.filter(
-          (e) => e.sessionId === sessionId,
-        );
-        const sessionAgents = allAgents.filter(
-          (a) => a.sessionId === sessionId && a.agentId != null,
-        );
-        const { sessionEvents: ownEvents } =
-          attributeEventsToAgents(allSessionEvents, sessionAgents, events);
-
-        const recentEvents = ownEvents.slice(0, RECENT_EVENT_LIMIT);
-        const latestEvent = ownEvents[0] ?? latestSessionEvents[sessionId] ?? null;
+        const activity = sessionActivity.get(sessionId);
+        if (!activity) return node;
+        const { latestEvent } = activity;
 
         let isToolRunning = false;
         let currentToolName: string | null = null;
@@ -339,28 +421,18 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
           currentToolName = payload.toolName ?? null;
         }
 
-        const lastActivityAt = clampToNow(
-          latestTimestamp(
-            data.session.startedAt,
-            data.session.lastEventAt,
-            allSessionEvents[0]?.timestamp,
-            latestSessionEvents[sessionId]?.timestamp,
-          ),
-          now,
-        );
-        const activityState = deriveSessionState(data.session, latestEvent, lastActivityAt, now);
-        sessionStates.set(sessionId, activityState);
-
         return {
           ...node,
           data: {
             ...data,
-            recentEvents,
+            recentEvents: activity.ownEvents.slice(0, RECENT_EVENT_LIMIT),
             latestEvent,
             isToolRunning,
             currentToolName,
-            activityState,
-            lastActivityAt,
+            activityState: activity.state,
+            lastActivityAt: activity.lastActivityAt,
+            toolCalls: toolCounts[sessionId]?.calls ?? null,
+            toolFailures: toolCounts[sessionId]?.failures ?? null,
           },
         };
       }
@@ -399,30 +471,32 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
         };
       }
 
+      if (node.type === "developer") {
+        const data = node.data as DeveloperNodeData;
+        let activeCount = 0;
+        let inactiveCount = 0;
+        for (const session of activeSessions) {
+          if (session.developerId !== data.developer.id) continue;
+          const state = sessionActivity.get(session.id)?.state;
+          if (state === "inactive") inactiveCount++;
+          else if (state !== "ended") activeCount++;
+        }
+        return { ...node, data: { ...data, activeCount, inactiveCount } };
+      }
+
       return node;
     });
 
-    const nodes = decorated.map((node) => {
-      if (node.type !== "developer") return node;
-      const data = node.data as DeveloperNodeData;
-      let activeCount = 0;
-      let inactiveCount = 0;
-      for (const session of activeSessions) {
-        if (session.developerId !== data.developer.id) continue;
-        const state = sessionStates.get(session.id);
-        if (state === "inactive") inactiveCount++;
-        else if (state !== "ended") activeCount++;
-      }
-      return { ...node, data: { ...data, activeCount, inactiveCount } };
-    });
-
     const edges = layoutEdges.map((edge) => {
-      const sessionId = (edge.data as { sessionId?: string } | undefined)?.sessionId;
-      if (!sessionId) return edge;
-      const state = sessionStates.get(sessionId);
-      return { ...edge, animated: state !== undefined && WORKING_STATES.has(state) };
+      const sessionIds = (edge.data as FlowEdgeData | undefined)?.sessionIds;
+      if (!sessionIds) return edge;
+      const working = sessionIds.some((id) => {
+        const state = sessionActivity.get(id)?.state;
+        return state !== undefined && WORKING_STATES.has(state);
+      });
+      return { ...edge, animated: working };
     });
 
     return { nodes, edges };
-  }, [positionedNodes, layoutEdges, events, latestSessionEvents, allAgents, activeSessions, now]);
+  }, [positionedNodes, layoutEdges, events, allAgents, activeSessions, sessionActivity, toolCounts]);
 }

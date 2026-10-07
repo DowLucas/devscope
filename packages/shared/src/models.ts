@@ -24,6 +24,9 @@ export interface Session {
   endedAt: string | null;
   /** Time of the session's latest event; only set by /api/sessions/active. */
   lastEventAt?: string | null;
+  /** Finished tool calls and failures so far; only set by /api/sessions/active, not for activity-only viewers. */
+  toolCalls?: number;
+  toolFailures?: number;
   status: "active" | "ended";
   permissionMode: string | null;
   privacyMode: PrivacyMode;

@@ -28,6 +28,16 @@ export interface SessionNodeData {
   activityState: SessionActivityState;
   /** Latest event of the session or its subagents, else its start. */
   lastActivityAt: string;
+  /** Finished tool calls and failures; null when the API does not share them. */
+  toolCalls: number | null;
+  toolFailures: number | null;
+}
+
+/** Groups a developer's sessions that share a project. */
+export interface ProjectNodeData {
+  [key: string]: unknown;
+  projectName: string;
+  sessionCount: number;
 }
 
 export interface AgentNodeData {

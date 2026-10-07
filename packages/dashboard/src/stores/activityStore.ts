@@ -18,6 +18,33 @@ export interface StoppedAgent extends ActiveAgent {
 
 const MAX_STOPPED_AGENTS = 100;
 
+export interface ToolCounts {
+  calls: number;
+  failures: number;
+}
+
+/** Counts as the API returned them; sessions without them (activity-only) are left out. */
+export function toolCountsFrom(sessions: Session[]): Record<string, ToolCounts> {
+  const counts: Record<string, ToolCounts> = {};
+  for (const s of sessions) {
+    if (s.toolCalls != null) counts[s.id] = { calls: s.toolCalls, failures: s.toolFailures ?? 0 };
+  }
+  return counts;
+}
+
+/** Counts a finished tool call live, until the next /api/sessions/active fetch resets them. */
+function withToolEvent(counts: Record<string, ToolCounts>, event: FeedEvent): Record<string, ToolCounts> {
+  const current = counts[event.sessionId];
+  if (!current || (event.eventType !== "tool.complete" && event.eventType !== "tool.fail")) return counts;
+  return {
+    ...counts,
+    [event.sessionId]: {
+      calls: current.calls + 1,
+      failures: current.failures + (event.eventType === "tool.fail" ? 1 : 0),
+    },
+  };
+}
+
 /** An event of the session itself, not one of its subagents' tool calls. */
 function isSessionOwnEvent(event: FeedEvent): boolean {
   if (event.eventType === "agent.start" || event.eventType === "agent.stop") return true;
@@ -44,6 +71,7 @@ export interface ActivityState {
   events: FeedEvent[];
   /** Newest own event per session, kept beyond the `events` window. */
   latestSessionEvents: Record<string, FeedEvent>;
+  toolCounts: Record<string, ToolCounts>;
   developers: (Developer & { activeSessions?: number })[];
   activeSessions: Session[];
   activeAgents: ActiveAgent[];
@@ -77,6 +105,7 @@ const MAX_EVENTS = 200;
 export const useActivityStore = create<ActivityState>((set) => ({
   events: [],
   latestSessionEvents: {},
+  toolCounts: {},
   developers: [],
   activeSessions: [],
   activeAgents: [],
@@ -93,6 +122,7 @@ export const useActivityStore = create<ActivityState>((set) => ({
       return {
         events: [event, ...state.events].slice(0, MAX_EVENTS),
         latestSessionEvents: withLatestSessionEvents(state.latestSessionEvents, [event]),
+        toolCounts: withToolEvent(state.toolCounts, event),
       };
     }),
 
@@ -100,7 +130,9 @@ export const useActivityStore = create<ActivityState>((set) => ({
   // failed fetch can never replace a list with something that crashes `.map`.
   setDevelopers: (developers) => set((state) => (Array.isArray(developers) ? { developers } : state)),
   setActiveSessions: (activeSessions) =>
-    set((state) => (Array.isArray(activeSessions) ? { activeSessions } : state)),
+    set((state) =>
+      Array.isArray(activeSessions) ? { activeSessions, toolCounts: toolCountsFrom(activeSessions) } : state,
+    ),
   setActiveAgents: (activeAgents) => set((state) => (Array.isArray(activeAgents) ? { activeAgents } : state)),
   addActiveAgent: (agent) =>
     set((state) => {

@@ -21,6 +21,9 @@ function mapSession(row: any) {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     lastEventAt: row.last_event_at ?? null,
+    // Only /active selects these; absent keys stay out of the JSON.
+    toolCalls: row.tool_calls != null ? Number(row.tool_calls) : undefined,
+    toolFailures: row.tool_failures != null ? Number(row.tool_failures) : undefined,
     status: row.status,
     permissionMode: row.permission_mode ?? null,
     privacyMode: row.privacy_mode ?? null,

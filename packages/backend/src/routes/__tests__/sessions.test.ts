@@ -325,6 +325,22 @@ describe("GET /sessions/active", () => {
     expect(body.find((s: any) => s.id === "sess-2").activeAgents).toEqual([]);
   });
 
+  test("returns tool counts for visible sessions only", async () => {
+    const own = makeSessionRow({ id: "sess-1", tool_calls: 12, tool_failures: 2 });
+    const teammate = makeSessionRow({ id: "sess-2", developer_id: "dev-bbb", owner_share_details: false, tool_calls: 7, tool_failures: 1 });
+    mockGetActiveSessions.mockImplementation(() => Promise.resolve([own, teammate]));
+    mockGetActiveAgents.mockImplementation(() => Promise.resolve([]));
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-aaa"]));
+
+    const app = buildApp({ orgDeveloperIds: ["dev-aaa", "dev-bbb"], user: { id: "user-1" } });
+    const body = await (await app.request("/sessions/active")).json();
+
+    expect(body.find((s: any) => s.id === "sess-1")).toMatchObject({ toolCalls: 12, toolFailures: 2 });
+    const s2 = body.find((s: any) => s.id === "sess-2");
+    expect(s2.toolCalls).toBeUndefined();
+    expect(s2.toolFailures).toBeUndefined();
+  });
+
   test("passes orgDeveloperIds to getActiveSessions", async () => {
     const devIds = ["dev-aaa"];
     const app = buildApp({ orgDeveloperIds: devIds });
