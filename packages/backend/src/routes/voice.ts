@@ -11,6 +11,7 @@ import {
   spokenLimits,
   toSpokenText,
   voiceAudioBody,
+  voiceThinkingBudget,
   voiceSummaryBody,
 } from "../services/voiceSummary";
 import { checkRateLimit, rateLimitKey, requireAi } from "./aiGuards";
@@ -32,6 +33,7 @@ export function voiceRoutes(sql: SQL) {
       result = await callGemini(buildVoicePrompt(input), undefined, {
         temperature: VOICE.temperature,
         maxOutputTokens: VOICE.maxOutputTokens,
+        thinkingBudget: voiceThinkingBudget(DEFAULT_MODEL),
       });
     } catch (err) {
       console.error("[ai] voice summary failed:", err);
@@ -41,8 +43,13 @@ export function voiceRoutes(sql: SQL) {
     recordTokenUsage(sql, "voice_summary", DEFAULT_MODEL, result.inputTokens, result.outputTokens, orgId).catch(
       (err) => console.error("[ai] voice usage not recorded:", err),
     );
-    // speakable first: toSpokenText strips the underscores it splits identifiers on.
-    const text = toSpokenText(speakable(result.text), spokenLimits(input.trigger, input.length));
+    // Cap the model's own words first; speakable() then adds words ("5s" ->
+    // "5 seconds") that must not count against the cap and chop the summary.
+    const capped = toSpokenText(result.text, spokenLimits(input.trigger, input.length));
+    const spoken = speakable(capped);
+    // An announcement is voiced in one request (at most maxChars * 2); a reply
+    // summary is voiced in pieces, so only announcements need the guard.
+    const text = input.trigger !== "reply" && spoken.length > VOICE.maxChars * 2 ? capped : spoken;
     if (!text) return c.json({ error: "Empty summary" }, 502);
     return c.json({ text });
   });

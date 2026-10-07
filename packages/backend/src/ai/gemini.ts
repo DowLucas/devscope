@@ -29,7 +29,7 @@ export function isAiAvailable(): boolean {
 export async function callGemini(
   contents: Content[],
   tools?: FunctionDeclaration[],
-  config?: { temperature?: number; model?: string; maxOutputTokens?: number }
+  config?: { temperature?: number; model?: string; maxOutputTokens?: number; thinkingBudget?: number }
 ): Promise<GeminiResponse> {
   if (!client) {
     throw new Error("AI features unavailable: GEMINI_API_KEY not configured");
@@ -41,6 +41,10 @@ export async function callGemini(
     temperature: config?.temperature ?? TEMPERATURE.query,
     maxOutputTokens: config?.maxOutputTokens ?? 8192,
   };
+  // Thinking tokens count against maxOutputTokens; a short text can turn it off.
+  if (config?.thinkingBudget !== undefined) {
+    generateConfig.thinkingConfig = { thinkingBudget: config.thinkingBudget };
+  }
 
   if (tools && tools.length > 0) {
     generateConfig.tools = [{ functionDeclarations: tools }];
