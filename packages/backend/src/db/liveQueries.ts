@@ -161,6 +161,8 @@ export async function getOpeningTurnIds(
 
 export interface SuggestionRow {
   turn_id: string;
+  /** Distinct sessions are what make a suggestion a habit rather than a one-off. */
+  session_id: string;
   prompt_text: string;
   prompt_at: string;
   tool_calls: number;
@@ -186,6 +188,7 @@ export async function getTurnSuggestionRows(
   return (await sql`
     SELECT
       t.id::TEXT AS turn_id,
+      t.session_id::TEXT AS session_id,
       left(t.prompt_text, ${maxChars}) AS prompt_text,
       t.prompt_at,
       t.tool_calls,

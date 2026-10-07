@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { isSuccessfulTurn, normalizePrompt, rankSuggestions, OUTCOME_BOOST } from "../nextPrompts";
+import { NEXT_PROMPTS, OUTCOME_BOOST, isSuccessfulTurn, isSuggestible, normalizePrompt, rankSuggestions } from "../nextPrompts";
 import type { SuggestionRow } from "../../db/liveQueries";
 
 const row = (over: Partial<SuggestionRow> = {}): SuggestionRow => ({
   turn_id: "t",
+  session_id: "s1",
   prompt_text: "run the tests",
   prompt_at: "2026-10-01T00:00:00Z",
   tool_calls: 3,
@@ -13,6 +14,10 @@ const row = (over: Partial<SuggestionRow> = {}): SuggestionRow => ({
   has_merged_pr: false,
   ...over,
 });
+
+/** The same prompt following in several sessions: a habit. */
+const habit = (text: string, sessions: number, base: number, over: Partial<SuggestionRow> = {}) =>
+  Array.from({ length: sessions }, (_, i) => ({ row: row({ prompt_text: text, session_id: `${text}-${i}`, ...over }), base }));
 
 describe("isSuccessfulTurn", () => {
   test("clean and not labelled down", () => {
@@ -24,46 +29,58 @@ describe("isSuccessfulTurn", () => {
   });
 });
 
+describe("isSuggestible", () => {
+  test("a few words that are a step of their own", () => {
+    for (const ok of ["push", "commit and push", "/code-review high", "/create-pr lucas, dev", "check logs"]) {
+      expect(isSuggestible(ok)).toBe(true);
+    }
+  });
+
+  test("never long prompts", () => {
+    expect(isSuggestible("please go through the open review comments")).toBe(false); // 7 words
+    expect(isSuggestible(`/x ${"a".repeat(NEXT_PROMPTS.maxChars)}`)).toBe(false);
+  });
+
+  test("never bare answers to a question, option picks or image placeholders", () => {
+    for (const no of ["yes", "Yes please!", "a", "B", "2", "1.", "continue", "do it", "lets do it", "done", "[Image #1]", ""]) {
+      expect(isSuggestible(no)).toBe(false);
+    }
+  });
+});
+
 describe("rankSuggestions", () => {
-  test("orders by base score plus outcome boosts", () => {
+  test("needs the prompt to have worked in at least two sessions", () => {
+    expect(rankSuggestions(habit("push", 1, 0.95), { limit: 1 })).toEqual([]);
+    expect(rankSuggestions(habit("push", 2, 0.85), { limit: 1 })).toEqual([{ text: "push", project: "proj" }]);
+    // Twice in one session is still one session.
+    const sameSession = [{ row: row({ prompt_text: "push" }), base: 0.9 }, { row: row({ prompt_text: "push" }), base: 0.9 }];
+    expect(rankSuggestions(sameSession, { limit: 1 })).toEqual([]);
+  });
+
+  test("opening prompts take their own, higher bar", () => {
+    expect(rankSuggestions(habit("start backend", 2, 0), { limit: 1, minSessions: 3 })).toEqual([]);
+    expect(rankSuggestions(habit("start backend", 3, 0), { limit: 1, minSessions: 3 })).toHaveLength(1);
+  });
+
+  test("drops a prompt that usually failed", () => {
+    const mixed = habit("deploy", 2, 0.9);
+    const failing = Array.from({ length: 3 }, (_, i) => ({ row: row({ prompt_text: "deploy", session_id: `f${i}`, tool_failures: 1 }), base: 0.9 }));
+    // Worked in 2 of 5 sessions: below the 60% bar.
+    expect(rankSuggestions([...mixed, ...failing], { limit: 1 })).toEqual([]);
+  });
+
+  test("orders by similarity, outcome boosts and support", () => {
     const out = rankSuggestions(
-      [
-        { row: row({ prompt_text: "a" }), base: 0.9 },
-        { row: row({ prompt_text: "b", label: "up" }), base: 0.85 },
-        { row: row({ prompt_text: "c", has_merged_pr: true }), base: 0.86 },
-      ],
-      { limit: 5 },
+      [...habit("push", 2, 0.9), ...habit("merge it", 2, 0.85, { label: "up" }), ...habit("check logs", 5, 0.85)],
+      { limit: 3 },
     );
-    // b: 0.95, c: 0.91, a: 0.9
-    expect(out.map((s) => s.text)).toEqual(["b", "c", "a"]);
+    // merge it: 0.85 + 0.1 + 0.04; check logs: 0.85 + 0.1 (5 sessions); push: 0.9 + 0.04
+    expect(out.map((s) => s.text)).toEqual(["merge it", "check logs", "push"]);
     expect(OUTCOME_BOOST.up).toBeGreaterThan(OUTCOME_BOOST.mergedPr);
   });
 
-  test("drops failed turns, duplicates and the prompt just sent", () => {
-    const out = rankSuggestions(
-      [
-        { row: row({ prompt_text: "Run  the tests" }), base: 0.8 },
-        { row: row({ prompt_text: "run the tests", label: "up" }), base: 0.8 },
-        { row: row({ prompt_text: "deploy", tool_failures: 2 }), base: 0.99 },
-        { row: row({ prompt_text: "fix the bug" }), base: 0.99 },
-      ],
-      { limit: 5, exclude: "Fix the  bug" },
-    );
-    expect(out).toHaveLength(1);
-    expect(out[0]).toEqual({ text: "run the tests", project: "proj" });
-  });
-
-  test("limits and trims", () => {
-    const long = "x".repeat(600);
-    const out = rankSuggestions(
-      [
-        { row: row({ prompt_text: long }), base: 1 },
-        { row: row({ prompt_text: "y" }), base: 0.5 },
-      ],
-      { limit: 1 },
-    );
-    expect(out).toHaveLength(1);
-    expect(out[0]!.text).toHaveLength(500);
+  test("drops the prompt just sent, folding case and whitespace", () => {
+    expect(rankSuggestions(habit("Push  it", 3, 0.9), { limit: 1, exclude: "push it" })).toEqual([]);
   });
 
   test("normalizePrompt folds case and whitespace", () => {

@@ -156,7 +156,7 @@ export function liveRoutes(sql: SQL) {
           sql,
           pairs.map((p) => p.turn_id),
           devIds,
-          NEXT_PROMPTS.maxChars,
+          NEXT_PROMPTS.fetchChars,
         );
         const byTurn = new Map(rows.map((r) => [r.turn_id, r]));
         const candidates = pairs.flatMap((p) => {
@@ -174,11 +174,13 @@ export function liveRoutes(sql: SQL) {
         excludeSessionId: session.id,
         sessionLimit: NEXT_PROMPTS.openingSessions,
       });
-      const rows = (await getTurnSuggestionRows(sql, turnIds, devIds, NEXT_PROMPTS.maxChars)).sort(
+      const rows = (await getTurnSuggestionRows(sql, turnIds, devIds, NEXT_PROMPTS.fetchChars)).sort(
         (a, b) => Date.parse(b.prompt_at) - Date.parse(a.prompt_at),
       );
       const candidates = rows.map((row, i) => ({ row, base: -i * RECENCY_STEP }));
-      return c.json({ suggestions: rankSuggestions(candidates, { limit: body.limit }) });
+      return c.json({
+        suggestions: rankSuggestions(candidates, { limit: body.limit, minSessions: NEXT_PROMPTS.openingMinSessions }),
+      });
     } catch (err) {
       console.warn("[live] next prompts failed:", err instanceof Error ? err.message : err);
       return c.json(empty);
