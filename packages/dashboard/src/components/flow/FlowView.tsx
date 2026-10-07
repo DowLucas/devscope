@@ -1,11 +1,14 @@
-import { Component, useEffect, type ReactNode } from "react";
+import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
+  type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import type { AgentSummaryNodeData } from "./flowTypes";
+import { DetailPanel } from "./DetailPanel";
 import { nodeTypes } from "./nodeTypes";
 import { useFlowLayout } from "./useFlowLayout";
 import { useActivityStore } from "@/stores/activityStore";
@@ -42,16 +45,40 @@ class FlowErrorBoundary extends Component<
 
 const CLEANUP_INTERVAL_MS = 10_000;
 
+/** The node whose details a click opens: sessions and agents; the done card opens its session. */
+function selectionFor(node: Node): string | null {
+  if (node.type === "session" || node.type === "agent") return node.id;
+  if (node.type === "agentSummary") return `session-${(node.data as AgentSummaryNodeData).sessionId}`;
+  return null;
+}
+
 export function FlowView() {
   const { nodes: layoutNodes, edges: layoutEdges } = useFlowLayout();
   const connected = useActivityStore((s) => s.connected);
   const cleanupStale = useActivityStore((s) => s.cleanupStale);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Periodically remove ended sessions after a grace period, with their finished agents
   useEffect(() => {
     const id = setInterval(cleanupStale, CLEANUP_INTERVAL_MS);
     return () => clearInterval(id);
   }, [cleanupStale]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId]);
+
+  // The panel follows the node's live data and closes when the node goes away.
+  const selectedNode = selectedId ? layoutNodes.find((n) => n.id === selectedId) : undefined;
+  const nodes = useMemo(
+    () => layoutNodes.map((n) => (n.id === selectedNode?.id ? { ...n, selected: true } : n)),
+    [layoutNodes, selectedNode?.id],
+  );
 
   if (layoutNodes.length === 0 && connected) {
     return (
@@ -71,12 +98,15 @@ export function FlowView() {
   }
 
   return (
-    <div className="h-[calc(100vh-73px)] -m-6">
+    <div className="relative h-[calc(100vh-73px)] -m-6">
       <FlowErrorBoundary>
         <ReactFlow
-          nodes={layoutNodes}
+          nodes={nodes}
           edges={layoutEdges}
           nodeTypes={nodeTypes}
+          onNodeClick={(_, node) => setSelectedId(selectionFor(node))}
+          onPaneClick={() => setSelectedId(null)}
+          elementsSelectable={false}
           fitView
           proOptions={{ hideAttribution: true }}
         >
@@ -95,6 +125,9 @@ export function FlowView() {
             maskColor="rgba(0, 0, 0, 0.7)"
           />
         </ReactFlow>
+        {selectedNode ? (
+          <DetailPanel node={selectedNode} nodes={layoutNodes} onClose={() => setSelectedId(null)} />
+        ) : null}
       </FlowErrorBoundary>
     </div>
   );

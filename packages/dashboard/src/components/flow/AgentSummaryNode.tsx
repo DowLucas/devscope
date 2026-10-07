@@ -11,7 +11,7 @@ export function AgentSummaryNode({ data }: NodeProps & { data: AgentSummaryNodeD
       initial={{ opacity: 0, scale: 0.85 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ type: "spring", stiffness: 500, damping: 35 }}
-      className="rounded-xl border border-gray-700 bg-gray-900 px-3 py-2 shadow-lg"
+      className="cursor-pointer rounded-xl border border-gray-700 bg-gray-900 px-3 py-2 shadow-lg hover:brightness-110"
       style={{ width: 240 }}
     >
       <Handle type="target" position={Position.Top} className="!bg-gray-600" />

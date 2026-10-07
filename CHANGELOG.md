@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Topology detail panel.** Clicking a session or subagent opens a live side
+  panel instead of leaving the page: state, branch, title, last active, model,
+  tokens and cost (own sessions only), its subagents, the last 15 events, and a
+  link to the full session. The graph stays usable behind it; Esc or a click on
+  the background closes it.
+
 - **Tell topology sessions and subagents apart.** Session cards show the git
   branch (new `sessions.git_branch`, migration 057, from `session.start`; never
   stored for `private` sessions) in place of the developer name the parent node

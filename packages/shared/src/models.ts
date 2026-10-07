@@ -27,6 +27,8 @@ export interface Session {
   status: "active" | "ended";
   permissionMode: string | null;
   privacyMode: PrivacyMode;
+  /** Claude Code model id at session start (migration 037). */
+  model?: string | null;
   /** Branch at session start; null for private sessions and older plugins. */
   gitBranch?: string | null;
   currentTitle?: string | null;

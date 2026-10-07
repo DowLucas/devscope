@@ -21,6 +21,9 @@ const NOW_REFRESH_MS = 10_000;
 /** States in which the session is doing work, so its edge animates. */
 const WORKING_STATES = new Set<SessionActivityState>(["running", "thinking", "compacting"]);
 
+/** Events kept per node for the detail panel. */
+const RECENT_EVENT_LIMIT = 15;
+
 const TOOL_EVENT_TYPES = new Set(["tool.start", "tool.complete", "tool.fail"]);
 
 /**
@@ -249,6 +252,7 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
           latestEvent: null,
           isToolRunning: false,
           currentToolName: null,
+          recentEvents: [],
         };
 
         nodes.push({
@@ -324,7 +328,7 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
         const { sessionEvents: ownEvents } =
           attributeEventsToAgents(allSessionEvents, sessionAgents, events);
 
-        const recentEvents = ownEvents.slice(0, 3);
+        const recentEvents = ownEvents.slice(0, RECENT_EVENT_LIMIT);
         const latestEvent = ownEvents[0] ?? latestSessionEvents[sessionId] ?? null;
 
         let isToolRunning = false;
@@ -388,6 +392,7 @@ export function useFlowLayout(): { nodes: Node[]; edges: Edge[] } {
           data: {
             ...data,
             latestEvent: agentLatest,
+            recentEvents: agentEvts.slice(0, RECENT_EVENT_LIMIT),
             isToolRunning: agentToolRunning,
             currentToolName: agentToolName,
           },
