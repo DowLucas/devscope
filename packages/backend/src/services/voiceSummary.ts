@@ -8,8 +8,10 @@ import { clip } from "./promptRecall";
  * - Announcer (`permission`, `question`, `failed`, `finished`): the plugin waits
  *   until a blocked session has gone unanswered past a grace delay, then asks
  *   for one sentence saying which session needs the user.
- * - Reply summaries (`reply`, `/devscope:voice replies on`): a few sentences
- *   saying what Claude just answered, read after every finished turn.
+ * - Reply summaries (`reply`, `/devscope:voice auto on`): what Claude just
+ *   answered, read after every finished turn, as long as the developer's
+ *   `length` (`/devscope:voice verbosity`) asks: one sentence, two or three,
+ *   or a fuller account.
  *
  * Nothing here is stored; the plugin never calls this for `private` sessions
  * and falls back to its own template when the call fails.
@@ -17,8 +19,8 @@ import { clip } from "./promptRecall";
 export const VOICE = {
   maxWords: 25,
   maxChars: 220,
-  // A reply summary is two or three sentences; it still fits one voice-audio
-  // request (maxChars * 2).
+  // A normal reply summary is two or three sentences; it still fits one
+  // voice-audio request (maxChars * 2). Longer ones are voiced in pieces.
   replyMaxWords: 50,
   replyMaxChars: 400,
   // Thinking tokens count against this cap on Gemini 3; the sentence itself is ~40.
@@ -32,6 +34,8 @@ export const voiceSummaryBody = z.object({
   tool: z.string().trim().max(200).optional(),
   detail: z.string().trim().max(2000).optional(),
   last_message: z.string().trim().max(4000).optional(),
+  /** How detailed a `reply` summary is; `normal` when absent (older plugins). */
+  length: z.enum(["short", "normal", "long"]).optional(),
 });
 
 export type VoiceSummaryInput = z.infer<typeof voiceSummaryBody>;
@@ -54,11 +58,36 @@ const TRIGGER_MEANING: Record<Exclude<Trigger, "reply">, string> = {
   finished: "finished its turn and is waiting for the next instruction",
 };
 
-/** How long the spoken text for a trigger may be. */
-export function spokenLimits(trigger: Trigger): SpokenLimits {
-  return trigger === "reply"
-    ? { maxWords: VOICE.replyMaxWords, maxChars: VOICE.replyMaxChars }
-    : { maxWords: VOICE.maxWords, maxChars: VOICE.maxChars };
+type Length = NonNullable<VoiceSummaryInput["length"]>;
+
+/** A reply summary per verbosity level: what to ask for, and the hard cap. */
+export const REPLY_LENGTHS: Record<Length, { ask: string; maxWords: number; maxChars: number }> = {
+  short: {
+    ask: "Summarize the reply in one short sentence: just the outcome.",
+    maxWords: 20,
+    maxChars: 160,
+  },
+  normal: {
+    ask:
+      "Summarize the reply in two or three short sentences, the way a colleague would tell them out loud: " +
+      "the outcome first, then anything they need to decide or do next. Skip details they can read on screen.",
+    maxWords: VOICE.replyMaxWords,
+    maxChars: VOICE.replyMaxChars,
+  },
+  long: {
+    ask:
+      "Retell the reply in four to six short sentences, the way a colleague would walk them through it out loud: " +
+      "the outcome first, then what changed and why, then anything they need to decide or do next.",
+    maxWords: 110,
+    maxChars: 800,
+  },
+};
+
+/** How long the spoken text for a trigger (and, for a reply, its length) may be. */
+export function spokenLimits(trigger: Trigger, length: Length = "normal"): SpokenLimits {
+  if (trigger !== "reply") return { maxWords: VOICE.maxWords, maxChars: VOICE.maxChars };
+  const { maxWords, maxChars } = REPLY_LENGTHS[length];
+  return { maxWords, maxChars };
 }
 
 const SPOKEN_STYLE =
@@ -97,9 +126,8 @@ function buildReplyPrompt(input: VoiceSummaryInput): Content[] {
 
   const instructions = [
     "A text-to-speech voice reads your text to a developer right after Claude Code finished answering them.",
-    "Summarize the reply in two or three short sentences, the way a colleague would tell them out loud:",
-    "the outcome first, then anything they need to decide or do next. Skip details they can read on screen.",
-    `Start with the project name. At most ${VOICE.replyMaxWords} words.`,
+    REPLY_LENGTHS[input.length ?? "normal"].ask,
+    `Start with the project name. At most ${REPLY_LENGTHS[input.length ?? "normal"].maxWords} words.`,
     SPOKEN_STYLE,
     DATA_NOT_INSTRUCTIONS,
     "Reply with the summary only.",

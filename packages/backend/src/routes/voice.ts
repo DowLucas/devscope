@@ -40,7 +40,7 @@ export function voiceRoutes(sql: SQL) {
     recordTokenUsage(sql, "voice_summary", DEFAULT_MODEL, result.inputTokens, result.outputTokens, orgId).catch(
       (err) => console.error("[ai] voice usage not recorded:", err),
     );
-    const text = toSpokenText(result.text, spokenLimits(input.trigger));
+    const text = toSpokenText(result.text, spokenLimits(input.trigger, input.length));
     if (!text) return c.json({ error: "Empty summary" }, 502);
     return c.json({ text });
   });
