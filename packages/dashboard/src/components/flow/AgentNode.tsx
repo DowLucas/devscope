@@ -42,7 +42,7 @@ const EVENT_COLORS: Record<string, string> = {
 };
 
 export function AgentNode({ data }: NodeProps & { data: AgentNodeData }) {
-  const { agentId, agentType, startedAt, latestEvent, isToolRunning, currentToolName, isStopped } = data;
+  const { agentId, agentType, startedAt, latestEvent, isToolRunning, currentToolName } = data;
 
   const debounced = useDebouncedToolState(isToolRunning, currentToolName, latestEvent);
 
@@ -61,11 +61,9 @@ export function AgentNode({ data }: NodeProps & { data: AgentNodeData }) {
     }
   }
 
-  const borderColor = isStopped
-    ? "rgba(34, 197, 94, 0.4)"   // green-500/40
-    : debounced.isToolRunning
-      ? "rgba(245, 158, 11, 0.4)"  // amber-500/40
-      : "rgba(168, 85, 247, 0.4)"; // purple-500/40
+  const borderColor = debounced.isToolRunning
+    ? "rgba(245, 158, 11, 0.4)"  // amber-500/40
+    : "rgba(168, 85, 247, 0.4)"; // purple-500/40
 
   return (
     <motion.div
@@ -75,19 +73,15 @@ export function AgentNode({ data }: NodeProps & { data: AgentNodeData }) {
       className="rounded-xl border bg-gray-900 px-3 py-2 shadow-lg"
       style={{ width: 240, borderWidth: 1 }}
     >
-      <Handle type="target" position={Position.Top} className={isStopped ? "!bg-green-500" : "!bg-purple-500"} />
+      <Handle type="target" position={Position.Top} className="!bg-purple-500" />
 
       <div className="flex items-center gap-2">
-        {isStopped ? (
-          <span className="h-2 w-2 shrink-0 rounded-full bg-green-400" />
-        ) : (
-          <motion.span
-            className="h-2 w-2 shrink-0 rounded-full bg-purple-400"
-            animate={{ opacity: [1, 0.4, 1] }}
-            transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-          />
-        )}
-        <span className={`truncate text-sm font-medium ${isStopped ? "text-green-200" : "text-purple-200"}`}>
+        <motion.span
+          className="h-2 w-2 shrink-0 rounded-full bg-purple-400"
+          animate={{ opacity: [1, 0.4, 1] }}
+          transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <span className="truncate text-sm font-medium text-purple-200">
           {agentType}
         </span>
       </div>
@@ -104,7 +98,6 @@ export function AgentNode({ data }: NodeProps & { data: AgentNodeData }) {
         displayEvent={debounced.displayEvent}
       />
 
-      <Handle type="source" position={Position.Bottom} className={isStopped ? "!bg-green-500" : "!bg-purple-500"} />
     </motion.div>
   );
 }

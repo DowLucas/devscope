@@ -3,17 +3,9 @@ import { motion } from "motion/react";
 import { ReactFlow, Background } from "@xyflow/react";
 import type { Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { DeveloperNode } from "../flow/DeveloperNode";
-import { SessionNode } from "../flow/SessionNode";
-import { AgentNode } from "../flow/AgentNode";
+import { nodeTypes } from "../flow/nodeTypes";
 import { buildDemoLayout, tickSimulation } from "./demoTopologyData";
 import { usePersona } from "./PersonaContext";
-
-const nodeTypes = {
-  developer: DeveloperNode,
-  session: SessionNode,
-  agent: AgentNode,
-};
 
 const revealInitial = { opacity: 0, y: 24 } as const;
 const revealVisible = { opacity: 1, y: 0 } as const;

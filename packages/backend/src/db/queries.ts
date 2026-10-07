@@ -136,14 +136,16 @@ export async function getActiveAgents(sql: SQL) {
 export async function getActiveSessions(sql: SQL, developerIds?: string[]) {
   if (developerIds !== undefined) {
     return await sql`
-      SELECT s.*, d.name as developer_name, d.email as developer_email, d.share_details as owner_share_details
+      SELECT s.*, d.name as developer_name, d.email as developer_email, d.share_details as owner_share_details,
+        LEAST((SELECT MAX(e.created_at) FROM events e WHERE e.session_id = s.id), NOW()) as last_event_at
       FROM sessions s
       JOIN developers d ON s.developer_id = d.id
       WHERE s.status = 'active' AND s.developer_id IN (${inList(developerIds)})
       ORDER BY s.started_at DESC`;
   }
   return await sql`
-    SELECT s.*, d.name as developer_name, d.email as developer_email, d.share_details as owner_share_details
+    SELECT s.*, d.name as developer_name, d.email as developer_email, d.share_details as owner_share_details,
+      LEAST((SELECT MAX(e.created_at) FROM events e WHERE e.session_id = s.id), NOW()) as last_event_at
     FROM sessions s
     JOIN developers d ON s.developer_id = d.id
     WHERE s.status = 'active'

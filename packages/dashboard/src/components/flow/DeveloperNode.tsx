@@ -12,8 +12,8 @@ function getInitials(name: string): string {
 }
 
 export function DeveloperNode({ data }: NodeProps & { data: DeveloperNodeData }) {
-  const { developer, sessionCount } = data;
-  const isActive = sessionCount > 0;
+  const { developer, activeCount, inactiveCount } = data;
+  const isActive = activeCount > 0;
 
   const borderColor = isActive
     ? "rgba(16, 185, 129, 0.6)"  // emerald-500/60
@@ -43,11 +43,18 @@ export function DeveloperNode({ data }: NodeProps & { data: DeveloperNodeData })
           </div>
         </div>
       </div>
-      {sessionCount > 0 && (
-        <div className="mt-2 text-center">
-          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
-            {sessionCount} active session{sessionCount !== 1 ? "s" : ""}
-          </span>
+      {(activeCount > 0 || inactiveCount > 0) && (
+        <div className="mt-2 flex justify-center gap-1.5">
+          {activeCount > 0 && (
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
+              {activeCount} active
+            </span>
+          )}
+          {inactiveCount > 0 && (
+            <span className="rounded-full bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-400">
+              {inactiveCount} inactive
+            </span>
+          )}
         </div>
       )}
       <Handle type="source" position={Position.Bottom} className="!bg-gray-600" />

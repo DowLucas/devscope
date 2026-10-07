@@ -45,7 +45,7 @@ export function visibilityForRow(row: any, viewerDevIds: string[]): Visibility {
 // column added later stays hidden until someone decides it is safe to show.
 const ACTIVITY_SESSION_KEYS = [
   "id", "developer_id", "developer_name", "developer_email",
-  "started_at", "ended_at", "status", "event_count", "context_clear_count",
+  "started_at", "ended_at", "last_event_at", "status", "event_count", "context_clear_count",
 ] as const;
 
 const ACTIVITY_EVENT_KEYS = [

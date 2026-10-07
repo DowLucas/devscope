@@ -89,9 +89,15 @@ const STATE_CONFIG: Record<SessionActivityState, {
     pulse: true,
   },
   idle: {
-    label: "Idle",
+    label: "Your turn",
     badgeClass: "bg-emerald-500/15 text-emerald-400",
     borderColor: "rgba(16, 185, 129, 0.4)",
+    pulse: false,
+  },
+  inactive: {
+    label: "Inactive",
+    badgeClass: "bg-gray-700 text-gray-400",
+    borderColor: "rgba(55, 65, 81, 1)",
     pulse: false,
   },
   ended: {
@@ -110,8 +116,7 @@ const STATE_PULSE_COLORS: Record<string, string> = {
 };
 
 export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
-  const { session, developerName, latestEvent, isToolRunning, currentToolName, activityState } = data;
-  const startedAt = session.startedAt ?? "";
+  const { session, developerName, latestEvent, isToolRunning, currentToolName, activityState, lastActivityAt } = data;
   const isDangerousMode = session.permissionMode === "dangerously-skip-permissions";
   const isRedactedMode = session.privacyMode === "private";
 
@@ -148,7 +153,7 @@ export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
     <motion.div
       onClick={() => { navigate(`/dashboard/sessions/${session.id}`); }}
       initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0, borderColor: stateConfig.borderColor }}
+      animate={{ opacity: displayState === "inactive" ? 0.55 : 1, y: 0, borderColor: stateConfig.borderColor }}
       transition={{ type: "spring", stiffness: 500, damping: 35 }}
       className="rounded-xl border bg-gray-900 px-4 py-3 shadow-lg cursor-pointer hover:brightness-110"
       style={{ width: 280, borderWidth: 1 }}
@@ -194,7 +199,7 @@ export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
       </div>
 
       <div className="mt-1 text-xs text-gray-600">
-        {startedAt ? timeAgo(startedAt) : ""}
+        active {timeAgo(lastActivityAt)}
       </div>
 
       <ActivityBadge

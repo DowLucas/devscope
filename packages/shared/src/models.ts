@@ -22,6 +22,8 @@ export interface Session {
   projectName: string | null;
   startedAt: string;
   endedAt: string | null;
+  /** Time of the session's latest event; only set by /api/sessions/active. */
+  lastEventAt?: string | null;
   status: "active" | "ended";
   permissionMode: string | null;
   privacyMode: PrivacyMode;
