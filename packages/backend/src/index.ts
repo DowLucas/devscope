@@ -50,7 +50,7 @@ import { similarRoutes } from "./routes/similar";
 import { liveRoutes } from "./routes/live";
 import { orgScopeMiddleware } from "./middleware/orgScope";
 import { rateLimitMiddleware, getClientIp } from "./middleware/rateLimit";
-import { apiKeyRateLimitRetryAfter } from "./middleware/apiKeyRateLimit";
+import { apiKeyRateLimitRetryAfter, apiKeyRateLimitRetryAfterFromError } from "./middleware/apiKeyRateLimit";
 import { csrfMiddleware } from "./middleware/csrf";
 import { getPublicStats } from "./db/queries";
 import { seedDefaultFrictionRules } from "./db";
@@ -207,8 +207,16 @@ async function requireApiKeyOrSession(c: Context, next: Next) {
           { status: 429, headers: { "Retry-After": String(retryAfter) } },
         );
       }
-    } catch {
-      // Fall through to session check
+    } catch (err) {
+      // better-auth throws when a key is over its rate limit; that is a 429 too.
+      const retryAfter = apiKeyRateLimitRetryAfterFromError(err);
+      if (retryAfter !== null) {
+        return c.json(
+          { error: "Too many requests" },
+          { status: 429, headers: { "Retry-After": String(retryAfter) } },
+        );
+      }
+      // Otherwise fall through to session check
     }
   }
   // Fall back to session cookie
