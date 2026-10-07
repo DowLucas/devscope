@@ -142,6 +142,7 @@ describe("GET /sessions", () => {
       projectName: "my-project",
       startedAt: "2026-03-01T10:00:00Z",
       endedAt: null,
+      lastEventAt: null,
       status: "active",
       permissionMode: "default",
       privacyMode: "standard",
@@ -280,6 +281,27 @@ describe("GET /sessions/active", () => {
     const s2 = body.find((s: any) => s.id === "sess-2");
     expect(s2.activeAgents).toHaveLength(1);
     expect(s2.activeAgents[0].agentId).toBe("agent-3");
+  });
+
+  test("returns lastEventAt, also for a teammate's activity-only session", async () => {
+    const own = makeSessionRow({ id: "sess-1", last_event_at: "2026-03-01T10:09:00Z" });
+    const teammate = makeSessionRow({
+      id: "sess-2",
+      developer_id: "dev-bbb",
+      owner_share_details: false,
+      last_event_at: "2026-03-01T10:08:00Z",
+    });
+    mockGetActiveSessions.mockImplementation(() => Promise.resolve([own, teammate]));
+    mockGetActiveAgents.mockImplementation(() => Promise.resolve([]));
+    mockGetAllDeveloperIdsForUser.mockImplementation(() => Promise.resolve(["dev-aaa"]));
+
+    const app = buildApp({ orgDeveloperIds: ["dev-aaa", "dev-bbb"], user: { id: "user-1" } });
+    const body = await (await app.request("/sessions/active")).json();
+
+    expect(body.find((s: any) => s.id === "sess-1").lastEventAt).toBe("2026-03-01T10:09:00Z");
+    const s2 = body.find((s: any) => s.id === "sess-2");
+    expect(s2.lastEventAt).toBe("2026-03-01T10:08:00Z");
+    expect(s2.projectName).toBeNull();
   });
 
   test("passes orgDeveloperIds to getActiveSessions", async () => {

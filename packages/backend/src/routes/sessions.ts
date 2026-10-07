@@ -20,6 +20,7 @@ function mapSession(row: any) {
     projectName: row.project_name ?? null,
     startedAt: row.started_at,
     endedAt: row.ended_at,
+    lastEventAt: row.last_event_at ?? null,
     status: row.status,
     permissionMode: row.permission_mode ?? null,
     privacyMode: row.privacy_mode ?? null,
