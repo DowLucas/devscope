@@ -174,6 +174,10 @@ const agentEventPayloadSchema = z
     agentType: z.string(),
     agentId: z.string(),
     parentAgentId: z.string().nullable().optional(),
+    description: z.string().max(500).optional(),
+    model: z.string().max(100).optional(),
+    lastMessageLength: z.number().int().nonnegative().optional(),
+    transcriptPath: z.string().optional(),
     ...privacyAnnotations,
   })
   .strict();

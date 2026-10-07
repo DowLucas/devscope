@@ -4,7 +4,7 @@ import { navigate } from "wouter/use-browser-location";
 import type { SessionNodeData } from "./flowTypes";
 import type { SessionActivityState } from "./flowTypes";
 import type { PromptEventPayload, AgentEventPayload } from "@devscope/shared";
-import { ShieldOff, Lock } from "lucide-react";
+import { ShieldOff, Lock, GitBranch } from "lucide-react";
 import { ActivityBadge } from "./ActivityBadge";
 import { useDebouncedToolState } from "@/hooks/useDebouncedToolState";
 import { timeAgo } from "@/lib/utils";
@@ -116,7 +116,7 @@ const STATE_PULSE_COLORS: Record<string, string> = {
 };
 
 export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
-  const { session, developerName, latestEvent, isToolRunning, currentToolName, activityState, lastActivityAt } = data;
+  const { session, latestEvent, isToolRunning, currentToolName, activityState, lastActivityAt } = data;
   const isDangerousMode = session.permissionMode === "dangerously-skip-permissions";
   const isRedactedMode = session.privacyMode === "private";
 
@@ -180,9 +180,12 @@ export function SessionNode({ data }: NodeProps & { data: SessionNodeData }) {
               {session.currentTitle}
             </div>
           ) : null}
-          <div className="truncate text-xs text-gray-500">
-            {developerName}
-          </div>
+          {session.gitBranch ? (
+            <div className="flex min-w-0 items-center gap-1 text-xs text-gray-500" title={session.gitBranch}>
+              <GitBranch className="h-3 w-3 shrink-0" />
+              <span className="truncate font-mono">{session.gitBranch}</span>
+            </div>
+          ) : null}
         </div>
         <span
           className={`flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${stateConfig.badgeClass}`}

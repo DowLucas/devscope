@@ -80,17 +80,17 @@ interface SessionDef {
 }
 
 const sessionDefs: SessionDef[] = [
-  { session: { id: "s1", developerId: "alice", projectPath: "/app/frontend", projectName: "frontend", startedAt: minutesAgo(45), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "alice", devName: "Alice Chen" },
-  { session: { id: "s2", developerId: "alice", projectPath: "/app/api", projectName: "api-service", startedAt: minutesAgo(20), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "alice", devName: "Alice Chen" },
-  { session: { id: "s3", developerId: "bob", projectPath: "/app/backend", projectName: "backend", startedAt: minutesAgo(30), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "bob", devName: "Bob Martinez" },
-  { session: { id: "s4", developerId: "carol", projectPath: "/app/ml", projectName: "ml-pipeline", startedAt: minutesAgo(60), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "carol", devName: "Carol Singh" },
-  { session: { id: "s5", developerId: "carol", projectPath: "/app/infra", projectName: "infra", startedAt: minutesAgo(15), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "carol", devName: "Carol Singh" },
-  { session: { id: "s6", developerId: "carol", projectPath: "/app/docs", projectName: "docs", startedAt: minutesAgo(8), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "carol", devName: "Carol Singh" },
-  { session: { id: "s7", developerId: "dave", projectPath: "/app/mobile", projectName: "mobile-app", startedAt: minutesAgo(25), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "dave", devName: "Dave Kim" },
+  { session: { id: "s1", gitBranch: "feat/auth-form", developerId: "alice", projectPath: "/app/frontend", projectName: "frontend", startedAt: minutesAgo(45), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "alice", devName: "Alice Chen" },
+  { session: { id: "s2", gitBranch: "fix/rate-limit", developerId: "alice", projectPath: "/app/api", projectName: "api-service", startedAt: minutesAgo(20), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "alice", devName: "Alice Chen" },
+  { session: { id: "s3", gitBranch: "main", developerId: "bob", projectPath: "/app/backend", projectName: "backend", startedAt: minutesAgo(30), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "bob", devName: "Bob Martinez" },
+  { session: { id: "s4", gitBranch: "exp/embeddings", developerId: "carol", projectPath: "/app/ml", projectName: "ml-pipeline", startedAt: minutesAgo(60), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "carol", devName: "Carol Singh" },
+  { session: { id: "s5", gitBranch: "chore/terraform", developerId: "carol", projectPath: "/app/infra", projectName: "infra", startedAt: minutesAgo(15), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "carol", devName: "Carol Singh" },
+  { session: { id: "s6", gitBranch: "docs/onboarding", developerId: "carol", projectPath: "/app/docs", projectName: "docs", startedAt: minutesAgo(8), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "carol", devName: "Carol Singh" },
+  { session: { id: "s7", gitBranch: "feat/offline-mode", developerId: "dave", projectPath: "/app/mobile", projectName: "mobile-app", startedAt: minutesAgo(25), endedAt: null, status: "active", permissionMode: null, privacyMode: null }, devId: "dave", devName: "Dave Kim" },
 ];
 
 const agentDefs = [
-  { agentId: "agent-1", agentType: "general-purpose", sessionId: "s1", startedAt: minutesAgo(5) },
+  { agentId: "agent-1", agentType: "general-purpose", description: "Refactor the auth form", model: "sonnet", sessionId: "s1", startedAt: minutesAgo(5) },
 ];
 
 const doneAgentDefs: AgentSummaryNodeData[] = [
@@ -130,7 +130,6 @@ export function buildDemoLayout(): { nodes: Node[]; edges: Edge[] } {
   for (const s of sessionDefs) {
     const data: SessionNodeData = {
       session: s.session,
-      developerName: s.devName,
       recentEvents: [],
       latestEvent: null,
       isToolRunning: false,
@@ -153,6 +152,8 @@ export function buildDemoLayout(): { nodes: Node[]; edges: Edge[] } {
     const data: AgentNodeData = {
       agentId: a.agentId,
       agentType: a.agentType,
+      description: a.description,
+      model: a.model,
       sessionId: a.sessionId,
       startedAt: a.startedAt,
       latestEvent: null,

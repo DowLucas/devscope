@@ -25,6 +25,7 @@ function mapSession(row: any) {
     permissionMode: row.permission_mode ?? null,
     privacyMode: row.privacy_mode ?? null,
     model: row.model ?? null,
+    gitBranch: row.git_branch ?? null,
     developerName: row.developer_name,
     developerEmail: row.developer_email,
     eventCount: row.event_count ?? 0,
@@ -86,6 +87,8 @@ export function sessionsRoutes(sql: SQL) {
     const agents = (agentsRaw as any[]).map((row) => ({
       agentId: row.agent_id,
       agentType: row.agent_type,
+      description: row.description ?? null,
+      model: row.model ?? null,
       sessionId: row.session_id,
       startedAt: row.started_at,
     }));

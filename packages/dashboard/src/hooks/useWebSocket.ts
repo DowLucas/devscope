@@ -52,6 +52,8 @@ export function useDevscopeSocket() {
                 store.addActiveAgent({
                   agentId: msg.data.payload.agentId,
                   agentType: msg.data.payload.agentType || "agent",
+                  description: msg.data.payload.description ?? null,
+                  model: msg.data.payload.model ?? null,
                   sessionId: msg.data.sessionId,
                   startedAt: msg.data.timestamp,
                 });

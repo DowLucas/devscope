@@ -21,7 +21,6 @@ export interface DeveloperNodeData {
 export interface SessionNodeData {
   [key: string]: unknown;
   session: Session;
-  developerName: string;
   recentEvents: FeedEvent[];
   latestEvent: FeedEvent | null;
   isToolRunning: boolean;
@@ -35,6 +34,8 @@ export interface AgentNodeData {
   [key: string]: unknown;
   agentId: string;
   agentType: string;
+  description: string | null;
+  model: string | null;
   sessionId: string;
   startedAt: string;
   latestEvent: FeedEvent | null;

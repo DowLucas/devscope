@@ -42,7 +42,7 @@ const EVENT_COLORS: Record<string, string> = {
 };
 
 export function AgentNode({ data }: NodeProps & { data: AgentNodeData }) {
-  const { agentId, agentType, startedAt, latestEvent, isToolRunning, currentToolName } = data;
+  const { agentId, agentType, description, model, startedAt, latestEvent, isToolRunning, currentToolName } = data;
 
   const debounced = useDebouncedToolState(isToolRunning, currentToolName, latestEvent);
 
@@ -86,8 +86,14 @@ export function AgentNode({ data }: NodeProps & { data: AgentNodeData }) {
         </span>
       </div>
 
+      {description ? (
+        <div className="mt-0.5 truncate text-xs text-gray-300" title={description}>
+          {description}
+        </div>
+      ) : null}
+
       <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
-        <span className="font-mono">{agentId?.slice(0, 8) ?? "—"}</span>
+        <span className="font-mono">{model ?? agentId?.slice(0, 8) ?? "—"}</span>
         <span>{startedAt ? timeAgo(startedAt) : ""}</span>
       </div>
 
