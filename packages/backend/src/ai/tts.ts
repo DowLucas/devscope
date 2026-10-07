@@ -19,7 +19,7 @@ export const TTS_MODEL = process.env.TTS_MODEL ?? "kokoro";
 
 export const TTS_DEFAULTS = {
   voice: process.env.TTS_VOICE ?? "am_michael",
-  speed: Number(process.env.TTS_SPEED ?? 1.5),
+  speed: Number(process.env.TTS_SPEED ?? 1.2),
   // Kokoro's volume_multiplier raises loudness while keeping peaks limited;
   // at 2.0 the voice is twice as loud as default with no clipping.
   volume: Number(process.env.TTS_VOLUME ?? 2),

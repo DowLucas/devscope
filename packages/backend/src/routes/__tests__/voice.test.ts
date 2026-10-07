@@ -9,7 +9,7 @@ const mockSynthesize = mock(async () => new Uint8Array([82, 73, 70, 70]).buffer 
 mock.module("../../ai/tts", () => ({
   isTtsAvailable: () => available,
   synthesize: mockSynthesize,
-  TTS_DEFAULTS: { voice: "am_michael", speed: 1.5, volume: 2 },
+  TTS_DEFAULTS: { voice: "am_michael", speed: 1.2, volume: 2 },
   TTS_MODEL: "kokoro",
 }));
 
