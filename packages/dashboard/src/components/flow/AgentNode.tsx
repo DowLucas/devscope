@@ -41,7 +41,7 @@ const EVENT_COLORS: Record<string, string> = {
   "teammate.idle": "text-gray-400 bg-gray-500/15",
 };
 
-export function AgentNode({ data }: NodeProps & { data: AgentNodeData }) {
+export function AgentNode({ data, selected }: NodeProps & { data: AgentNodeData }) {
   const { agentId, agentType, description, model, startedAt, latestEvent, isToolRunning, currentToolName } = data;
 
   const debounced = useDebouncedToolState(isToolRunning, currentToolName, latestEvent);
@@ -70,7 +70,7 @@ export function AgentNode({ data }: NodeProps & { data: AgentNodeData }) {
       initial={{ opacity: 0, scale: 0.85 }}
       animate={{ opacity: 1, scale: 1, borderColor }}
       transition={{ type: "spring", stiffness: 500, damping: 35 }}
-      className="rounded-xl border bg-gray-900 px-3 py-2 shadow-lg"
+      className={`rounded-xl border bg-gray-900 px-3 py-2 shadow-lg cursor-pointer hover:brightness-110 ${selected ? "ring-2 ring-blue-400/60" : ""}`}
       style={{ width: 240, borderWidth: 1 }}
     >
       <Handle type="target" position={Position.Top} className="!bg-purple-500" />

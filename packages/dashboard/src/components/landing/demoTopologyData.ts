@@ -159,6 +159,7 @@ export function buildDemoLayout(): { nodes: Node[]; edges: Edge[] } {
       latestEvent: null,
       isToolRunning: false,
       currentToolName: null,
+      recentEvents: [],
     };
     nodes.push({ id: `agent-${a.agentId}`, type: "agent", position: { x: 0, y: 0 }, data });
     edges.push({

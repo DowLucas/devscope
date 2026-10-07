@@ -41,6 +41,8 @@ export interface AgentNodeData {
   latestEvent: FeedEvent | null;
   isToolRunning: boolean;
   currentToolName: string | null;
+  /** Newest first, for the detail panel. */
+  recentEvents: FeedEvent[];
 }
 
 /** All finished subagents of one session, collapsed into a single node. */
