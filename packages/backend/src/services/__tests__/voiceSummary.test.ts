@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  REPLY_LENGTHS,
   VOICE,
   buildVoicePrompt,
   spokenLimits,
@@ -61,6 +62,27 @@ describe("buildVoicePrompt (reply)", () => {
     const text = buildVoicePrompt({ trigger: "reply", project: "p", last_message: "y".repeat(3500) })[0].parts![0]
       .text!;
     expect(text).toContain("y".repeat(3500));
+  });
+});
+
+describe("reply length (verbosity)", () => {
+  const prompt = (length?: "short" | "normal" | "long") =>
+    buildVoicePrompt({ trigger: "reply", project: "p", last_message: "Done.", ...(length ? { length } : {}) })[0].parts![0].text!;
+
+  test("absent means normal, as older plugins send it", () => {
+    expect(prompt()).toBe(prompt("normal"));
+    expect(voiceSummaryBody.safeParse({ trigger: "reply", project: "p", length: "long" }).success).toBe(true);
+    expect(voiceSummaryBody.safeParse({ trigger: "reply", project: "p", length: "huge" }).success).toBe(false);
+  });
+
+  test("each level asks for its own length and caps it", () => {
+    expect(prompt("short")).toContain("one short sentence");
+    expect(prompt("short")).toContain(`At most ${REPLY_LENGTHS.short.maxWords} words`);
+    expect(prompt("long")).toContain("four to six");
+    expect(spokenLimits("reply", "short").maxWords).toBeLessThan(spokenLimits("reply").maxWords);
+    expect(spokenLimits("reply", "long").maxWords).toBeGreaterThan(spokenLimits("reply").maxWords);
+    // The announcer is never affected.
+    expect(spokenLimits("permission", "long")).toEqual(spokenLimits("permission"));
   });
 });
 
