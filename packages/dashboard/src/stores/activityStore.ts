@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { FeedEvent, Developer, Session, AlertEvent, FrictionAlert } from "@devscope/shared";
+import { parseUTC } from "@/lib/utils";
 
 export interface ActiveAgent {
   agentId: string;
@@ -14,8 +15,32 @@ export interface StoppedAgent extends ActiveAgent {
 
 const MAX_STOPPED_AGENTS = 100;
 
+/** An event of the session itself, not one of its subagents' tool calls. */
+function isSessionOwnEvent(event: FeedEvent): boolean {
+  if (event.eventType === "agent.start" || event.eventType === "agent.stop") return true;
+  return !(event.payload as { agentId?: string } | null)?.agentId;
+}
+
+/** Keeps the newest own event per session, so state survives eviction from `events`. */
+function withLatestSessionEvents(
+  latest: Record<string, FeedEvent>,
+  events: FeedEvent[],
+): Record<string, FeedEvent> {
+  let next = latest;
+  for (const event of events) {
+    if (!isSessionOwnEvent(event)) continue;
+    const current = next[event.sessionId];
+    if (current && parseUTC(current.timestamp) >= parseUTC(event.timestamp)) continue;
+    if (next === latest) next = { ...latest };
+    next[event.sessionId] = event;
+  }
+  return next;
+}
+
 export interface ActivityState {
   events: FeedEvent[];
+  /** Newest own event per session, kept beyond the `events` window. */
+  latestSessionEvents: Record<string, FeedEvent>;
   developers: (Developer & { activeSessions?: number })[];
   activeSessions: Session[];
   activeAgents: ActiveAgent[];
@@ -48,6 +73,7 @@ const MAX_EVENTS = 200;
 
 export const useActivityStore = create<ActivityState>((set) => ({
   events: [],
+  latestSessionEvents: {},
   developers: [],
   activeSessions: [],
   activeAgents: [],
@@ -61,7 +87,10 @@ export const useActivityStore = create<ActivityState>((set) => ({
   addEvent: (event) =>
     set((state) => {
       if (state.events.some((e) => e.id === event.id)) return state;
-      return { events: [event, ...state.events].slice(0, MAX_EVENTS) };
+      return {
+        events: [event, ...state.events].slice(0, MAX_EVENTS),
+        latestSessionEvents: withLatestSessionEvents(state.latestSessionEvents, [event]),
+      };
     }),
 
   // Ignore non-array payloads (e.g. an `{ error }` body from a 401/429) so a
@@ -72,22 +101,28 @@ export const useActivityStore = create<ActivityState>((set) => ({
   setActiveAgents: (activeAgents) => set((state) => (Array.isArray(activeAgents) ? { activeAgents } : state)),
   addActiveAgent: (agent) =>
     set((state) => {
-      if (state.activeAgents.some((a) => a.agentId === agent.agentId)) return state;
+      if (
+        state.activeAgents.some((a) => a.agentId === agent.agentId) ||
+        state.stoppedAgents.some((a) => a.agentId === agent.agentId)
+      ) return state;
       return { activeAgents: [...state.activeAgents, agent] };
     }),
   removeActiveAgent: (agentId) =>
     set((state) => {
       const agent = state.activeAgents.find((a) => a.agentId === agentId);
+      if (!agent) return state;
       return {
         activeAgents: state.activeAgents.filter((a) => a.agentId !== agentId),
-        stoppedAgents: agent
-          ? [...state.stoppedAgents, { ...agent, stoppedAt: Date.now() }].slice(-MAX_STOPPED_AGENTS)
-          : state.stoppedAgents,
+        stoppedAgents: [...state.stoppedAgents, { ...agent, stoppedAt: Date.now() }].slice(-MAX_STOPPED_AGENTS),
       };
     }),
   setConnected: (connected) => set({ connected }),
   bumpFetchGeneration: () => set((state) => ({ fetchGeneration: state.fetchGeneration + 1 })),
-  setEvents: (events) => set({ events }),
+  setEvents: (events) =>
+    set((state) => ({
+      events,
+      latestSessionEvents: withLatestSessionEvents(state.latestSessionEvents, events),
+    })),
 
   updateSession: (sessionId, status) =>
     set((state) => ({
@@ -134,10 +169,15 @@ export const useActivityStore = create<ActivityState>((set) => ({
       const endedSessionTimes = removedIds.size > 0
         ? Object.fromEntries(Object.entries(state.endedSessionTimes).filter(([id]) => !removedIds.has(id)))
         : state.endedSessionTimes;
+      // Finished agents stay (collapsed on the topology) for as long as their session does.
+      const sessionIds = new Set(activeSessions.map((s) => s.id));
       return {
         activeSessions,
         endedSessionTimes,
-        stoppedAgents: state.stoppedAgents.filter((a) => a.stoppedAt > cutoff),
+        stoppedAgents: state.stoppedAgents.filter((a) => sessionIds.has(a.sessionId)),
+        latestSessionEvents: Object.fromEntries(
+          Object.entries(state.latestSessionEvents).filter(([id]) => sessionIds.has(id)),
+        ),
       };
     }),
 

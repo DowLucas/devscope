@@ -7,12 +7,15 @@ export type SessionActivityState =
   | "waiting"
   | "compacting"
   | "idle"
+  | "inactive"
   | "ended";
 
 export interface DeveloperNodeData {
   [key: string]: unknown;
   developer: Developer;
-  sessionCount: number;
+  /** Sessions neither inactive nor ended. */
+  activeCount: number;
+  inactiveCount: number;
 }
 
 export interface SessionNodeData {
@@ -24,6 +27,8 @@ export interface SessionNodeData {
   isToolRunning: boolean;
   currentToolName: string | null;
   activityState: SessionActivityState;
+  /** Latest event of the session or its subagents, else its start. */
+  lastActivityAt: string;
 }
 
 export interface AgentNodeData {
@@ -35,5 +40,13 @@ export interface AgentNodeData {
   latestEvent: FeedEvent | null;
   isToolRunning: boolean;
   currentToolName: string | null;
-  isStopped: boolean;
+}
+
+/** All finished subagents of one session, collapsed into a single node. */
+export interface AgentSummaryNodeData {
+  [key: string]: unknown;
+  sessionId: string;
+  total: number;
+  /** Count per agent type, most frequent first. */
+  types: { agentType: string; count: number }[];
 }

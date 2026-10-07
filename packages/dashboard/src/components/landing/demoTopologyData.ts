@@ -1,26 +1,14 @@
-import dagre from "@dagrejs/dagre";
 import type { Node, Edge } from "@xyflow/react";
-import type { DeveloperNodeData, SessionNodeData, AgentNodeData, SessionActivityState } from "../flow/flowTypes";
+import type {
+  DeveloperNodeData,
+  SessionNodeData,
+  AgentNodeData,
+  AgentSummaryNodeData,
+  SessionActivityState,
+} from "../flow/flowTypes";
+import { getLayoutedElements } from "../flow/layout";
 import type { Developer, Session, FeedEvent, ToolEventPayload, PromptEventPayload } from "@devscope/shared";
 import type { Persona } from "./PersonaContext";
-
-const NODE_WIDTH_DEVELOPER = 200;
-const NODE_HEIGHT_DEVELOPER = 90;
-const NODE_WIDTH_SESSION = 280;
-const NODE_HEIGHT_SESSION = 160;
-const NODE_WIDTH_AGENT = 240;
-const NODE_HEIGHT_AGENT = 110;
-
-function getNodeDimensions(type: string): { width: number; height: number } {
-  switch (type) {
-    case "developer":
-      return { width: NODE_WIDTH_DEVELOPER, height: NODE_HEIGHT_DEVELOPER };
-    case "agent":
-      return { width: NODE_WIDTH_AGENT, height: NODE_HEIGHT_AGENT };
-    default:
-      return { width: NODE_WIDTH_SESSION, height: NODE_HEIGHT_SESSION };
-  }
-}
 
 function minutesAgo(m: number): string {
   return new Date(Date.now() - m * 60_000).toISOString();
@@ -102,8 +90,11 @@ const sessionDefs: SessionDef[] = [
 ];
 
 const agentDefs = [
-  { agentId: "agent-1", agentType: "general-purpose", sessionId: "s1", startedAt: minutesAgo(5), isStopped: false },
-  { agentId: "agent-2", agentType: "Explore", sessionId: "s4", startedAt: minutesAgo(10), isStopped: true },
+  { agentId: "agent-1", agentType: "general-purpose", sessionId: "s1", startedAt: minutesAgo(5) },
+];
+
+const doneAgentDefs: AgentSummaryNodeData[] = [
+  { sessionId: "s4", total: 2, types: [{ agentType: "Explore", count: 2 }] },
 ];
 
 // --- Per-session simulation state ---
@@ -130,7 +121,8 @@ export function buildDemoLayout(): { nodes: Node[]; edges: Edge[] } {
   for (const dev of developers) {
     const data: DeveloperNodeData = {
       developer: dev,
-      sessionCount: devSessionCounts.get(dev.id) ?? 0,
+      activeCount: devSessionCounts.get(dev.id) ?? 0,
+      inactiveCount: 0,
     };
     nodes.push({ id: `dev-${dev.id}`, type: "developer", position: { x: 0, y: 0 }, data });
   }
@@ -144,6 +136,7 @@ export function buildDemoLayout(): { nodes: Node[]; edges: Edge[] } {
       isToolRunning: false,
       currentToolName: null,
       activityState: "idle",
+      lastActivityAt: minutesAgo(0),
     };
     nodes.push({ id: `session-${s.session.id}`, type: "session", position: { x: 0, y: 0 }, data });
     edges.push({
@@ -165,7 +158,6 @@ export function buildDemoLayout(): { nodes: Node[]; edges: Edge[] } {
       latestEvent: null,
       isToolRunning: false,
       currentToolName: null,
-      isStopped: a.isStopped,
     };
     nodes.push({ id: `agent-${a.agentId}`, type: "agent", position: { x: 0, y: 0 }, data });
     edges.push({
@@ -173,33 +165,23 @@ export function buildDemoLayout(): { nodes: Node[]; edges: Edge[] } {
       source: `session-${a.sessionId}`,
       target: `agent-${a.agentId}`,
       type: "smoothstep",
-      animated: !a.isStopped,
-      style: { stroke: a.isStopped ? "#6b7280" : "#a855f7" },
+      animated: true,
+      style: { stroke: "#a855f7" },
     });
   }
 
-  // Run Dagre layout
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "TB", nodesep: 40, ranksep: 80 });
-
-  for (const node of nodes) {
-    const { width, height } = getNodeDimensions(node.type ?? "session");
-    g.setNode(node.id, { width, height });
-  }
-  for (const edge of edges) {
-    g.setEdge(edge.source, edge.target);
+  for (const data of doneAgentDefs) {
+    nodes.push({ id: `agents-done-${data.sessionId}`, type: "agentSummary", position: { x: 0, y: 0 }, data });
+    edges.push({
+      id: `edge-${data.sessionId}-agents-done`,
+      source: `session-${data.sessionId}`,
+      target: `agents-done-${data.sessionId}`,
+      type: "smoothstep",
+      style: { stroke: "#4b5563" },
+    });
   }
 
-  dagre.layout(g);
-
-  const layoutedNodes = nodes.map((node) => {
-    const pos = g.node(node.id);
-    const { width, height } = getNodeDimensions(node.type ?? "session");
-    return { ...node, position: { x: pos.x - width / 2, y: pos.y - height / 2 } };
-  });
-
-  return { nodes: layoutedNodes, edges };
+  return getLayoutedElements(nodes, edges);
 }
 
 // --- Event simulation ---
@@ -360,13 +342,14 @@ export function tickSimulation(baseNodes: Node[], persona?: Persona | null): Nod
           isToolRunning: state.phase === "tool_start",
           currentToolName: state.toolName,
           activityState: phaseToActivityState(state.phase),
+          // Demo sessions are always live.
+          lastActivityAt: new Date().toISOString(),
         },
       };
     }
 
     if (node.type === "agent") {
       const data = node.data as AgentNodeData;
-      if (data.isStopped) return node; // Don't simulate stopped agents
 
       return {
         ...node,

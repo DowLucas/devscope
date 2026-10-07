@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Topology shows what each session is actually doing.** A session whose turn
+  finished reads "Your turn" instead of "Idle", turns a dimmed "Inactive" after
+  2 minutes without events, and shows "active 3m ago" instead of its start time.
+  The developer node counts active and inactive sessions separately, and an
+  edge animates only while its session is working. Finished subagents collapse
+  into one "✓ N subagents done" card per session instead of vanishing after 30 s.
+  `/api/sessions/active` returns each session's `lastEventAt` for this (timing
+  only, so it is also visible in the `activity` view).
+
 - **Louder server voice.** `/api/ai/voice-audio` takes an optional `volume`
   (Kokoro `volume_multiplier`, 0.5-3); the default `TTS_VOLUME=2` doubles the
   loudness without clipping (Kokoro keeps peaks limited).

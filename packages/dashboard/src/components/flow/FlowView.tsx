@@ -6,17 +6,9 @@ import {
   MiniMap,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { DeveloperNode } from "./DeveloperNode";
-import { SessionNode } from "./SessionNode";
-import { AgentNode } from "./AgentNode";
+import { nodeTypes } from "./nodeTypes";
 import { useFlowLayout } from "./useFlowLayout";
 import { useActivityStore } from "@/stores/activityStore";
-
-const nodeTypes = {
-  developer: DeveloperNode,
-  session: SessionNode,
-  agent: AgentNode,
-};
 
 class FlowErrorBoundary extends Component<
   { children: ReactNode },
@@ -55,7 +47,7 @@ export function FlowView() {
   const connected = useActivityStore((s) => s.connected);
   const cleanupStale = useActivityStore((s) => s.cleanupStale);
 
-  // Periodically remove ended sessions and stopped agents after grace period
+  // Periodically remove ended sessions after a grace period, with their finished agents
   useEffect(() => {
     const id = setInterval(cleanupStale, CLEANUP_INTERVAL_MS);
     return () => clearInterval(id);
@@ -97,6 +89,7 @@ export function FlowView() {
             nodeColor={(node) => {
               if (node.type === "developer") return "#10b981";
               if (node.type === "agent") return "#a855f7";
+              if (node.type === "agentSummary") return "#374151";
               return "#6b7280";
             }}
             maskColor="rgba(0, 0, 0, 0.7)"
