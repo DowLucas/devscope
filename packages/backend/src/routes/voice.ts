@@ -2,7 +2,7 @@ import type { SQL } from "bun";
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { callGemini, DEFAULT_MODEL } from "../ai/gemini";
-import { isTtsAvailable, synthesize } from "../ai/tts";
+import { isTtsAvailable, synthesize, ttsServices } from "../ai/tts";
 import { speakable } from "../services/speakable";
 import { recordTokenUsage } from "../db";
 import {
@@ -60,12 +60,15 @@ export function voiceRoutes(sql: SQL) {
     if (!checkRateLimit(`tts:${rateLimitKey(c)}`)) {
       return c.json({ error: "Rate limit exceeded. Max 20 voice requests/minute." }, 429);
     }
-    const { text, voice, speed, volume } = c.req.valid("json");
+    const { text, voice, speed, volume, model } = c.req.valid("json");
     // Every voiced text, Claude's explanations included, is said the way a person would say it.
-    const audio = await synthesize(speakable(text), voice, speed, volume);
+    const audio = await synthesize(speakable(text), voice, speed, volume, model);
     if (!audio) return c.json({ error: "Voice unavailable" }, 503);
     return new Response(audio, { headers: { "content-type": "audio/wav", "cache-control": "no-store" } });
   });
+
+  // The voices this server offers, default first, for `/devscope:voice model`.
+  app.get("/voice-models", (c) => c.json({ models: ttsServices().map((s) => s.name) }));
 
   return app;
 }

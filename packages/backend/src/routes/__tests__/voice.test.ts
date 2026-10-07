@@ -9,6 +9,7 @@ const mockSynthesize = mock(async () => new Uint8Array([82, 73, 70, 70]).buffer 
 mock.module("../../ai/tts", () => ({
   isTtsAvailable: () => available,
   synthesize: mockSynthesize,
+  ttsServices: () => [{ name: "chatterbox", url: "http://c" }, { name: "kokoro", url: "http://k" }],
   TTS_DEFAULTS: { voice: "am_michael", speed: 1.2, volume: 2 },
   TTS_MODEL: "kokoro",
 }));
@@ -45,7 +46,18 @@ describe("POST /api/ai/voice-audio", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("audio/wav");
     expect((await res.arrayBuffer()).byteLength).toBe(4);
-    expect(mockSynthesize).toHaveBeenCalledWith("cloud needs you", "am_michael", 1.5, 2.5);
+    expect(mockSynthesize).toHaveBeenCalledWith("cloud needs you", "am_michael", 1.5, 2.5, undefined);
+  });
+
+  test("passes the requested voice model, and rejects a malformed name", async () => {
+    await post(buildApp(), { text: "hi", model: "kokoro" });
+    expect((mockSynthesize.mock.calls[0] as unknown[])[4]).toBe("kokoro");
+    expect((await post(buildApp(), { text: "hi", model: "../etc" })).status).toBe(400);
+  });
+
+  test("GET /voice-models lists the voices, default first", async () => {
+    const res = await buildApp().request("/api/ai/voice-models");
+    expect(await res.json()).toEqual({ models: ["chatterbox", "kokoro"] });
   });
 
   test("503 when no TTS service is configured, without calling it", async () => {

@@ -47,6 +47,8 @@ export const voiceAudioBody = z.object({
   voice: z.string().regex(/^[a-z]{2}_[a-z0-9_]{2,30}$/).optional(),
   speed: z.number().min(0.5).max(2).optional(),
   volume: z.number().min(0.5).max(3).optional(),
+  /** Which speech service to use first, by its TTS_SERVICES name (e.g. "kokoro"). */
+  model: z.string().regex(/^[a-z0-9-]{1,32}$/).optional(),
 });
 
 type Trigger = VoiceSummaryInput["trigger"];
