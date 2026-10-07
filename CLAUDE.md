@@ -89,8 +89,8 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/live/vcs` | POST | `{session_id, kind: commit\|pr, ref, repo_remote?}`: a commit or PR the session produced (`session_vcs_links`) |
 | `/api/live/vcs/open-prs?repo_remote=` | GET | The caller's PR links in that repo still unknown/open and not checked for an hour; the mod resolves them with `gh` |
 | `/api/live/vcs/status` | POST | `{ref, state: open\|merged\|closed, merged_at?, closed_at?}`: PR state for the caller's own links |
-| `/api/ai/voice-summary` | POST | One spoken sentence for the plugin's voice announcer (`trigger`, `project`, optional `tool`/`detail`/`last_message`); stateless, only token usage is recorded as `voice_summary`. The plugin never calls it for `private` sessions |
-| `/api/ai/voice-audio` | POST | That sentence as WAV (`text`, optional Kokoro `voice`/`speed`/`volume`), voiced by the homelab TTS service; 503 when `TTS_URL` is unset or the service fails, so the plugin falls back to a local voice. Own 20/min bucket, no Gemini budget |
+| `/api/ai/voice-summary` | POST | Spoken text for the plugin's voice features (`trigger`, `project`, optional `tool`/`detail`/`last_message`): one sentence for the announcer, or with `trigger: "reply"` a two-to-three sentence summary (≤ 50 words) of Claude's reply for `/devscope:voice replies on`; stateless, only token usage is recorded as `voice_summary`. The plugin never calls it for `private` sessions |
+| `/api/ai/voice-audio` | POST | That text (or one piece of a `/devscope:explain` explanation) as WAV (`text`, optional Kokoro `voice`/`speed`/`volume`), voiced by the homelab TTS service; 503 when `TTS_URL` is unset or the service fails, so the plugin falls back to a local voice. Own 20/min bucket, no Gemini budget |
 | `/api/sessions/usage/backfill` | POST | Exact token usage per transcript and model from `/devscope:backfill-usage` (`{items: [{transcriptId, sessionId?, byModel}]}`, max 500); only the caller's own sessions are updated, the rest are counted as `skipped` |
 | `/api/health` | GET | Health check + WS client count |
 | `/ws` | WS | Real-time event stream |
@@ -222,8 +222,8 @@ Session tokens and cost (migration 055, `db/tokenUsageQueries.ts`). Costs are **
 The plugin's voice announcer speaks through `/api/ai/voice-audio`, so users get a natural voice without installing a model. Both voice endpoints live in `routes/voice.ts` (mounted under `/api/ai`; the Gemini guard and rate limiter are shared with `routes/ai.ts` via `routes/aiGuards.ts`).
 
 - **Service:** [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) CPU image (`ghcr.io/remsky/kokoro-fastapi-cpu`, ~3.3 GB) next to the backend on the internal network only, never exposed. It speaks the OpenAI-compatible `/v1/audio/speech`; `ai/tts.ts` never throws and returns null on any failure.
-- **Env:** `TTS_URL` (e.g. `http://kokoro:8880`; unset disables the feature), `TTS_VOICE` (default `am_michael`), `TTS_SPEED` (default `1.5`), `TTS_VOLUME` (Kokoro `volume_multiplier`, default `2`: twice the default loudness, peaks stay limited), `TTS_MODEL` (default `kokoro`).
-- **Privacy:** only the sentence the backend itself wrote for a non-private session is voiced; the plugin never sends `private` sessions here. Nothing is stored.
+- **Env:** `TTS_URL` (e.g. `http://kokoro:8880`; unset disables the feature), `TTS_VOICE` (default `am_michael`), `TTS_SPEED` (default `1.2`; the plugin sends its own, also 1.2 by default), `TTS_VOLUME` (Kokoro `volume_multiplier`, default `2`: twice the default loudness, peaks stay limited), `TTS_MODEL` (default `kokoro`).
+- **Privacy:** what is voiced is either the text the backend itself wrote, or a spoken explanation Claude wrote for `/devscope:explain` (sent in pieces of at most 440 characters, the next one fetched while the current one plays). The plugin never sends `private` sessions here; they use a local voice. Nothing is stored.
 
 ## Ethics & Design Principles
 

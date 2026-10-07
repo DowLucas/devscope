@@ -4,22 +4,31 @@ import { zValidator } from "@hono/zod-validator";
 import { callGemini, DEFAULT_MODEL } from "../ai/gemini";
 import { isTtsAvailable, synthesize } from "../ai/tts";
 import { recordTokenUsage } from "../db";
-import { VOICE, buildVoicePrompt, toSpokenText, voiceAudioBody, voiceSummaryBody } from "../services/voiceSummary";
+import {
+  VOICE,
+  buildVoicePrompt,
+  spokenLimits,
+  toSpokenText,
+  voiceAudioBody,
+  voiceSummaryBody,
+} from "../services/voiceSummary";
 import { checkRateLimit, rateLimitKey, requireAi } from "./aiGuards";
 
 /**
- * The plugin's voice announcer, mounted under /api/ai: a sentence saying which
- * session needs the user (Gemini), and that sentence as audio (the homelab
- * TTS service). Stateless: nothing is persisted beyond token usage.
+ * The plugin's voice features, mounted under /api/ai: a sentence saying which
+ * session needs the user, or a short summary of Claude's reply (Gemini), and
+ * text as audio (the homelab TTS service). Stateless: nothing is persisted
+ * beyond token usage.
  */
 export function voiceRoutes(sql: SQL) {
   const app = new Hono();
 
   app.post("/voice-summary", requireAi(sql), zValidator("json", voiceSummaryBody), async (c) => {
     const orgId = c.get("orgId" as never) as string | undefined;
+    const input = c.req.valid("json");
     let result;
     try {
-      result = await callGemini(buildVoicePrompt(c.req.valid("json")), undefined, {
+      result = await callGemini(buildVoicePrompt(input), undefined, {
         temperature: VOICE.temperature,
         maxOutputTokens: VOICE.maxOutputTokens,
       });
@@ -31,7 +40,7 @@ export function voiceRoutes(sql: SQL) {
     recordTokenUsage(sql, "voice_summary", DEFAULT_MODEL, result.inputTokens, result.outputTokens, orgId).catch(
       (err) => console.error("[ai] voice usage not recorded:", err),
     );
-    const text = toSpokenText(result.text);
+    const text = toSpokenText(result.text, spokenLimits(input.trigger));
     if (!text) return c.json({ error: "Empty summary" }, 502);
     return c.json({ text });
   });

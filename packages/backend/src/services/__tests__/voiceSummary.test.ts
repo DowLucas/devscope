@@ -1,9 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { VOICE, buildVoicePrompt, toSpokenText, voiceAudioBody, voiceSummaryBody } from "../voiceSummary";
+import {
+  VOICE,
+  buildVoicePrompt,
+  spokenLimits,
+  toSpokenText,
+  voiceAudioBody,
+  voiceSummaryBody,
+} from "../voiceSummary";
 
 describe("voiceSummaryBody", () => {
   test("accepts a minimal permission request", () => {
     const r = voiceSummaryBody.safeParse({ trigger: "permission", project: "devscope-cloud", tool: "Bash" });
+    expect(r.success).toBe(true);
+  });
+
+  test("accepts a reply summary request", () => {
+    const r = voiceSummaryBody.safeParse({ trigger: "reply", project: "devscope", last_message: "Done." });
     expect(r.success).toBe(true);
   });
 
@@ -34,6 +46,33 @@ describe("buildVoicePrompt", () => {
   });
 });
 
+describe("buildVoicePrompt (reply)", () => {
+  test("asks for a short summary of the reply, outcome first", () => {
+    const text = buildVoicePrompt({ trigger: "reply", project: "plugin", last_message: "All 40 tests pass." })[0]
+      .parts![0].text!;
+    expect(text).toContain("Project: plugin");
+    expect(text).toContain("Claude's reply: All 40 tests pass.");
+    expect(text).toContain("outcome first");
+    expect(text).toContain(`At most ${VOICE.replyMaxWords} words`);
+    expect(text).not.toContain("Situation:");
+  });
+
+  test("keeps far more of the reply than the announcer does", () => {
+    const text = buildVoicePrompt({ trigger: "reply", project: "p", last_message: "y".repeat(3500) })[0].parts![0]
+      .text!;
+    expect(text).toContain("y".repeat(3500));
+  });
+});
+
+describe("spokenLimits", () => {
+  test("replies may run longer than announcements but fit one audio request", () => {
+    expect(spokenLimits("permission")).toEqual({ maxWords: VOICE.maxWords, maxChars: VOICE.maxChars });
+    const reply = spokenLimits("reply");
+    expect(reply.maxWords).toBeGreaterThan(VOICE.maxWords);
+    expect(reply.maxChars).toBeLessThanOrEqual(VOICE.maxChars * 2);
+  });
+});
+
 describe("toSpokenText", () => {
   test("strips markup and collapses whitespace", () => {
     expect(toSpokenText('  **devscope** wants to run `bun test`\n now "please" ')).toBe(
@@ -49,6 +88,14 @@ describe("toSpokenText", () => {
     const out = toSpokenText(Array.from({ length: 60 }, (_, i) => `w${i}`).join(" "));
     expect(out.split(" ").length).toBe(VOICE.maxWords);
     expect(out.endsWith(".")).toBe(true);
+  });
+
+  test("takes the reply limits", () => {
+    const out = toSpokenText(
+      Array.from({ length: 80 }, (_, i) => `w${i}`).join(" "),
+      spokenLimits("reply"),
+    );
+    expect(out.split(" ").length).toBe(VOICE.replyMaxWords);
   });
 
   test("returns empty for empty model output", () => {
