@@ -141,7 +141,11 @@ export async function getActiveSessions(sql: SQL, developerIds?: string[]) {
   if (developerIds !== undefined) {
     return await sql`
       SELECT s.*, d.name as developer_name, d.email as developer_email, d.share_details as owner_share_details,
-        LEAST((SELECT MAX(e.created_at) FROM events e WHERE e.session_id = s.id), NOW()) as last_event_at
+        LEAST((SELECT MAX(e.created_at) FROM events e WHERE e.session_id = s.id), NOW()) as last_event_at,
+      (SELECT COUNT(*)::INT FROM events e
+       WHERE e.session_id = s.id AND e.event_type IN ('tool.complete', 'tool.fail')) as tool_calls,
+      (SELECT COUNT(*)::INT FROM events e
+       WHERE e.session_id = s.id AND e.event_type = 'tool.fail') as tool_failures
       FROM sessions s
       JOIN developers d ON s.developer_id = d.id
       WHERE s.status = 'active' AND s.developer_id IN (${inList(developerIds)})
@@ -149,7 +153,11 @@ export async function getActiveSessions(sql: SQL, developerIds?: string[]) {
   }
   return await sql`
     SELECT s.*, d.name as developer_name, d.email as developer_email, d.share_details as owner_share_details,
-      LEAST((SELECT MAX(e.created_at) FROM events e WHERE e.session_id = s.id), NOW()) as last_event_at
+      LEAST((SELECT MAX(e.created_at) FROM events e WHERE e.session_id = s.id), NOW()) as last_event_at,
+      (SELECT COUNT(*)::INT FROM events e
+       WHERE e.session_id = s.id AND e.event_type IN ('tool.complete', 'tool.fail')) as tool_calls,
+      (SELECT COUNT(*)::INT FROM events e
+       WHERE e.session_id = s.id AND e.event_type = 'tool.fail') as tool_failures
     FROM sessions s
     JOIN developers d ON s.developer_id = d.id
     WHERE s.status = 'active'

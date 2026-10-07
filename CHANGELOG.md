@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Richer topology cards, project groups and filters.** Your own session cards
+  show the model, tokens and cost; every visible session shows its tool calls and
+  failures (`toolCalls` / `toolFailures` on `/api/sessions/active`, counted live
+  between fetches; not for activity-only viewers). Two or more of a developer's
+  sessions in one project hang under a project node. "Hide inactive" and "Hide
+  finished subagents" toggles are remembered per browser.
+
 - **Topology detail panel.** Clicking a session or subagent opens a live side
   panel instead of leaving the page: state, branch, title, last active, model,
   tokens and cost (own sessions only), its subagents, the last 15 events, and a

@@ -6,7 +6,7 @@ import type { FeedEvent } from "@devscope/shared";
 import type { SessionNodeData, AgentNodeData, AgentSummaryNodeData } from "./flowTypes";
 import { STATE_CONFIG } from "./sessionStates";
 import { EVENT_LABELS, getEventSummary } from "@/lib/eventDisplay";
-import { formatCost, formatTokenCount, timeAgo } from "@/lib/utils";
+import { formatCost, formatTokenCount, sessionTokenTotal, timeAgo } from "@/lib/utils";
 import { ProjectLabel } from "@/components/ProjectLabel";
 
 interface DetailPanelProps {
@@ -41,7 +41,7 @@ export function DetailPanel({ node, nodes, onClose }: DetailPanelProps) {
 }
 
 function SessionDetails({ data, nodes }: { data: SessionNodeData; nodes: Node[] }) {
-  const { session, activityState, lastActivityAt, recentEvents } = data;
+  const { session, activityState, lastActivityAt, recentEvents, toolCalls, toolFailures } = data;
   const state = STATE_CONFIG[activityState];
   const agents = nodes.filter(
     (n) => n.type === "agent" && (n.data as AgentNodeData).sessionId === session.id,
@@ -51,11 +51,6 @@ function SessionDetails({ data, nodes }: { data: SessionNodeData; nodes: Node[] 
   )?.data as AgentSummaryNodeData | undefined;
   // Usage is only returned for the viewer's own sessions.
   const hasUsage = session.tokenSource != null;
-  const totalTokens =
-    (session.totalInputTokens ?? 0) +
-    (session.totalOutputTokens ?? 0) +
-    (session.totalCacheCreationTokens ?? 0) +
-    (session.totalCacheReadTokens ?? 0);
 
   return (
     <div className="space-y-5">
@@ -83,7 +78,13 @@ function SessionDetails({ data, nodes }: { data: SessionNodeData; nodes: Node[] 
         {session.model ? <Fact label="Model">{session.model}</Fact> : null}
         {hasUsage ? (
           <Fact label="Tokens">
-            {formatTokenCount(totalTokens)} · {formatCost(session.estimatedCostUsd ?? 0)}
+            {formatTokenCount(sessionTokenTotal(session))} · {formatCost(session.estimatedCostUsd ?? 0)}
+          </Fact>
+        ) : null}
+        {toolCalls != null ? (
+          <Fact label="Tool calls">
+            {toolCalls}
+            {toolFailures ? <span className="text-red-400"> · {toolFailures} failed</span> : null}
           </Fact>
         ) : null}
       </dl>

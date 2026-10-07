@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useActivityStore, type ActiveAgent } from "@/stores/activityStore";
+import { useActivityStore, toolCountsFrom, type ActiveAgent } from "@/stores/activityStore";
 import { apiFetch } from "@/lib/api";
 import type { Developer, Session } from "@devscope/shared";
 
@@ -86,6 +86,7 @@ export function useDevscopeSocket() {
                   developers: devs,
                   activeAgents: [...apiAgents, ...realtimeOnly],
                   activeSessions: sessions,
+                  toolCounts: toolCountsFrom(sessions),
                 });
               }).catch(() => {
                 // Fetch failures are expected during backend restarts;
