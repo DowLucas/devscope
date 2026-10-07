@@ -43,7 +43,9 @@ describe("buildVoicePrompt", () => {
       detail: "x".repeat(2000),
     })[0].parts![0].text!;
     expect(text).toContain("Tool: Bash");
-    expect(text.length).toBeLessThan(1500);
+    // The 2000-character detail is clipped to 600 (599 kept plus an ellipsis).
+    expect(text).toContain("x".repeat(599));
+    expect(text).not.toContain("x".repeat(600));
   });
 });
 

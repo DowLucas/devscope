@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { callGemini, DEFAULT_MODEL } from "../ai/gemini";
 import { isTtsAvailable, synthesize } from "../ai/tts";
+import { speakable } from "../services/speakable";
 import { recordTokenUsage } from "../db";
 import {
   VOICE,
@@ -40,7 +41,8 @@ export function voiceRoutes(sql: SQL) {
     recordTokenUsage(sql, "voice_summary", DEFAULT_MODEL, result.inputTokens, result.outputTokens, orgId).catch(
       (err) => console.error("[ai] voice usage not recorded:", err),
     );
-    const text = toSpokenText(result.text, spokenLimits(input.trigger, input.length));
+    // speakable first: toSpokenText strips the underscores it splits identifiers on.
+    const text = toSpokenText(speakable(result.text), spokenLimits(input.trigger, input.length));
     if (!text) return c.json({ error: "Empty summary" }, 502);
     return c.json({ text });
   });
@@ -52,7 +54,8 @@ export function voiceRoutes(sql: SQL) {
       return c.json({ error: "Rate limit exceeded. Max 20 voice requests/minute." }, 429);
     }
     const { text, voice, speed, volume } = c.req.valid("json");
-    const audio = await synthesize(text, voice, speed, volume);
+    // Every voiced text, Claude's explanations included, is said the way a person would say it.
+    const audio = await synthesize(speakable(text), voice, speed, volume);
     if (!audio) return c.json({ error: "Voice unavailable" }, 503);
     return new Response(audio, { headers: { "content-type": "audio/wav", "cache-control": "no-store" } });
   });
