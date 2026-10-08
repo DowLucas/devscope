@@ -1,13 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import {
+  LABEL_MAX_CHARS,
   REPLY_LENGTHS,
   VOICE,
+  branchTopic,
   buildVoicePrompt,
+  sessionLabel,
+  sessionTopic,
   spokenLimits,
+  titleTopic,
   toSpokenText,
   voiceAudioBody,
   voiceSummaryBody,
   voiceThinkingBudget,
+  withLabel,
 } from "../voiceSummary";
 
 describe("voiceSummaryBody", () => {
@@ -154,5 +160,60 @@ describe("voiceAudioBody", () => {
     expect(voiceAudioBody.safeParse({ text: "x".repeat(VOICE.maxChars * 2 + 1) }).success).toBe(false);
     expect(voiceAudioBody.safeParse({ text: "hi", voice: "../etc" }).success).toBe(false);
     expect(voiceAudioBody.safeParse({ text: "hi", speed: 5 }).success).toBe(false);
+  });
+});
+
+describe("session labels", () => {
+  test("a branch becomes words, and main-like branches say nothing", () => {
+    expect(branchTopic("feat/oauth-login")).toBe("oauth login");
+    expect(branchTopic("lucas/fix_rate-limit")).toBe("fix rate limit");
+    expect(branchTopic("main")).toBeNull();
+    expect(branchTopic("Master")).toBeNull();
+    expect(branchTopic(null)).toBeNull();
+    expect(branchTopic("feat/a-very-long-branch-name-for-this")).toBe("a very long branch name");
+  });
+
+  test("a title loses closing punctuation and is kept short", () => {
+    expect(titleTopic("Fix the rate limiter.")).toBe("Fix the rate limiter");
+    expect(titleTopic("Add OAuth sign-in to the login form and tests")).toBe("Add OAuth sign-in to the login");
+    expect(titleTopic("  ")).toBeNull();
+  });
+
+  test("the topic is the title, else the branch, never for private sessions", () => {
+    const row = { current_title: "Rate limiter fix", git_branch: "fix/rate-limit", privacy_mode: "standard" };
+    expect(sessionTopic(row)).toBe("Rate limiter fix");
+    expect(sessionTopic({ ...row, current_title: null })).toBe("rate limit");
+    expect(sessionTopic({ ...row, privacy_mode: "private" })).toBeNull();
+    expect(sessionTopic({ current_title: null, git_branch: "main", privacy_mode: null })).toBeNull();
+  });
+
+  test("the label is project plus topic, cut to whole words", () => {
+    expect(sessionLabel("api-service", "rate limiter fix")).toBe("api-service, rate limiter fix");
+    expect(sessionLabel("api-service", null)).toBe("api-service");
+    const long = sessionLabel("api-service", "x".repeat(30) + " " + "y".repeat(30) + " zzz");
+    expect(long.length).toBeLessThanOrEqual(LABEL_MAX_CHARS);
+    expect(long.endsWith(" ")).toBe(false);
+  });
+
+  test("the label is spoken first, as its own sentence", () => {
+    expect(withLabel("api-service, rate limiter fix", "It needs approval to run the tests."))
+      .toBe("api-service, rate limiter fix. It needs approval to run the tests.");
+    expect(withLabel(null, "Done.")).toBe("Done.");
+  });
+
+  test("with a label, the prompt tells the model not to repeat the project", () => {
+    const input = voiceSummaryBody.parse({ trigger: "permission", project: "api", session_id: "s1" });
+    const labelled = buildVoicePrompt(input, true)[0].parts![0].text!;
+    const plain = buildVoicePrompt(input)[0].parts![0].text!;
+    expect(labelled).toContain("do not repeat the project name");
+    expect(labelled).not.toContain("Start with the project name");
+    expect(plain).toContain("Start with the project name");
+    const reply = voiceSummaryBody.parse({ trigger: "reply", project: "api", last_message: "Done." });
+    expect(buildVoicePrompt(reply, true)[0].parts![0].text!).toContain("do not repeat the project name");
+  });
+
+  test("the body accepts a session id and a returned label, within limits", () => {
+    expect(voiceSummaryBody.safeParse({ trigger: "finished", project: "api", session_id: "s1", label: "api, x" }).success).toBe(true);
+    expect(voiceSummaryBody.safeParse({ trigger: "finished", project: "api", label: "x".repeat(LABEL_MAX_CHARS + 1) }).success).toBe(false);
   });
 });

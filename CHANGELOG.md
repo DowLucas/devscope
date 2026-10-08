@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Voice says which session it is about.** `/api/ai/voice-summary` takes an
+  optional `session_id` and `label`. For the caller's own session it builds a
+  spoken label, the project plus what the session works on (its title, else
+  its branch as words: "api-service, rate limiter fix"), starts the text with
+  it in code rather than trusting the model to, and returns it as `label`.
+  The plugin (0.32.0) sends that label back on later calls, so a session keeps
+  one name. Another developer's session, or a private one, is labelled with
+  the project only; requests without `session_id` are answered as before.
+
 - **Landing page repositioned around what DevScope now does.** Developers get a
   productivity toolkit for Claude Code (voice when a session needs you, live
   topology, error recall, search, slash commands, next-step hints); team leads
