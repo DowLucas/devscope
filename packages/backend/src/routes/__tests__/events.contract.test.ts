@@ -268,6 +268,19 @@ function transformPluginSetup(raw: Record<string, unknown>) {
   });
 }
 
+function transformModelFirstUse(raw: Record<string, unknown>) {
+  // Mirrors scripts/model-first-use.sh on PostModelSwitch (the fixture's shape).
+  // The script lowercases ids and drops a trailing `[1m]`-style suffix.
+  const norm = (m: unknown) => String(m ?? "").toLowerCase().replace(/\[[^\]]*\]$/, "");
+  const previous = norm(raw.from_model);
+  return envelope("model.first_use", {
+    model: norm(raw.to_model),
+    trigger: "model_switch",
+    ...(previous ? { previousModel: previous } : {}),
+    ...baseFields(raw),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -300,6 +313,8 @@ describe("plugin↔backend wire contract (DEV-88)", () => {
     { file: "cwd-changed.json", transform: transformCwdChanged, eventType: "cwd.change" },
     { file: "directory-added.json", transform: transformDirectoryAdded, eventType: "directory.added" },
     { file: "setup-hook.json", transform: transformPluginSetup, eventType: "plugin.setup" },
+    // Added in plugin 0.35.0.
+    { file: "model-first-use.json", transform: transformModelFirstUse, eventType: "model.first_use" },
   ];
 
   for (const { file, transform, eventType } of fixtureCases) {
@@ -353,6 +368,8 @@ describe("plugin↔backend wire contract (DEV-88)", () => {
         "cwd.change",
         "directory.added",
         "plugin.setup",
+        // Added in plugin 0.35.0.
+        "model.first_use",
       ].sort(),
     );
   });

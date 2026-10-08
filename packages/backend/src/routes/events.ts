@@ -59,6 +59,8 @@ const eventSchema = z.object({
     "tool.batch", "prompt.expansion", "response.failed", "model.switch",
     "permission.denied", "task.created", "cwd.change", "directory.added",
     "plugin.setup",
+    // Added in plugin 0.35.0.
+    "model.first_use",
   ]),
   payload: z.record(z.unknown()),
 });

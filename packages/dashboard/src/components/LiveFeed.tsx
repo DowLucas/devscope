@@ -205,6 +205,7 @@ function buildFeedItems(events: FeedEvent[]): FeedItem[] {
       case "cwd.change":
       case "directory.added":
       case "plugin.setup":
+      case "model.first_use":
         flushTools();
         items.push({ kind: "event", key: event.id, event });
         break;
