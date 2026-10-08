@@ -163,7 +163,7 @@ export function FlowView() {
   );
 }
 
-function FilterToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+export function FilterToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}

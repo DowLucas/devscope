@@ -21,7 +21,7 @@ interface Stat {
 
 const FALLBACK_STATS: readonly Stat[] = [
   { value: "< 5 min", label: "Setup time" },
-  { value: "0 ms", label: "Impact on workflow" },
+  { value: "3", label: "Privacy modes" },
   { value: "Real-time", label: "Event streaming" },
   { value: "Open Source", label: "Self-hostable" },
 ] as const;

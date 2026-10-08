@@ -20,12 +20,12 @@ const DEFAULT_FAQ: readonly FaqItem[] = [
   {
     question: "What is DevScope?",
     answer:
-      "DevScope is an open-source monitoring and upskilling platform for Claude Code developer sessions. It captures session lifecycle events, analyzes AI-assisted workflows, surfaces effective patterns, and helps developers and teams improve their AI engineering skills over time.",
+      "DevScope is an open-source companion for Claude Code. It remembers your sessions, and your team's if they choose to share, and brings back what worked while you code: fixes for errors you've seen, earlier answers, proven prompts and skills. A dashboard adds search, a live view of every session, and team insights.",
   },
   {
     question: "How does the Claude Code plugin work?",
     answer:
-      "The DevScope plugin installs as Claude Code hooks — lightweight async Bash scripts that fire on session events like prompts, tool calls, and session start/end. All hooks run asynchronously and non-blocking, so there is zero impact on your Claude Code workflow. Install with: claude plugin marketplace add DowLucas/devscope-plugin",
+      "The DevScope plugin installs as Claude Code hooks that fire on prompts, tool calls and session start and end. Recording runs in the background. The recall and hint hooks run inline, are capped at 5 seconds, are skipped on any error, and can each be turned off. Install with: claude plugin marketplace add DowLucas/devscope-plugin",
   },
   {
     question: "What data does DevScope collect?",
@@ -50,7 +50,7 @@ const DEFAULT_FAQ: readonly FaqItem[] = [
   {
     question: "How is DevScope different from Claude Code's built-in analytics?",
     answer:
-      "Claude Code does not currently provide session-level analytics or team-wide upskilling insights. DevScope fills that gap: it tracks which tools you use, how your sessions are structured, where you get stuck, and what patterns lead to successful outcomes — then surfaces those insights in a dashboard you and your team can act on.",
+      "Claude Code forgets each session when it ends. DevScope keeps them, searchable and shared with the team if you choose, and feeds what worked back into new sessions as they happen, instead of only reporting on them afterwards.",
   },
 ] as const;
 
@@ -85,7 +85,7 @@ export function FaqSection() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="text-center mb-12"
         >
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-balance text-foreground">
             Frequently asked questions
           </h2>
         </motion.div>

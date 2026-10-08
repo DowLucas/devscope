@@ -1,6 +1,6 @@
 import { Separator } from "@/components/ui/separator";
 import { usePersona } from "./PersonaContext";
-import logoFull from "@/assets/logo-full.png";
+import logoMark from "@/assets/logo-mark.svg";
 
 /** Product navigation links — anchor IDs or external URLs. */
 const PRODUCT_LINKS = [
@@ -28,11 +28,12 @@ export function FooterSection() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand */}
           <div>
-            <a href="/" className="inline-block hover:opacity-80 transition-opacity">
-              <img src={logoFull} alt="DevScope" className="h-5" />
+            <a href="/" className="inline-flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <img src={logoMark} alt="" className="h-6 w-6" />
+              <span className="text-sm font-semibold tracking-tight text-foreground">DevScope</span>
             </a>
             <p className="mt-2 text-sm text-muted-foreground">
-              Upskilling platform for AI-assisted development.
+              A memory for Claude Code, shared with your team.
             </p>
           </div>
 

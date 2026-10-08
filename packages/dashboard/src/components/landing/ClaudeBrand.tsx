@@ -8,7 +8,7 @@ const CLAUDE_COLOR = "#DE7356";
 
 /** Inline <span> that renders "Claude Code" in Claude's brand terracotta. */
 export function ClaudeBrand() {
-  return <span style={{ color: CLAUDE_COLOR }}>Claude Code</span>;
+  return <span className="whitespace-nowrap" style={{ color: CLAUDE_COLOR }}>Claude Code</span>;
 }
 
 /**
@@ -21,7 +21,7 @@ export function brandify(text: string): ReactNode {
   if (parts.length === 1) return text;
   return parts.map((part, i) =>
     part === "Claude Code" ? (
-      <span key={i} style={{ color: CLAUDE_COLOR }}>
+      <span key={i} className="whitespace-nowrap" style={{ color: CLAUDE_COLOR }}>
         Claude Code
       </span>
     ) : (

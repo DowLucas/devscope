@@ -1,11 +1,11 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity,
-  AlertTriangle,
-  BarChart3,
-  GitBranch,
-  Sparkles,
+  History,
+  Network,
+  Search,
   Terminal,
+  Users,
+  Volume2,
 } from "lucide-react";
 import { motion } from "motion/react";
 
@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { usePersona } from "./PersonaContext";
 import { getFeaturesContent, type FeatureItem } from "./personaContent";
 import { brandify } from "./ClaudeBrand";
+import { Backdrop } from "./Backdrop";
 
 /* -------------------------------------------------------------------------- */
 /*  Fallback features (shown before persona is selected)                       */
@@ -33,46 +34,46 @@ interface Feature {
 
 const DEFAULT_FEATURES: readonly Feature[] = [
   {
-    icon: Activity,
-    title: "Pattern Discovery",
+    icon: History,
+    title: "Recall what worked",
     description:
-      "Surface effective workflows from real session data. See which tool sequences and prompting styles lead to the best outcomes.",
+      "Hit an error or ask something you've asked before, and DevScope shows what fixed it last time.",
   },
   {
-    icon: GitBranch,
-    title: "Anti-Pattern Detection",
+    icon: Search,
+    title: "Search every session",
     description:
-      "Automatically flag common pitfalls — retry loops, high failure-rate tools, and inefficient workflows — so your team can learn from them.",
+      "Find any past prompt or reply by meaning, not just keywords, and jump straight to that turn.",
   },
   {
-    icon: BarChart3,
-    title: "Team Skill Mapping",
+    icon: Users,
+    title: "Team habits, shared",
     description:
-      "Understand how your team adopts AI tools over time. Track which skills are developing and where coaching can help most.",
+      "Prompts and skills that worked for your team show up as suggestions while you work.",
   },
   {
-    icon: AlertTriangle,
-    title: "Suggested Improvements",
+    icon: Volume2,
+    title: "A voice when you're needed",
     description:
-      "AI-generated recommendations based on session patterns — concrete tips to help developers get more from every Claude Code session.",
+      "Hear when a session is waiting on you, and get long replies summarised out loud.",
   },
   {
-    icon: Sparkles,
-    title: "Shareable Learnings",
+    icon: Network,
+    title: "Everything running, live",
     description:
-      "AI-generated reports that highlight what's working, what isn't, and which patterns to adopt or avoid.",
+      "Every session and subagent across the team, with branch, task and state.",
   },
   {
     icon: Terminal,
-    title: "Zero-Friction Plugin",
+    title: "One-command plugin",
     description:
-      "Install the Claude Code plugin with a single command. Non-blocking hooks mean zero impact on developer workflow.",
+      "Install the Claude Code plugin in a minute. It works in any editor or terminal.",
   },
 ] as const;
 
-const DEFAULT_HEADING = "Turn AI usage data into\u00a0team\u00a0skills";
+const DEFAULT_HEADING = "From session history to help in the moment";
 const DEFAULT_SUBHEADING =
-  "DevScope finds patterns in how your team uses AI — surfacing effective workflows, catching anti-patterns, and helping everyone level up.";
+  "Every Claude Code session your team runs makes the next one easier. DevScope does the remembering.";
 
 /* -------------------------------------------------------------------------- */
 /*  Scroll-reveal animation variants                                          */
@@ -94,11 +95,12 @@ export function FeaturesSection() {
   const features = content?.items ?? DEFAULT_FEATURES;
 
   return (
-    <section id="features" className="py-24 px-4">
+    <section id="features" className="relative isolate py-24 px-4">
+      <Backdrop pattern="dots" fadeFrom="top" glows={[{ color: "violet", at: "85% 10%", size: "35% 30%", opacity: 0.08 }]} />
       <div className="max-w-6xl mx-auto">
         {/* ---- Section heading ---- */}
         <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-balance text-foreground">
             {heading}
           </h2>
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">

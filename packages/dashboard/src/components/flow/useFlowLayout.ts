@@ -20,7 +20,7 @@ const INACTIVE_AFTER_MS = 2 * 60_000;
 const NOW_REFRESH_MS = 10_000;
 
 /** States in which the session is doing work, so its edge animates. */
-const WORKING_STATES = new Set<SessionActivityState>(["running", "thinking", "compacting"]);
+export const WORKING_STATES = new Set<SessionActivityState>(["running", "thinking", "compacting"]);
 
 /** Events kept per node for the detail panel. */
 const RECENT_EVENT_LIMIT = 15;
