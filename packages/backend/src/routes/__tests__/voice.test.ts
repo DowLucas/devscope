@@ -61,6 +61,27 @@ describe("POST /api/ai/voice-audio", () => {
     expect(mockSynthesize).toHaveBeenCalledWith("cloud needs you", "am_michael", 1.5, 2.5, undefined);
   });
 
+  test("pads the end with silence; pad_ms 0 for mid-speech pieces", async () => {
+    const pcm = (frames: number) => {
+      const b = new ArrayBuffer(44 + frames * 2);
+      const v = new DataView(b);
+      [..."RIFF"].forEach((c, i) => v.setUint8(i, c.charCodeAt(0)));
+      v.setUint32(4, 36 + frames * 2, true);
+      [..."WAVEfmt "].forEach((c, i) => v.setUint8(8 + i, c.charCodeAt(0)));
+      v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, 24000, true); v.setUint32(28, 48000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+      [..."data"].forEach((c, i) => v.setUint8(36 + i, c.charCodeAt(0)));
+      v.setUint32(40, frames * 2, true);
+      return b;
+    };
+    mockSynthesize.mockImplementation(async () => pcm(240));
+    const padded = await (await post(buildApp(), { text: "hi" })).arrayBuffer();
+    expect(padded.byteLength).toBe(44 + (240 + 9600) * 2); // default 400 ms at 24 kHz
+    const bare = await (await post(buildApp(), { text: "hi", pad_ms: 0 })).arrayBuffer();
+    expect(bare.byteLength).toBe(44 + 240 * 2);
+    expect((await post(buildApp(), { text: "hi", pad_ms: 5000 })).status).toBe(400);
+  });
+
   test("passes the requested voice model, and rejects a malformed name", async () => {
     await post(buildApp(), { text: "hi", model: "kokoro" });
     expect((mockSynthesize.mock.calls[0] as unknown[])[4]).toBe("kokoro");

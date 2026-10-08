@@ -33,6 +33,8 @@ export const VOICE = {
   // tokens) was cut mid-word at 1024. Room for thinking where it can't be off.
   maxOutputTokens: 4096,
   temperature: 0.4,
+  /** Silence after the last word of a voiced text, so no output drops its tail. */
+  padMs: 400,
 } as const;
 
 /** Longest label; the topic part is cut to whole words to fit. */
@@ -63,6 +65,11 @@ export const voiceAudioBody = z.object({
   volume: z.number().min(0.5).max(3).optional(),
   /** Which speech service to use first, by its TTS_SERVICES name (e.g. "kokoro"). */
   model: z.string().regex(/^[a-z0-9-]{1,32}$/).optional(),
+  /**
+   * Trailing silence in ms; VOICE.padMs when absent. The plugin sends 0 for a
+   * piece in the middle of long speech, where the next piece follows at once.
+   */
+  pad_ms: z.number().int().min(0).max(1000).optional(),
 });
 
 type Trigger = VoiceSummaryInput["trigger"];
@@ -192,8 +199,27 @@ export function toSpokenText(
     .trim();
   if (!text) return "";
   const words = text.split(" ");
-  const capped = words.length > maxWords ? `${words.slice(0, maxWords).join(" ")}.` : text;
-  return capped.length > maxChars ? `${capped.slice(0, maxChars - 1)}…` : capped;
+  let capped = text;
+  if (words.length > maxWords) {
+    const kept = words.slice(0, maxWords).join(" ");
+    capped = atSentenceEnd(kept, kept.length / 2) ?? `${kept.replace(/[,;:]$/, "")}.`;
+  }
+  if (capped.length <= maxChars) return capped;
+  const head = capped.slice(0, maxChars);
+  return atSentenceEnd(head, maxChars / 2) ?? `${head.slice(0, Math.max(head.lastIndexOf(" "), 1)).replace(/[,;:]$/, "")}…`;
+}
+
+/**
+ * A cut text ends at its last full sentence when that keeps at least
+ * `minLength` characters, so a summary the model let run long is not spoken
+ * stopping mid-sentence. Null when no sentence ends late enough.
+ */
+function atSentenceEnd(text: string, minLength: number): string | null {
+  const ends = [...text.matchAll(/[.!?](?=\s|$)/g)];
+  const last = ends.at(-1);
+  if (!last || last.index === undefined) return null;
+  const cut = text.slice(0, last.index + 1);
+  return cut.length >= minLength ? cut : null;
 }
 
 // --- Session labels ---

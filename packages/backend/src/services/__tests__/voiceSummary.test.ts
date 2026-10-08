@@ -130,6 +130,25 @@ describe("toSpokenText", () => {
     expect(out.endsWith(".")).toBe(true);
   });
 
+  test("a summary that runs long ends at its last full sentence, not mid-sentence", () => {
+    const first = Array.from({ length: 15 }, (_, i) => `a${i}`).join(" ") + ".";
+    const second = Array.from({ length: 30 }, (_, i) => `b${i}`).join(" ") + ".";
+    expect(toSpokenText(`${first} ${second}`)).toBe(first);
+  });
+
+  test("falls back to a word cut when the first sentence is too short to keep", () => {
+    const out = toSpokenText("Ok. " + Array.from({ length: 40 }, (_, i) => `w${i}`).join(" ") + ".");
+    expect(out.split(" ").length).toBe(VOICE.maxWords);
+    expect(out.endsWith(".")).toBe(true);
+  });
+
+  test("a character cut ends at a sentence or a whole word, never mid-word", () => {
+    const long = Array.from({ length: 24 }, () => "abcdefghijk").join(" ");
+    const out = toSpokenText(long, { maxWords: 100, maxChars: 50 });
+    expect(out.endsWith("…")).toBe(true);
+    expect(out.slice(0, -1).split(" ").every((w) => w === "abcdefghijk")).toBe(true);
+  });
+
   test("takes the reply limits", () => {
     const out = toSpokenText(
       Array.from({ length: 80 }, (_, i) => `w${i}`).join(" "),
