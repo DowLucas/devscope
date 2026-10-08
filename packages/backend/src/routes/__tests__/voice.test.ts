@@ -14,6 +14,18 @@ mock.module("../../ai/tts", () => ({
   TTS_MODEL: "kokoro",
 }));
 
+const mockGemini = mock(async () => ({ text: "It needs approval to run the tests.", inputTokens: 10, outputTokens: 5 }));
+mock.module("../../ai/gemini", () => ({
+  callGemini: mockGemini,
+  isAiAvailable: () => true,
+  DEFAULT_MODEL: "gemini-2.5-flash",
+}));
+
+let ownDevIds = ["dev-me"];
+mock.module("../../services/visibility", () => ({
+  getOwnOrgDevIds: async () => ownDevIds,
+}));
+
 const { voiceRoutes } = await import("../voice");
 
 let userSeq = 0;
@@ -86,5 +98,87 @@ describe("POST /api/ai/voice-audio", () => {
     expect((await post(app, { text: "hi" })).status).toBe(429);
     // Another user has their own bucket.
     expect((await post(buildApp(), { text: "hi" })).status).toBe(200);
+  });
+});
+
+describe("POST /api/ai/voice-summary (session labels)", () => {
+  let session: Record<string, unknown> | undefined;
+  let queries = 0;
+  // Stands in for Bun.sql: the only query is the session lookup.
+  const fakeSql = (async () => {
+    queries++;
+    return session ? [session] : [];
+  }) as any;
+
+  function summaryApp() {
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      c.set("user" as never, { id: `user-${++userSeq}` } as never);
+      await next();
+    });
+    app.route("/api/ai", voiceRoutes(fakeSql));
+    return app;
+  }
+
+  const summarize = (body: unknown) =>
+    summaryApp().request("/api/ai/voice-summary", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  beforeEach(() => {
+    ownDevIds = ["dev-me"];
+    queries = 0;
+    session = { developer_id: "dev-me", current_title: "Rate limiter fix", git_branch: "fix/rate-limit", privacy_mode: "standard" };
+    mockGemini.mockClear();
+  });
+
+  test("starts with project and title, and returns the label", async () => {
+    const res = await summarize({ trigger: "permission", project: "api-service", session_id: "s1" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      text: "api-service, Rate limiter fix. It needs approval to run the tests.",
+      label: "api-service, Rate limiter fix",
+    });
+    const prompt = (mockGemini.mock.calls[0] as unknown as [{ parts: { text: string }[] }[]])[0][0].parts[0].text;
+    expect(prompt).toContain("do not repeat the project name");
+  });
+
+  test("falls back to the branch when the session has no title yet", async () => {
+    session = { ...session, current_title: null };
+    const res = await summarize({ trigger: "finished", project: "api-service", session_id: "s1" });
+    expect((await res.json()).label).toBe("api-service, rate limit");
+  });
+
+  test("never names another developer's session", async () => {
+    ownDevIds = ["dev-someone-else"];
+    const res = await summarize({ trigger: "finished", project: "api-service", session_id: "s1" });
+    expect((await res.json()).label).toBe("api-service");
+  });
+
+  test("reuses a label the plugin sends back, without a lookup", async () => {
+    const res = await summarize({ trigger: "finished", project: "api-service", session_id: "s1", label: "api-service, first name" });
+    expect((await res.json()).label).toBe("api-service, first name");
+    expect(queries).toBe(0);
+  });
+
+  test("older plugins without a session id keep the old wording", async () => {
+    const res = await summarize({ trigger: "finished", project: "api-service" });
+    expect(await res.json()).toEqual({ text: "It needs approval to run the tests." });
+    const prompt = (mockGemini.mock.calls[0] as unknown as [{ parts: { text: string }[] }[]])[0][0].parts[0].text;
+    expect(prompt).toContain("Start with the project name");
+  });
+
+  test("a failed lookup still answers, labelled with the project", async () => {
+    const failing = (async () => { throw new Error("db down"); }) as any;
+    const app = new Hono();
+    app.route("/api/ai", voiceRoutes(failing));
+    const res = await app.request("/api/ai/voice-summary", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trigger: "finished", project: "api-service", session_id: "s1" }),
+    });
+    expect((await res.json()).label).toBe("api-service");
   });
 });

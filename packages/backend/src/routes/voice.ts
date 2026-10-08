@@ -1,5 +1,5 @@
 import type { SQL } from "bun";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { callGemini, DEFAULT_MODEL } from "../ai/gemini";
 import { isTtsAvailable, synthesize, ttsServices } from "../ai/tts";
@@ -8,12 +8,17 @@ import { recordTokenUsage } from "../db";
 import {
   VOICE,
   buildVoicePrompt,
+  sessionLabel,
+  sessionTopic,
   spokenLimits,
   toSpokenText,
   voiceAudioBody,
   voiceThinkingBudget,
   voiceSummaryBody,
+  withLabel,
+  type VoiceSummaryInput,
 } from "../services/voiceSummary";
+import { getOwnOrgDevIds } from "../services/visibility";
 import { checkRateLimit, rateLimitKey, requireAi } from "./aiGuards";
 
 /**
@@ -28,9 +33,10 @@ export function voiceRoutes(sql: SQL) {
   app.post("/voice-summary", requireAi(sql), zValidator("json", voiceSummaryBody), async (c) => {
     const orgId = c.get("orgId" as never) as string | undefined;
     const input = c.req.valid("json");
+    const label = await resolveLabel(sql, c, input);
     let result;
     try {
-      result = await callGemini(buildVoicePrompt(input), undefined, {
+      result = await callGemini(buildVoicePrompt(input, label != null), undefined, {
         temperature: VOICE.temperature,
         maxOutputTokens: VOICE.maxOutputTokens,
         thinkingBudget: voiceThinkingBudget(DEFAULT_MODEL),
@@ -46,12 +52,13 @@ export function voiceRoutes(sql: SQL) {
     // Cap the model's own words first; speakable() then adds words ("5s" ->
     // "5 seconds") that must not count against the cap and chop the summary.
     const capped = toSpokenText(result.text, spokenLimits(input.trigger, input.length));
-    const spoken = speakable(capped);
+    if (!capped) return c.json({ error: "Empty summary" }, 502);
+    const labelled = withLabel(label, capped);
+    const spoken = speakable(labelled);
     // An announcement is voiced in one request (at most maxChars * 2); a reply
     // summary is voiced in pieces, so only announcements need the guard.
-    const text = input.trigger !== "reply" && spoken.length > VOICE.maxChars * 2 ? capped : spoken;
-    if (!text) return c.json({ error: "Empty summary" }, 502);
-    return c.json({ text });
+    const text = input.trigger !== "reply" && spoken.length > VOICE.maxChars * 2 ? labelled : spoken;
+    return c.json(label ? { text, label } : { text });
   });
 
   // No Gemini here, so its own rate-limit bucket and no token budget.
@@ -71,4 +78,26 @@ export function voiceRoutes(sql: SQL) {
   app.get("/voice-models", (c) => c.json({ models: ttsServices().map((s) => s.name) }));
 
   return app;
+}
+
+/**
+ * The session's spoken name: the one the plugin got earlier (so it never
+ * changes mid-session), else project plus what the caller's own session is
+ * working on. Null for older plugins that send no session, so they keep the
+ * old wording. A lookup failure only costs the topic, never the summary.
+ */
+async function resolveLabel(sql: SQL, c: Context, input: VoiceSummaryInput): Promise<string | null> {
+  if (input.label) return input.label;
+  if (!input.session_id) return null;
+  let topic: string | null = null;
+  try {
+    const own = new Set(await getOwnOrgDevIds(sql, c as never));
+    const [row] = await sql`
+      SELECT developer_id, current_title, git_branch, privacy_mode
+      FROM sessions WHERE id = ${input.session_id}`;
+    if (row && own.has(row.developer_id)) topic = sessionTopic(row);
+  } catch (err) {
+    console.error("[ai] voice label lookup failed:", err);
+  }
+  return sessionLabel(input.project, topic);
 }
