@@ -42,6 +42,8 @@ export const EVENT_COLORS: Record<string, string> = {
   "cwd.change": "border-slate-500/30 bg-slate-500/5",
   "directory.added": "border-slate-500/30 bg-slate-500/5",
   "plugin.setup": "border-sky-500/30 bg-sky-500/5",
+  // Added in plugin 0.35.0
+  "model.first_use": "border-fuchsia-500/50 bg-fuchsia-500/10",
 };
 
 export const EVENT_LABELS: Record<string, string> = {
@@ -76,6 +78,8 @@ export const EVENT_LABELS: Record<string, string> = {
   "cwd.change": "Directory Changed",
   "directory.added": "Directory Added",
   "plugin.setup": "Plugin Setup",
+  // Added in plugin 0.35.0
+  "model.first_use": "New Model",
 };
 
 export function getEventSummary(event: FeedEvent): string {
@@ -169,6 +173,11 @@ export function getEventSummary(event: FeedEvent): string {
       return String(p.directory ?? "directory");
     case "plugin.setup":
       return "Trigger: " + String(p.trigger ?? "init");
+    case "model.first_use": {
+      const model = String(p.model ?? "");
+      const prev = p.previousModel ? ` (from ${String(p.previousModel)})` : "";
+      return model ? `First use of ${model}${prev}` : "First use of a model";
+    }
     default:
       return event.eventType;
   }

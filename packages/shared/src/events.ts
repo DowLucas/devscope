@@ -32,7 +32,9 @@ export type EventType =
   | "task.created"
   | "cwd.change"
   | "directory.added"
-  | "plugin.setup";
+  | "plugin.setup"
+  // Added in plugin 0.35.0: the first time a model is used on a machine.
+  | "model.first_use";
 
 export interface DevscopeEvent {
   id: string;

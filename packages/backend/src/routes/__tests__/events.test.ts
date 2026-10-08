@@ -284,6 +284,19 @@ describe("POST /events", () => {
     expect(res.status).not.toBe(400);
   });
 
+  test("accepts eventType model.first_use (added in plugin 0.35.0)", async () => {
+    const sql = makeMockSql();
+    const app = buildApp(sql);
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ eventType: "model.first_use" })),
+    });
+
+    expect(res.status).not.toBe(400);
+  });
+
   // Pre-0.15.0 plugins stay installed and keep sending these; dropping them
   // from the enum would turn their events into 400s.
   test.each(["worktree.create", "worktree.remove"])(

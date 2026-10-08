@@ -347,6 +347,19 @@ const modelSwitchPayloadSchema = z
   })
   .strict();
 
+/**
+ * `model-first-use.sh` — SessionStart / PostModelSwitch, the first time a model
+ * is used on the developer's machine. `trigger` says which of the two saw it.
+ */
+const modelFirstUsePayloadSchema = z
+  .object({
+    model: z.string(),
+    trigger: z.string(),
+    previousModel: z.string().optional(),
+    ...privacyAnnotations,
+  })
+  .strict();
+
 /** `permission-denied.sh` — PermissionDenied. */
 const permissionDeniedPayloadSchema = z
   .object({
@@ -428,6 +441,8 @@ export const payloadSchemasByEventType = {
   "cwd.change": cwdChangePayloadSchema,
   "directory.added": directoryAddedPayloadSchema,
   "plugin.setup": pluginSetupPayloadSchema,
+  // Added in plugin 0.35.0.
+  "model.first_use": modelFirstUsePayloadSchema,
 } as const;
 
 export type EventTypeKey = keyof typeof payloadSchemasByEventType;
