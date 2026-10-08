@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Voiced audio ends cleanly.** `/api/ai/voice-audio` rewrites the speech
+  service's WAV into a plain 44-byte-header PCM file with its real sizes
+  (Kokoro streams its WAV with `0xFFFFFFFF` sizes and a LIST chunk, so players
+  had to guess where it ends) and appends trailing silence, 400 ms by default
+  (`VOICE.padMs`), so outputs that close the stream early, such as Bluetooth
+  headphones, keep the last word. An optional `pad_ms` (0-1000) overrides it;
+  the plugin (0.33.0) sends `0` for pieces in the middle of long speech.
+- **Summaries that run long end at a sentence.** `toSpokenText` cuts an
+  over-long summary at its last full sentence when that keeps at least half,
+  and a character cut ends at a whole word, instead of stopping mid-sentence.
+
 - **Voice says which session it is about.** `/api/ai/voice-summary` takes an
   optional `session_id` and `label`. For the caller's own session it builds a
   spoken label, the project plus what the session works on (its title, else
