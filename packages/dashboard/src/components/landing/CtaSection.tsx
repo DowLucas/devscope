@@ -2,6 +2,7 @@ import { motion } from "motion/react";
 import { usePersona } from "./PersonaContext";
 import { getCtaContent } from "./personaContent";
 import { brandify } from "./ClaudeBrand";
+import { Backdrop } from "./Backdrop";
 
 /* ------------------------------------------------------------------ */
 /*  CtaSection — Final call-to-action with radial gradient backdrop    */
@@ -13,9 +14,9 @@ const revealVisible = { opacity: 1, y: 0 } as const;
 const revealViewport = { once: true, amount: 0.3 } as const;
 
 const DEFAULT = {
-  heading: "Start building better AI skills today",
+  heading: "Give Claude Code a memory",
   subtext:
-    "Set up DevScope in under 5 minutes. Open source, self-hosted, zero developer friction.",
+    "Set up DevScope in under 5 minutes. Open source, self-hostable, and you choose what's shared.",
   buttonLabel: "Get Started Free",
 };
 
@@ -24,11 +25,14 @@ export function CtaSection() {
   const c = persona ? getCtaContent(persona) : DEFAULT;
 
   return (
-    <section id="cta" className="relative overflow-hidden py-24 px-4">
-      {/* ---- Background radial glow ---- */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,oklch(0.488_0.243_264.376/0.1),transparent_70%)]"
+    <section id="cta" className="relative isolate overflow-hidden py-24 px-4">
+      <Backdrop
+        pattern="dots"
+        fadeFrom="center"
+        glows={[
+          { color: "green", at: "50% 55%", size: "40% 50%", opacity: 0.12 },
+          { color: "blue", at: "50% 40%", size: "60% 50%", opacity: 0.08 },
+        ]}
       />
 
       <div className="relative max-w-3xl mx-auto text-center">
@@ -37,7 +41,7 @@ export function CtaSection() {
           whileInView={revealVisible}
           viewport={revealViewport}
           transition={{ duration: 0.5, ease: "easeOut" }}
-          className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground"
+          className="text-3xl sm:text-4xl font-bold tracking-tight text-balance text-foreground"
         >
           {brandify(c.heading)}
         </motion.h2>

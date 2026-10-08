@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Landing page repositioned around what DevScope now does.** Developers get a
+  productivity toolkit for Claude Code (voice when a session needs you, live
+  topology, error recall, search, slash commands, next-step hints); team leads
+  get shared know-how and tooling friction, explicitly aggregate. The hero shows
+  an animated Claude Code session with error recall and voice instead of the
+  activity feed, and the team mockup drops velocity and workload framing.
+- **Privacy section says what developers control:** private mode, team sharing
+  off by default, export or delete. The FAQ gains "How do I opt out?" and no
+  longer claims prompts are never collected or that hooks add zero latency.
+- **Topology demo matches the real view:** branches, subagent tasks, "Your
+  turn" / waiting / inactive states, project grouping, live tool counts, cost on
+  your own sessions, working filters and the detail panel. It no longer captures
+  scroll, so the page scrolls past it.
+- New logo mark and favicons, CSS-only section backdrops (glows, grid/dots,
+  grain), and balanced headline wrapping.
+
 - **Richer topology cards, project groups and filters.** Your own session cards
   show the model, tokens and cost; every visible session shows its tool calls and
   failures (`toolCalls` / `toolFailures` on `/api/sessions/active`, counted live

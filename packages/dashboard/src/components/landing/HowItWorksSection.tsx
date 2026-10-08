@@ -62,7 +62,7 @@ const DEVELOPER_STEPS: Step[] = [
     number: 3,
     icon: CheckCircle2,
     title: "You're live",
-    description: "Start a Claude Code session and your activity streams to the dashboard instantly.",
+    description: "Start a Claude Code session. It shows up live, and the more you work, the more DevScope can recall.",
     detail: (
       <div className="flex items-center gap-2">
         <motion.span
@@ -116,7 +116,7 @@ const MANAGER_STEPS: Step[] = [
     number: 3,
     icon: Terminal,
     title: "Developers run the setup",
-    description: "Each developer runs one command. Non-blocking, zero workflow disruption.",
+    description: "Each developer runs one command and picks what they share. Nothing about their workflow changes.",
     detail: (
       <div className="rounded-md border border-border bg-muted/50 px-3 py-2 flex items-start gap-2">
         <span className="text-xs text-muted-foreground select-none">$</span>
@@ -130,7 +130,7 @@ const MANAGER_STEPS: Step[] = [
     number: 4,
     icon: BarChart3,
     title: "See your team's activity",
-    description: "Sessions stream in as your team works. Metrics, alerts, and AI insights — all automatic.",
+    description: "Sessions show up live, and what works for one developer starts helping the rest.",
     detail: (
       <div className="flex items-center gap-2">
         <motion.span
@@ -203,7 +203,7 @@ export function HowItWorksSection() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="text-center mb-12"
         >
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-balance text-foreground">
             {heading.title}
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">

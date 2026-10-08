@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import logoFull from "@/assets/logo-full.png";
+import logoMark from "@/assets/logo-mark.svg";
 
 /* ------------------------------------------------------------------ */
 /* Landing page sticky navigation bar                                  */
@@ -25,8 +25,9 @@ export function LandingNav() {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
         {/* Brand */}
-        <a href="/" className="flex items-center hover:opacity-80 transition-opacity">
-          <img src={logoFull} alt="DevScope" className="h-6" />
+        <a href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <img src={logoMark} alt="" className="h-7 w-7" />
+          <span className="text-base font-semibold tracking-tight text-foreground">DevScope</span>
         </a>
 
         {/* Desktop nav links */}

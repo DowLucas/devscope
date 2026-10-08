@@ -4,8 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { usePersona } from "./PersonaContext";
 import { getHeroContent } from "./personaContent";
 import { brandify } from "./ClaudeBrand";
-import { MockupActivityFeed } from "./MockupActivityFeed";
+import { MockupTerminal } from "./MockupTerminal";
+import logoMark from "@/assets/logo-mark.svg";
 import { MockupTeamDashboard } from "./MockupTeamDashboard";
+import { Backdrop } from "./Backdrop";
 
 /* ------------------------------------------------------------------ */
 /*  HeroSection — Top-of-page hero for the DevScope marketing site    */
@@ -24,11 +26,11 @@ const fadeUp = {
 
 /** Fallback content used before persona is chosen. */
 const DEFAULT = {
-  badge: "Open Source AI Upskilling Platform",
-  headline: "Help your team master AI-assisted development.",
-  headlineAccent: "Together.",
+  badge: "Open source, for Claude Code",
+  headline: "Claude Code that remembers",
+  headlineAccent: "what your team already solved.",
   subtext:
-    "DevScope surfaces patterns in how your team uses Claude Code — revealing effective workflows to share, anti-patterns to avoid, and skills to develop. Turn every session into a learning opportunity.",
+    "DevScope turns past Claude Code sessions into help while you work: the fix for an error you've hit before, the prompt that worked last time, a heads-up when a session needs you, and a live view of everything running.",
 };
 
 export function HeroSection() {
@@ -38,12 +40,15 @@ export function HeroSection() {
   return (
     <section
       id="hero"
-      className="relative overflow-hidden py-24 md:py-32 px-4"
+      className="relative isolate overflow-hidden py-24 md:py-32 px-4"
     >
-      {/* ---- Background glow ---- */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,oklch(0.488_0.243_264.376/0.15),transparent_70%)]"
+      <Backdrop
+        pattern="grid"
+        glows={[
+          { color: "blue", at: "30% 20%", size: "45% 40%", opacity: 0.16 },
+          { color: "violet", at: "72% 18%", size: "40% 35%", opacity: 0.14 },
+          { color: "green", at: "50% 75%", size: "50% 30%", opacity: 0.08 },
+        ]}
       />
 
       {/* ---- Content container ---- */}
@@ -66,10 +71,10 @@ export function HeroSection() {
           initial="initial"
           animate="animate"
           custom={1}
-          className="max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl"
+          className="max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl"
         >
-          {brandify(c.headline)}{" "}
-          <span className="bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
+          <span className="block text-balance">{brandify(c.headline)}</span>
+          <span className="block text-balance bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text pb-1 text-transparent">
             {c.headlineAccent}
           </span>
         </motion.h1>
@@ -80,7 +85,7 @@ export function HeroSection() {
           initial="initial"
           animate="animate"
           custom={2}
-          className="max-w-2xl text-lg text-muted-foreground"
+          className="max-w-2xl text-lg text-pretty text-muted-foreground"
         >
           {brandify(c.subtext)}
         </motion.p>
@@ -127,11 +132,11 @@ export function HeroSection() {
               <span className="size-3 rounded-full bg-red-500" />
               <span className="size-3 rounded-full bg-yellow-500" />
               <span className="size-3 rounded-full bg-green-500" />
-              <span className="ml-3 text-base text-muted-foreground">
-                DevScope —{" "}
+              <span className="ml-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <img src={logoMark} alt="" className="h-4 w-4" />
                 {persona === "non-technical"
-                  ? "Team Dashboard"
-                  : "Activity Feed"}
+                  ? "DevScope — Team Dashboard"
+                  : "Claude Code — with DevScope"}
               </span>
             </div>
 
@@ -140,7 +145,7 @@ export function HeroSection() {
               {persona === "non-technical" ? (
                 <MockupTeamDashboard />
               ) : (
-                <MockupActivityFeed />
+                <MockupTerminal />
               )}
             </div>
           </div>

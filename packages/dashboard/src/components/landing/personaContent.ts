@@ -1,19 +1,19 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
-  AlertTriangle,
   BarChart3,
-  BrainCircuit,
+  BookOpen,
   Briefcase,
-  GitBranch,
-  Lightbulb,
-  LineChart,
+  History,
+  MessageSquareText,
+  Network,
+  Search,
+  ShieldCheck,
   Sparkles,
-  Target,
   Terminal,
-  TrendingUp,
-  Workflow,
-  Zap,
+  Users,
+  Volume2,
+  Wrench,
 } from "lucide-react";
 import type { Persona } from "./PersonaContext";
 
@@ -32,18 +32,18 @@ interface HeroContent {
 
 const HERO: Record<Persona, HeroContent> = {
   technical: {
-    badge: "Open Source AI Upskilling",
-    headline: "Level up how you use Claude Code.",
-    headlineAccent: "Ship smarter.",
+    badge: "Open source toolkit for Claude Code",
+    headline: "Get more out of Claude Code.",
+    headlineAccent: "Spend less time babysitting it.",
     subtext:
-      "DevScope analyzes your Claude Code sessions to reveal what's working and what isn't — discover effective patterns, break out of anti-patterns, and build better AI workflows over time.",
+      "DevScope adds the tools Claude Code is missing: a voice that tells you when a session needs you, a live view of every session and subagent, fixes recalled from errors you've hit before, and search across everything you've done.",
   },
   "non-technical": {
-    badge: "AI Development Upskilling Platform",
-    headline: "Help your team master AI-assisted development.",
-    headlineAccent: "Faster.",
+    badge: "For teams adopting Claude Code",
+    headline: "What one developer figures out,",
+    headlineAccent: "the whole team gets.",
     subtext:
-      "DevScope turns AI usage data into actionable team skills — surface effective patterns, identify anti-patterns to avoid, and accelerate adoption with data-driven coaching.",
+      "DevScope puts your team's proven prompts, skills and fixes in front of every developer while they work, and shows you where tools and workflows slow the team down. No rankings, no surveillance.",
   },
 };
 
@@ -67,88 +67,88 @@ interface FeaturesContent {
 
 const FEATURES: Record<Persona, FeaturesContent> = {
   technical: {
-    heading: "Build better AI skills, session by session",
+    heading: "The tools around Claude Code",
     subheading:
-      "DevScope turns your Claude Code usage into a personal learning tool — revealing patterns, flagging anti-patterns, and suggesting better workflows.",
+      "Small, focused helpers that run inside Claude Code and fail open. Turn on what you want, switch off what you don't.",
     items: [
       {
-        icon: Activity,
-        title: "Session Replay & Timeline",
+        icon: Volume2,
+        title: "Know when a session needs you",
         description:
-          "Review every prompt and tool call in chronological order. Spot what works, learn from what doesn't, and refine your approach.",
+          "A voice tells you when Claude is waiting on a permission prompt or a question, so you can work elsewhere and stop checking tabs.",
       },
       {
-        icon: GitBranch,
-        title: "Pattern Library",
+        icon: Network,
+        title: "Every session at a glance",
         description:
-          "See which tool sequences and prompting styles lead to success. Build a personal playbook of effective AI workflows.",
+          "All your sessions and subagents live, with branch, task, state, tool failures, tokens and cost.",
       },
       {
-        icon: BrainCircuit,
-        title: "Anti-Pattern Alerts",
+        icon: History,
+        title: "Fixes you've already found",
         description:
-          "Get flagged when you hit common pitfalls — retry loops, high-failure tools, or inefficient sequences — with suggestions to break out.",
+          "When a tool call fails with an error you've hit before, Claude gets the call that fixed it last time.",
       },
       {
-        icon: Lightbulb,
-        title: "AI-Powered Suggestions",
+        icon: Search,
+        title: "Search everything you've done",
         description:
-          "Receive personalized tips based on your session patterns — concrete techniques to improve how you work with Claude Code.",
-      },
-      {
-        icon: Zap,
-        title: "Skill Progress",
-        description:
-          "See how your AI workflows improve over time. Track which tools you've mastered and where you're still learning.",
+          "Find any past prompt or reply by meaning, not just keywords, from the dashboard or /devscope:search.",
       },
       {
         icon: Terminal,
-        title: "Zero-Friction Plugin",
+        title: "Slash commands",
         description:
-          "Install with a single command. Non-blocking hooks mean zero overhead — your workflow stays untouched.",
+          "/devscope:review critiques the current session, /devscope:upskill proposes CLAUDE.md fixes, /devscope:ask answers questions about your history.",
+      },
+      {
+        icon: MessageSquareText,
+        title: "Next steps that worked before",
+        description:
+          "After a PR or a skill, get the step you usually take next, and prompts that worked for your team as you type.",
       },
     ],
   },
   "non-technical": {
-    heading: "Upskill your team's AI development",
+    heading: "Your team's best sessions, shared",
     subheading:
-      "DevScope helps teams learn from their AI usage — surfacing effective patterns, catching anti-patterns, and accelerating skill development.",
+      "DevScope turns what works in one developer's sessions into help for everyone, and shows you where the team gets stuck.",
     items: [
       {
-        icon: TrendingUp,
-        title: "Adoption & Skill Trends",
+        icon: Users,
+        title: "Shared know-how",
         description:
-          "Understand how your team's AI skills are developing over time. See adoption curves, tool mastery, and areas where coaching can help.",
+          "A prompt, skill or fix that worked for one developer is offered to the next one when they need it.",
       },
       {
-        icon: LineChart,
-        title: "Pattern & Anti-Pattern Reports",
+        icon: Network,
+        title: "Live team view",
         description:
-          "Identify which AI workflows succeed across your team and which common anti-patterns are costing time.",
+          "See what's running across the team and which sessions are waiting on someone.",
       },
       {
-        icon: Briefcase,
-        title: "Team Learning Reports",
+        icon: Wrench,
+        title: "Tooling friction",
         description:
-          "AI-generated summaries highlighting team patterns to adopt, anti-patterns to avoid, and skills to develop next.",
+          "Find the tools and projects where sessions keep failing. Problems are tied to tools, never to people.",
       },
       {
-        icon: Target,
-        title: "Project-Level Insights",
+        icon: BookOpen,
+        title: "Team skills and playbooks",
         description:
-          "See which projects benefit most from AI-assisted development and where teams can improve their approach.",
+          "Turn effective patterns into skills Claude Code can follow, shared across your organisation.",
       },
       {
-        icon: AlertTriangle,
-        title: "Blocker Detection",
+        icon: Sparkles,
+        title: "AI team reports",
         description:
-          "Automatically surface sessions with high failure rates — identify tooling issues and workflow blockers early.",
+          "Summaries of what's working, what isn't, and what to try next, across the whole team.",
       },
       {
-        icon: Workflow,
-        title: "Shareable Playbooks",
+        icon: ShieldCheck,
+        title: "Trust built in",
         description:
-          "Turn successful patterns into team knowledge. Share what works so everyone can level up together.",
+          "Developers choose what they share. Team views are aggregate, with no rankings or productivity scores.",
       },
     ],
   },
@@ -230,15 +230,15 @@ interface CtaContent {
 
 const CTA: Record<Persona, CtaContent> = {
   technical: {
-    heading: "Start leveling up your AI workflow today",
+    heading: "Get more out of Claude Code",
     subtext:
-      "Set up DevScope in under 5 minutes. Open source, self-hosted, zero overhead on your development flow.",
+      "Install the plugin in under 5 minutes. Open source, self-hostable, and you choose what's shared.",
     buttonLabel: "Get Started Free",
   },
   "non-technical": {
-    heading: "Start upskilling your team's AI development",
+    heading: "Make every session count for the whole team",
     subtext:
-      "Deploy DevScope in minutes. Self-hosted, open source, and designed for teams that want to get better at AI-assisted development.",
+      "Roll DevScope out in minutes. Open source, self-hostable, and every developer controls what they share.",
     buttonLabel: "Get Started Free",
   },
 };
@@ -259,12 +259,17 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
     {
       question: "Will DevScope slow down my Claude Code sessions?",
       answer:
-        "No. The plugin uses async, non-blocking bash hooks with zero milliseconds of overhead. Your sessions run exactly as fast as before.",
+        "No. Event capture runs in the background and never waits on the network. The only hooks that run inline are prompt recall, error recall and next-step hints, each capped at 5 seconds and skipped on any error, and each can be turned off.",
     },
     {
       question: "What data does DevScope collect?",
       answer:
-        "DevScope captures session lifecycle events, tool usage patterns, and prompt metadata. It does not collect prompt content or your code — only structural information about how sessions progress.",
+        "That's your choice. In the default standard mode the plugin sends session events, tool calls with their inputs, and your prompt text. Set DEVSCOPE_PRIVACY=private to send only tool names, file paths and durations, or open to add Claude's responses for full replay. Your teammates see none of your content unless you turn on team sharing.",
+    },
+    {
+      question: "How do I opt out?",
+      answer:
+        "Use private mode to keep prompts and responses on your machine. Leave team sharing off (the default) so teammates only see that you're active. Turn off recall or hints individually with DEVSCOPE_PREFLIGHT, DEVSCOPE_ERROR_RECALL or DEVSCOPE_HINTS set to off. You can request an export or deletion of your data from the dashboard at any time.",
     },
     {
       question: "Can I self-host DevScope?",
@@ -274,7 +279,7 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
     {
       question: "How does it help me improve?",
       answer:
-        "DevScope analyzes your session patterns and highlights effective workflows, flags anti-patterns like retry loops, and generates AI-powered suggestions to help you build better AI development skills over time.",
+        "Mostly in the moment: it recalls fixes and earlier answers as you work, and suggests next steps that worked before. Looking back, /devscope:upskill reads where your sessions got stuck and proposes changes to your CLAUDE.md and memory.",
     },
     {
       question: "Does it work with any IDE?",
@@ -286,7 +291,7 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
     {
       question: "What is DevScope?",
       answer:
-        "DevScope is an open-source upskilling platform for AI-assisted development. It analyzes team-wide Claude Code sessions to surface effective patterns, flag anti-patterns, and help your team build better AI workflows over time.",
+        "DevScope is an open-source companion for Claude Code. It remembers your team's sessions and brings what worked back to each developer while they work, and gives you a live, aggregate view of how the team uses Claude Code.",
     },
     {
       question: "How does rollout work for my team?",
@@ -301,7 +306,7 @@ const FAQ: Record<Persona, readonly FaqItem[]> = {
     {
       question: "Is the data secure?",
       answer:
-        "DevScope is fully self-hosted — your data never leaves your infrastructure. It captures session metadata only, not source code or prompt content.",
+        "Developers control what is sent. By default the plugin sends prompt text and tool activity; private mode sends metadata only. Each developer decides whether teammates can see their sessions, and it is off by default. Self-host DevScope to keep the data on your infrastructure. AI-generated summaries use an external model provider and only see what each developer's privacy mode allows.",
     },
     {
       question: "How does it help upskill my team?",

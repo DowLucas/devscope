@@ -14,10 +14,12 @@ interface DetailPanelProps {
   /** All topology nodes, to list a session's subagents. */
   nodes: Node[];
   onClose: () => void;
+  /** Off in the landing demo, whose sessions do not exist. */
+  showSessionLink?: boolean;
 }
 
 /** Side panel for the selected topology node; follows its live data. */
-export function DetailPanel({ node, nodes, onClose }: DetailPanelProps) {
+export function DetailPanel({ node, nodes, onClose, showSessionLink = true }: DetailPanelProps) {
   return (
     <aside className="absolute right-0 top-0 z-10 flex h-full w-[380px] max-w-full flex-col border-l border-gray-800 bg-gray-950/95 shadow-2xl backdrop-blur">
       <div className="flex justify-end p-2">
@@ -31,16 +33,16 @@ export function DetailPanel({ node, nodes, onClose }: DetailPanelProps) {
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         {node.type === "session" ? (
-          <SessionDetails data={node.data as SessionNodeData} nodes={nodes} />
+          <SessionDetails data={node.data as SessionNodeData} nodes={nodes} showSessionLink={showSessionLink} />
         ) : (
-          <AgentDetails data={node.data as AgentNodeData} />
+          <AgentDetails data={node.data as AgentNodeData} showSessionLink={showSessionLink} />
         )}
       </div>
     </aside>
   );
 }
 
-function SessionDetails({ data, nodes }: { data: SessionNodeData; nodes: Node[] }) {
+function SessionDetails({ data, nodes, showSessionLink }: { data: SessionNodeData; nodes: Node[]; showSessionLink: boolean }) {
   const { session, activityState, lastActivityAt, recentEvents, toolCalls, toolFailures } = data;
   const state = STATE_CONFIG[activityState];
   const agents = nodes.filter(
@@ -114,12 +116,12 @@ function SessionDetails({ data, nodes }: { data: SessionNodeData; nodes: Node[] 
 
       <RecentActivity events={recentEvents} />
 
-      <FullSessionLink sessionId={session.id} />
+      {showSessionLink ? <FullSessionLink sessionId={session.id} /> : null}
     </div>
   );
 }
 
-function AgentDetails({ data }: { data: AgentNodeData }) {
+function AgentDetails({ data, showSessionLink }: { data: AgentNodeData; showSessionLink: boolean }) {
   return (
     <div className="space-y-5">
       <header className="space-y-1">
@@ -137,7 +139,7 @@ function AgentDetails({ data }: { data: AgentNodeData }) {
 
       <RecentActivity events={data.recentEvents} />
 
-      <FullSessionLink sessionId={data.sessionId} />
+      {showSessionLink ? <FullSessionLink sessionId={data.sessionId} /> : null}
     </div>
   );
 }
