@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Auto voice can stay quiet.** A `reply` request to `/api/ai/voice-summary`
+  with `may_skip: true` lets the model answer `SKIP` when the reply brings no
+  news, and the endpoint then returns `{skip: true}` (plus `label`) instead of
+  text. The plugin (0.36.0) also sends `background` (the turn was started by a
+  monitor or task notification, not the developer) and `previous` (the summary
+  it last spoke for the session). Background turns need real news (finished
+  work, a failure, a new question); progress, expired monitors and restated
+  state are skipped. Turns the developer started are always summarized unless
+  they only acknowledge or repeat, and failures are never skipped. Older
+  plugins send no `may_skip` and are unaffected.
 - **Voiced audio ends cleanly.** `/api/ai/voice-audio` rewrites the speech
   service's WAV into a plain 44-byte-header PCM file with its real sizes
   (Kokoro streams its WAV with `0xFFFFFFFF` sizes and a LIST chunk, so players

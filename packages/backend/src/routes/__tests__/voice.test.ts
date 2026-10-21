@@ -191,6 +191,19 @@ describe("POST /api/ai/voice-summary (session labels)", () => {
     expect(prompt).toContain("Start with the project name");
   });
 
+  test("a reply the model judges not worth saying comes back as skip, with the label", async () => {
+    mockGemini.mockImplementationOnce(async () => ({ text: "SKIP", inputTokens: 10, outputTokens: 1 }));
+    const res = await summarize({ trigger: "reply", project: "api-service", session_id: "s1", last_message: "Monitor expired.", may_skip: true, background: true });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ skip: true, label: "api-service, Rate limiter fix" });
+  });
+
+  test("without may_skip a SKIP answer is not honoured as silence", async () => {
+    mockGemini.mockImplementationOnce(async () => ({ text: "SKIP", inputTokens: 10, outputTokens: 1 }));
+    const res = await summarize({ trigger: "reply", project: "api-service", last_message: "Monitor expired." });
+    expect((await res.json()).skip).toBeUndefined();
+  });
+
   test("a failed lookup still answers, labelled with the project", async () => {
     const failing = (async () => { throw new Error("db down"); }) as any;
     const app = new Hono();
