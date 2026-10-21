@@ -9,6 +9,7 @@ import { recordTokenUsage } from "../db";
 import {
   VOICE,
   buildVoicePrompt,
+  isSkip,
   sessionLabel,
   sessionTopic,
   spokenLimits,
@@ -50,6 +51,10 @@ export function voiceRoutes(sql: SQL) {
     recordTokenUsage(sql, "voice_summary", DEFAULT_MODEL, result.inputTokens, result.outputTokens, orgId).catch(
       (err) => console.error("[ai] voice usage not recorded:", err),
     );
+    // The model judged the reply not worth saying; only plugins that can stay quiet are offered that.
+    if (input.trigger === "reply" && input.may_skip && isSkip(result.text)) {
+      return c.json(label ? { skip: true, label } : { skip: true });
+    }
     // Cap the model's own words first; speakable() then adds words ("5s" ->
     // "5 seconds") that must not count against the cap and chop the summary.
     const capped = toSpokenText(result.text, spokenLimits(input.trigger, input.length));

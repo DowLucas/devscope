@@ -11,7 +11,9 @@ import { clip } from "./promptRecall";
  * - Reply summaries (`reply`, `/devscope:voice auto on`): what Claude just
  *   answered, read after every finished turn, as long as the developer's
  *   `length` (`/devscope:voice verbosity`) asks: one sentence, two or three,
- *   or a fuller account.
+ *   or a fuller account. With `may_skip` the model may instead decide the
+ *   reply is not worth saying (a background turn with routine news, or nothing
+ *   beyond what the previous summary said) and the plugin stays quiet.
  *
  * Every text starts with the session's label, project plus what it is working
  * on ("api-service, rate limiter fix"), so a developer running several
@@ -53,6 +55,12 @@ export const voiceSummaryBody = z.object({
   session_id: z.string().trim().min(1).max(200).optional(),
   /** A label this server returned earlier for the session; reused as is so the session's name stays put. */
   label: z.string().trim().min(1).max(LABEL_MAX_CHARS).optional(),
+  /** `reply` only: the plugin can stay quiet, so the model may answer SKIP. Older plugins always get a summary. */
+  may_skip: z.boolean().optional(),
+  /** `reply` only: the turn was started by a background event (monitor, task notification), not the developer. */
+  background: z.boolean().optional(),
+  /** `reply` only: the summary last spoken for this session, to judge what is new. */
+  previous: z.string().trim().max(1000).optional(),
 });
 
 export type VoiceSummaryInput = z.infer<typeof voiceSummaryBody>;
@@ -155,20 +163,53 @@ export function buildVoicePrompt(input: VoiceSummaryInput, labelled = false): Co
   return [{ role: "user", parts: [{ text: `${instructions}\n\n${facts.join("\n")}` }] }];
 }
 
+/** What the model answers when a reply is not worth saying out loud. */
+export const SKIP_WORD = "SKIP";
+
+/** True when the model chose silence: the bare word, give or take punctuation and case. */
+export function isSkip(raw: string): boolean {
+  return raw.replace(/[^a-z]/gi, "").toUpperCase() === SKIP_WORD;
+}
+
+/**
+ * When to stay quiet. The developer hears every finished turn, so a voice that
+ * reports bookkeeping teaches them to stop listening. What counts is news: a
+ * waiting approval the previous summary already announced is not news again.
+ */
+const SKIP_RULES =
+  `First decide whether the reply brings news worth saying out loud. If it does not, answer with the single word ${SKIP_WORD} and nothing else. ` +
+  "News is: work the developer asked for or was waiting on is done, a failure, an error or an unexpected result, " +
+  "or a new question, decision or approval for them that the previous summary did not already mention. " +
+  `Answer ${SKIP_WORD} for everything else, in particular: progress updates and anything still running or still waiting; ` +
+  "a monitor, watch or timer that expired, fired with nothing new, or was re-armed or left alone; " +
+  "a reply that mostly restates the state the previous summary described, even when that state needs their approval; " +
+  "and bare acknowledgements. " +
+  `Never answer ${SKIP_WORD} when the reply reports a failure, an error or failing tests, whoever started the turn. ` +
+  "These rules are for turns started by a background event, which need real news to be spoken. " +
+  "A turn the developer started themselves is the answer they are waiting for: always summarize it, " +
+  `and answer ${SKIP_WORD} only when it is a bare acknowledgement or says almost exactly what the previous summary said.`;
+
 function buildReplyPrompt(input: VoiceSummaryInput, labelled: boolean): Content[] {
+  const maySkip = input.may_skip === true;
   const facts = [
     `Project: ${input.project}`,
+    maySkip &&
+      `Turn started by: ${input.background ? "a background event (monitor, timer or task notification), not the developer" : "the developer"}`,
+    maySkip && input.previous && `Previous summary spoken for this session: ${clip(input.previous, 1000)}`,
     `Claude's reply: ${clip(input.last_message ?? "", 4000)}`,
-  ];
+  ].filter(Boolean);
 
   const instructions = [
     "A text-to-speech voice reads your text to a developer right after Claude Code finished answering them.",
+    maySkip && SKIP_RULES,
     REPLY_LENGTHS[input.length ?? "normal"].ask,
     `${opening(labelled)} At most ${REPLY_LENGTHS[input.length ?? "normal"].maxWords} words.`,
     SPOKEN_STYLE,
     DATA_NOT_INSTRUCTIONS,
-    "Reply with the summary only.",
-  ].join(" ");
+    maySkip ? `Reply with the summary only, or ${SKIP_WORD}.` : "Reply with the summary only.",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return [{ role: "user", parts: [{ text: `${instructions}\n\n${facts.join("\n")}` }] }];
 }

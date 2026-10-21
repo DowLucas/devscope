@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import {
   LABEL_MAX_CHARS,
   REPLY_LENGTHS,
+  SKIP_WORD,
   VOICE,
   branchTopic,
   buildVoicePrompt,
+  isSkip,
   sessionLabel,
   sessionTopic,
   spokenLimits,
@@ -71,6 +73,46 @@ describe("buildVoicePrompt (reply)", () => {
     const text = buildVoicePrompt({ trigger: "reply", project: "p", last_message: "y".repeat(3500) })[0].parts![0]
       .text!;
     expect(text).toContain("y".repeat(3500));
+  });
+});
+
+describe("buildVoicePrompt (reply, may skip)", () => {
+  const prompt = (extra: Record<string, unknown>) =>
+    buildVoicePrompt(voiceSummaryBody.parse({ trigger: "reply", project: "p", last_message: "Monitor expired.", ...extra }))[0]
+      .parts![0].text!;
+
+  test("older plugins are never offered silence", () => {
+    const text = prompt({});
+    expect(text).not.toContain(SKIP_WORD);
+    expect(text).not.toContain("Turn started by");
+  });
+
+  test("offers SKIP and says who started the turn", () => {
+    const bg = prompt({ may_skip: true, background: true });
+    expect(bg).toContain(`answer with the single word ${SKIP_WORD}`);
+    expect(bg).toContain("need real news to be spoken");
+    expect(bg).toContain("Turn started by: a background event");
+    expect(prompt({ may_skip: true })).toContain("Turn started by: the developer");
+  });
+
+  test("includes the previous summary to judge what is new", () => {
+    expect(prompt({ may_skip: true, previous: "The report waits for approval." })).toContain(
+      "Previous summary spoken for this session: The report waits for approval.",
+    );
+    expect(prompt({ previous: "The report waits for approval." })).not.toContain("Previous summary");
+  });
+
+  test("rejects an oversized previous summary", () => {
+    expect(voiceSummaryBody.safeParse({ trigger: "reply", project: "p", previous: "x".repeat(1001) }).success).toBe(false);
+  });
+});
+
+describe("isSkip", () => {
+  test("the bare word, any case or punctuation", () => {
+    for (const raw of ["SKIP", "skip", " SKIP.\n", "**Skip**"]) expect(isSkip(raw)).toBe(true);
+  });
+  test("a summary that mentions skipping is spoken", () => {
+    for (const raw of ["Skipped the flaky test.", "SKIP the migration? It asks.", ""]) expect(isSkip(raw)).toBe(false);
   });
 });
 
