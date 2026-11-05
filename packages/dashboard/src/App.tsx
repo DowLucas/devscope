@@ -12,6 +12,7 @@ import { InsightsView } from "@/components/insights/InsightsView";
 import { SessionDetail } from "@/components/session/SessionDetail";
 import { FailuresView } from "@/components/failures/FailuresView";
 import { ProjectsView } from "@/components/projects/ProjectsView";
+import { CommandsView } from "@/components/commands/CommandsView";
 import { AiView } from "@/components/ai/AiView";
 import { AuthPage } from "@/components/auth/AuthPage";
 import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
@@ -90,6 +91,7 @@ function AppContent() {
         <Route path="/dashboard/metrics/*?" component={InsightsView} />
         <Route path="/dashboard/incidents" component={FailuresView} />
         <Route path="/dashboard/projects/*?" component={ProjectsView} />
+        <Route path="/dashboard/commands" component={CommandsView} />
         <Route path="/dashboard/assistant/*?" component={AiView} />
         <Route path="/dashboard/skills/*?" component={SkillsView} />
         <Route path="/dashboard/playbooks/*?" component={PlaybooksView} />

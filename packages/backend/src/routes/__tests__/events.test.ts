@@ -59,6 +59,13 @@ mock.module("../../utils/ethicsAudit", () => ({
   logEthicsEvent: mock(() => {}),
 }));
 
+const mockRecordCommandRun = mock(() => Promise.resolve());
+const mockSettleBackgroundCommands = mock(() => Promise.resolve(0));
+mock.module("../../db/commandQueries", () => ({
+  recordCommandRun: mockRecordCommandRun,
+  settleBackgroundCommands: mockSettleBackgroundCommands,
+}));
+
 // Import AFTER mocks are registered
 const { eventsRoutes } = await import("../events");
 
@@ -292,6 +299,19 @@ describe("POST /events", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(validEvent({ eventType: "model.first_use" })),
+    });
+
+    expect(res.status).not.toBe(400);
+  });
+
+  test("accepts eventType command.background_complete (added in plugin 0.38.0)", async () => {
+    const sql = makeMockSql();
+    const app = buildApp(sql);
+
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(validEvent({ eventType: "command.background_complete", payload: { commands: [] } })),
     });
 
     expect(res.status).not.toBe(400);
@@ -1659,5 +1679,70 @@ describe("token usage on response.complete", () => {
     expect(res.status).toBe(200);
     expect(mockApplyUsageSnapshot).not.toHaveBeenCalled();
     expect(mockUpdateSessionTokens).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("command timing (command_runs)", () => {
+  beforeEach(() => {
+    mockRecordCommandRun.mockClear();
+    mockSettleBackgroundCommands.mockClear();
+    mockInsertEvent.mockImplementation(() => Promise.resolve({ stored: true }));
+  });
+
+  const post = (app: Hono, body: unknown) =>
+    app.request("/", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+  test("records every tool.complete and tool.fail", async () => {
+    const app = buildApp(makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }]));
+    for (const eventType of ["tool.complete", "tool.fail"]) {
+      const res = await post(app, validEvent({
+        id: `evt-${eventType}`,
+        eventType,
+        payload: { toolName: "Bash", duration: 1200, toolUseId: "toolu_1", commandSignature: "bun test" },
+      }));
+      expect(res.status).toBe(200);
+    }
+    expect(mockRecordCommandRun).toHaveBeenCalledTimes(2);
+    const [, event] = mockRecordCommandRun.mock.calls[0] as unknown as [unknown, any];
+    expect(event.developerId).toBe(ALICE_DEV_ID);
+    expect(event.payload.commandSignature).toBe("bun test");
+  });
+
+  test("a failing recordCommandRun does not fail ingestion", async () => {
+    mockRecordCommandRun.mockImplementationOnce(() => Promise.reject(new Error("db down")));
+    const app = buildApp(makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }]));
+    const res = await post(app, validEvent({ eventType: "tool.complete", payload: { toolName: "Bash" } }));
+    expect(res.status).toBe(200);
+  });
+
+  test("a duplicate event is not recorded twice", async () => {
+    mockInsertEvent.mockImplementationOnce(() => Promise.resolve({ stored: false }));
+    const app = buildApp(makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }]));
+    await post(app, validEvent({ eventType: "tool.complete", payload: { toolName: "Bash" } }));
+    expect(mockRecordCommandRun).not.toHaveBeenCalled();
+  });
+
+  test("command.background_complete settles the sender's own runs", async () => {
+    const app = buildApp(makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }]));
+    const commands = [
+      { toolUseId: "toolu_bg", taskId: "b1", status: "completed", exitCode: 0, finishedAt: "2026-03-03T12:05:00.000Z" },
+    ];
+    const res = await post(app, validEvent({ eventType: "command.background_complete", payload: { commands } }));
+    expect(res.status).toBe(200);
+    expect(mockSettleBackgroundCommands).toHaveBeenCalledTimes(1);
+    const [, devId, settled] = mockSettleBackgroundCommands.mock.calls[0] as unknown as [unknown, string, unknown];
+    expect(devId).toBe(ALICE_DEV_ID);
+    expect(settled).toEqual(commands);
+    expect(mockRecordCommandRun).not.toHaveBeenCalled();
+  });
+
+  test("a malformed command.background_complete settles nothing", async () => {
+    const app = buildApp(makeMockSql([{ status: "active", developer_id: ALICE_DEV_ID }]));
+    const res = await post(app, validEvent({
+      eventType: "command.background_complete",
+      payload: { commands: [{ toolUseId: "toolu_bg", status: "completed", finishedAt: "x", command: "rm -rf /" }] },
+    }));
+    expect(res.status).toBe(200);
+    expect(mockSettleBackgroundCommands).not.toHaveBeenCalled();
   });
 });

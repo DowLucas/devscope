@@ -206,6 +206,7 @@ function buildFeedItems(events: FeedEvent[]): FeedItem[] {
       case "directory.added":
       case "plugin.setup":
       case "model.first_use":
+      case "command.background_complete":
         flushTools();
         items.push({ kind: "event", key: event.id, event });
         break;

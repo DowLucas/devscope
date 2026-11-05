@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ChartCard } from "@/components/insights/ChartCard";
+import { CommandTimings } from "@/components/commands/CommandTimings";
 
 interface ProjectDrillDownProps {
   projectName: string;
@@ -84,6 +85,11 @@ export function ProjectDrillDown({ projectName, onBack }: ProjectDrillDownProps)
         </ChartCard>
 
         <ToolUsageChart data={tools.data} loading={tools.loading} />
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold">Command timing</h3>
+        <CommandTimings days={days} project={projectName} />
       </div>
     </div>
   );

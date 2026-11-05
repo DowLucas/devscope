@@ -44,6 +44,8 @@ export const EVENT_COLORS: Record<string, string> = {
   "plugin.setup": "border-sky-500/30 bg-sky-500/5",
   // Added in plugin 0.35.0
   "model.first_use": "border-fuchsia-500/50 bg-fuchsia-500/10",
+  // Added in plugin 0.38.0
+  "command.background_complete": "border-slate-500/30 bg-slate-500/5",
 };
 
 export const EVENT_LABELS: Record<string, string> = {
@@ -80,6 +82,8 @@ export const EVENT_LABELS: Record<string, string> = {
   "plugin.setup": "Plugin Setup",
   // Added in plugin 0.35.0
   "model.first_use": "New Model",
+  // Added in plugin 0.38.0
+  "command.background_complete": "Background Command Finished",
 };
 
 export function getEventSummary(event: FeedEvent): string {
@@ -177,6 +181,12 @@ export function getEventSummary(event: FeedEvent): string {
       const model = String(p.model ?? "");
       const prev = p.previousModel ? ` (from ${String(p.previousModel)})` : "";
       return model ? `First use of ${model}${prev}` : "First use of a model";
+    }
+    case "command.background_complete": {
+      const commands = Array.isArray(p.commands) ? (p.commands as Array<{ status?: string }>) : [];
+      const failed = commands.filter((c) => c.status !== "completed").length;
+      const what = commands.length === 1 ? "1 background command" : `${commands.length} background commands`;
+      return failed > 0 ? `${what} finished, ${failed} failed or stopped` : `${what} finished`;
     }
     default:
       return event.eventType;

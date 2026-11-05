@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Command timing.** Every Bash command Claude runs is now a row in
+  `command_runs` (migration 058): its signature (the program and up to two
+  plain words, such as `bun run build`; never the command itself), whether it
+  ran in the foreground, the background, or was moved there after its
+  timeout, how long the session waited on it, its start-to-finish duration,
+  and the outcome. Background commands are settled by the new
+  `command.background_complete` event from plugin 0.38.0, which reports when
+  each one finished and its exit code. `/api/commands/summary`, `/trend` and
+  `/projects` aggregate by command and project (team or own, never per
+  developer; a teammate's session that is not shared counts under its program
+  only), and the new **Commands** page and a section on each project page show
+  which commands the sessions wait on most and whether they are getting
+  slower. `scripts/command-runs-backfill.ts` fills the table from stored
+  events (program only, since older plugins sent nothing more).
+
 - **Voiced audio ends cleanly.** `/api/ai/voice-audio` rewrites the speech
   service's WAV into a plain 44-byte-header PCM file with its real sizes
   (Kokoro streams its WAV with `0xFFFFFFFF` sizes and a LIST chunk, so players

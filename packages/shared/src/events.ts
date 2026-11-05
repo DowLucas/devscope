@@ -34,7 +34,9 @@ export type EventType =
   | "directory.added"
   | "plugin.setup"
   // Added in plugin 0.35.0: the first time a model is used on a machine.
-  | "model.first_use";
+  | "model.first_use"
+  // Added in plugin 0.38.0: background Bash commands that settled.
+  | "command.background_complete";
 
 export interface DevscopeEvent {
   id: string;
@@ -127,6 +129,22 @@ export interface ToolEventPayload {
   errorMessage?: string;
   isInterrupt?: boolean;
   agentId?: string | null;
+  // Bash only, plugin 0.38.0+ (see command_runs, migration 058).
+  toolUseId?: string;
+  commandSignature?: string;
+  backgroundTaskId?: string;
+  runInBackground?: boolean;
+}
+
+/** command.background_complete: background Bash commands that settled since the last report. */
+export interface CommandBackgroundCompletePayload {
+  commands: Array<{
+    toolUseId: string;
+    taskId?: string;
+    status: "completed" | "failed" | "killed" | string;
+    exitCode?: number;
+    finishedAt: string;
+  }>;
 }
 
 export interface AgentEventPayload {

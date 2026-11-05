@@ -93,6 +93,9 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 | `/api/ai/voice-summary` | POST | Spoken text for the plugin's voice features (`trigger`, `project`, optional `tool`/`detail`/`last_message`/`session_id`/`label`), starting with the session's label (`project, topic` from the caller's own session title, else branch; a sent `label` is reused as is, so the name never changes) and returning it as `label`: one sentence for the announcer, or with `trigger: "reply"` a summary of Claude's reply for `/devscope:voice auto`, as detailed as the optional `length` asks (`short` one sentence ≤ 20 words, `normal` 2-3 sentences ≤ 50 words, `long` 4-6 sentences ≤ 110 words; `REPLY_LENGTHS`); stateless, only token usage is recorded as `voice_summary`. The plugin never calls it for `private` sessions |
 | `/api/ai/voice-audio` | POST | That text (or one piece of a `/devscope:voice explain` explanation) as WAV (`text`, optional `model` = a `TTS_SERVICES` name, Kokoro `voice`, `speed`, `volume`, `pad_ms` trailing silence, default 400), rewritten as a canonical PCM WAV with real sizes (`services/wav.ts`), voiced by the homelab speech services; 503 when none is configured or all fail, so the plugin falls back to a local voice. Own 20/min bucket, no Gemini budget |
 | `/api/sessions/usage/backfill` | POST | Exact token usage per transcript and model from `/devscope:backfill-usage` (`{items: [{transcriptId, sessionId?, byModel}]}`, max 500); only the caller's own sessions are updated, the rest are counted as `skipped` |
+| `/api/commands/summary?days=&scope=team\|me&group=signature\|program&project=&limit=` | GET | Bash commands by time the sessions waited on them, with p50/p95/max duration, failures, background/moved counts and the period before for comparison (see Command timing) |
+| `/api/commands/trend?days=&scope=&group=&project=&command=&bucket=day\|week` | GET | One command's (or all commands') runs, p50/p95 and time waited per day or week |
+| `/api/commands/projects?days=` | GET | Projects with command runs the caller may see, for the project filter |
 | `/api/health` | GET | Health check + WS client count |
 | `/ws` | WS | Real-time event stream |
 
@@ -100,7 +103,7 @@ WebSocket message types: `event.new`, `session.update`, `developer.update`.
 
 Two flavors of auth — pick one per route:
 
-- **API key (`x-api-key` header)** — the plugin path. Required by `/api/events` and the plugin-accessible routes (`/api/ai`, `/api/insights`, `/api/patterns`, `/api/playbooks`, `/api/skills`, `/api/topology`, `/api/workflow-profiles`, `/api/friction`, `/api/sessions`, `/api/similar`, `/api/live`). Keys are minted via better-auth's `auth.api.createApiKey({ body: { userId, name } })`; the dashboard exposes this at Settings → API Keys, but there's no UI before you have a session.
+- **API key (`x-api-key` header)** — the plugin path. Required by `/api/events` and the plugin-accessible routes (`/api/ai`, `/api/insights`, `/api/patterns`, `/api/playbooks`, `/api/skills`, `/api/topology`, `/api/workflow-profiles`, `/api/friction`, `/api/sessions`, `/api/similar`, `/api/live`, `/api/commands`). Keys are minted via better-auth's `auth.api.createApiKey({ body: { userId, name } })`; the dashboard exposes this at Settings → API Keys, but there's no UI before you have a session.
 - **Session cookie** — what the dashboard uses. Sign-in via `/api/auth/sign-in/email` returns a session cookie. Most dashboard routes go through `orgScopeMiddleware`, which reads `session.activeOrganizationId` to scope queries.
 
 Two traps that bite manual testers:
@@ -217,6 +220,33 @@ Session tokens and cost (migration 055, `db/tokenUsageQueries.ts`). Costs are **
 - **`sessions.token_source`:** `exact` | `estimated` | `legacy` | NULL (no usage). `sessions.total_*` / `estimated_cost_usd` are the roll-up every query reads; `total_cache_creation_tokens` is 5m + 1h writes.
 - **Backfill from disk:** `/devscope:backfill-usage` uploads exact totals for transcripts still on the developer's machine. Claude Code deletes transcripts after `cleanupPeriodDays` (30 by default), so older sessions keep the estimate.
 - **Pricing:** `token_cost_usd()` and the rows in 055; runbook in `packages/backend/docs/token-pricing.md`. Sessions with no `model` (pre-037) are priced at the `*` fallback (Sonnet-4 rates), which understates Opus-era usage.
+
+## Command timing
+
+How long the Bash commands Claude runs take, per project and over time (`command_runs`, migration 058,
+`db/commandQueries.ts`, `routes/commands.ts`, dashboard `components/commands/`).
+
+- **Rows** come from Bash `tool.complete` / `tool.fail` at ingestion (`recordCommandRun`, in
+  `runPostInsertHandlers`, so it never blocks or fails ingestion). Key: Claude Code's `tool_use_id` (plugin
+  0.38.0+), else `event:<event id>` with `legacy_timing` set. `wait_ms` is the event's `duration` (Claude
+  Code's `duration_ms` since plugin 0.38.0; before that the plugin's own timer, which mixed up parallel
+  calls); the start is the event timestamp minus it.
+- **Signature, never the command.** The plugin sends `commandSignature` (`_ds_command_signature`: program +
+  up to two plain words, the third only after a group word like `run`/`compose`/`pr`; private mode the
+  program only). `cleanSignature` re-checks the shape and falls back to the program, and private sessions
+  store the program whatever was sent. Older plugins only have `toolSubcommand` (the first word).
+- **Background commands.** PostToolUse fires when a command is backgrounded (`run_in_background` →
+  `background`; a timeout or the user → `moved`), so the row starts as `running` with `duration_ms` NULL. The
+  plugin finds the settling in the transcript (`queue-operation` enqueue of a `<task-notification>`) at Stop
+  and SessionEnd and sends `command.background_complete`; `settleBackgroundCommands` updates only the
+  sender's own running rows, by `tool_use_id` (not session).
+- **Privacy.** No developer or project column: both come from `sessions` at read time, so retention
+  anonymization applies, and the row cascades away with its event. Reads aggregate by command and project
+  only; a signature or project is named only for sessions the viewer may see (`visibleSessionSql`), the rest
+  count under their program, and a `project` filter matches only visible sessions. `scope=me` is the
+  caller's own ids in the org (no `developerId` parameter).
+- **Backfill:** `scripts/command-runs-backfill.ts` (dry run by default, `--write`) runs stored Bash events
+  through `recordCommandRun`; idempotent.
 
 ## Server voice
 
