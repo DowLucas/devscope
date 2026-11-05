@@ -9,3 +9,4 @@ export * from "./topology";
 export * from "./workflowProfiles";
 export * from "./similarity";
 export * from "./live";
+export * from "./commands";

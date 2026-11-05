@@ -20,6 +20,7 @@ import {
   Shield,
   Lightbulb,
   Search,
+  Timer,
 } from "lucide-react";
 import { useActivityStore } from "@/stores/activityStore";
 import { authClient } from "@/lib/auth-client";
@@ -140,6 +141,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     items: [
       { path: "/dashboard/metrics", label: "Metrics", icon: BarChart3 },
       { path: "/dashboard/projects", label: "Projects", icon: FolderOpen },
+      { path: "/dashboard/commands", label: "Commands", icon: Timer },
       { path: "/dashboard/claudemd", label: "CLAUDE.md", icon: FileText },
     ],
   },

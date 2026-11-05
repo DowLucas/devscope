@@ -151,6 +151,11 @@ const toolEventPayloadBase = {
   errorMessage: z.string().optional(),
   isInterrupt: z.boolean().optional(),
   agentId: z.string().nullable().optional(),
+  // Bash only, plugin 0.38.0+ (command_runs, migration 058).
+  toolUseId: z.string().max(200).optional(),
+  commandSignature: z.string().max(200).optional(),
+  backgroundTaskId: z.string().max(100).optional(),
+  runInBackground: z.boolean().optional(),
   ...privacyAnnotations,
 } as const;
 
@@ -360,6 +365,29 @@ const modelFirstUsePayloadSchema = z
   })
   .strict();
 
+/**
+ * `_ds_report_bg_commands` (Stop / SessionEnd, plugin 0.38.0+): background
+ * Bash commands that settled, read from the transcript by bg_commands.py.
+ */
+export const commandBackgroundCompletePayloadSchema = z
+  .object({
+    commands: z
+      .array(
+        z
+          .object({
+            toolUseId: z.string().min(1).max(200),
+            taskId: z.string().max(100).optional(),
+            status: z.string().max(20),
+            exitCode: z.number().int().optional(),
+            finishedAt: z.string().min(1).max(50),
+          })
+          .strict(),
+      )
+      .max(200),
+    ...privacyAnnotations,
+  })
+  .strict();
+
 /** `permission-denied.sh` — PermissionDenied. */
 const permissionDeniedPayloadSchema = z
   .object({
@@ -443,6 +471,8 @@ export const payloadSchemasByEventType = {
   "plugin.setup": pluginSetupPayloadSchema,
   // Added in plugin 0.35.0.
   "model.first_use": modelFirstUsePayloadSchema,
+  // Added in plugin 0.38.0.
+  "command.background_complete": commandBackgroundCompletePayloadSchema,
 } as const;
 
 export type EventTypeKey = keyof typeof payloadSchemasByEventType;

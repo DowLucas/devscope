@@ -17,7 +17,8 @@ import {
   finalizeTokenSegment,
   applyUsageSnapshot,
 } from "../db";
-import { usageSnapshotSchema } from "../utils/eventSchemas";
+import { commandBackgroundCompletePayloadSchema, usageSnapshotSchema } from "../utils/eventSchemas";
+import { recordCommandRun, settleBackgroundCommands } from "../db/commandQueries";
 import { broadcastToOrg } from "../ws/handler";
 import { autoLinkDeveloperToOrg, autoLinkUserToDeveloper, computeDeveloperId } from "../services/developerLink";
 import { broadcastSessionUpdate, getViewerDevIds, redactEvent, visibilityForRow } from "../services/visibility";
@@ -61,6 +62,8 @@ const eventSchema = z.object({
     "plugin.setup",
     // Added in plugin 0.35.0.
     "model.first_use",
+    // Added in plugin 0.38.0.
+    "command.background_complete",
   ]),
   payload: z.record(z.unknown()),
 });
@@ -224,6 +227,21 @@ export function eventsRoutes(sql: SQL) {
         if (alert) {
           await broadcastSessionDetail({ type: "alert.triggered", data: alert });
         }
+      }
+    }
+
+    // Bash command timing (command_runs, migration 058). Never blocks ingestion.
+    if (event.eventType === "tool.complete" || event.eventType === "tool.fail") {
+      await recordCommandRun(sql, event).catch((e) =>
+        console.error("[commands] recordCommandRun failed:", (e as Error).message),
+      );
+    }
+    if (event.eventType === "command.background_complete") {
+      const parsed = commandBackgroundCompletePayloadSchema.safeParse(event.payload);
+      if (parsed.success) {
+        await settleBackgroundCommands(sql, event.developerId, parsed.data.commands).catch((e) =>
+          console.error("[commands] settleBackgroundCommands failed:", (e as Error).message),
+        );
       }
     }
 

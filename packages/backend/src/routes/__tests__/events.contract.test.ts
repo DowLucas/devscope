@@ -132,6 +132,10 @@ function transformToolComplete(raw: Record<string, unknown>) {
   };
   if (raw.tool_input != null) payload.toolInput = raw.tool_input;
   if (raw.tool_result != null) payload.toolResult = raw.tool_result;
+  // Plugin 0.38.0+, Bash only: Claude Code's tool_use_id and a command
+  // signature (fixtures from before carry neither).
+  if (raw.tool_use_id) payload.toolUseId = raw.tool_use_id;
+  if (raw.tool_name === "Bash" && raw.tool_use_id) payload.commandSignature = "echo";
   return envelope("tool.complete", payload);
 }
 
@@ -370,6 +374,8 @@ describe("plugin↔backend wire contract (DEV-88)", () => {
         "plugin.setup",
         // Added in plugin 0.35.0.
         "model.first_use",
+        // Added in plugin 0.38.0.
+        "command.background_complete",
       ].sort(),
     );
   });
@@ -377,6 +383,35 @@ describe("plugin↔backend wire contract (DEV-88)", () => {
   // -------------------------------------------------------------------------
   // Negative cases: deliberately malformed payloads must fail
   // -------------------------------------------------------------------------
+
+  // command.background_complete is built from the transcript, not from a hook
+  // input, so it has no fixture: this mirrors _ds_report_bg_commands +
+  // scripts/bg_commands.py (tests/commands/run.sh on the plugin side).
+  test("command.background_complete (plugin 0.38.0) parses against strict schema", () => {
+    const event = envelope("command.background_complete", {
+      commands: [
+        { toolUseId: "toolu_1", taskId: "b5r0fuwka", status: "completed", exitCode: 0, finishedAt: "2026-11-03T09:04:08.224Z" },
+        { toolUseId: "toolu_2", taskId: "b6", status: "killed", finishedAt: "2026-11-03T09:05:00.000Z" },
+      ],
+    });
+    expect(strictEventSchema.safeParse(event).success).toBe(true);
+  });
+
+  test("command.background_complete rejects extra fields (no command text)", () => {
+    const broken = envelope("command.background_complete", {
+      commands: [{ toolUseId: "toolu_1", status: "completed", finishedAt: "2026-11-03T09:04:08.224Z", summary: "Background command x" }],
+    });
+    expect(strictEventSchema.safeParse(broken).success).toBe(false);
+  });
+
+  test("tool.complete accepts the Bash timing fields (plugin 0.38.0)", () => {
+    const event = envelope("tool.complete", {
+      toolName: "Bash", success: true, duration: 45000, isInterrupt: false,
+      toolUseId: "toolu_1", commandSignature: "bun run dev",
+      backgroundTaskId: "b1", runInBackground: true,
+    });
+    expect(strictEventSchema.safeParse(event).success).toBe(true);
+  });
 
   test("session.start missing startType is rejected", () => {
     const broken = envelope("session.start", {
