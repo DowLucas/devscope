@@ -134,8 +134,8 @@ export function CommandTimings({ days, project, filters }: CommandTimingsProps) 
   const totals = summary.data?.totals;
   const runsDelta = totals ? percentChange(totals.runs, totals.prev_runs) : null;
   const waitDelta = totals ? percentChange(totals.wait_ms, totals.prev_wait_ms) : null;
-  const moved = commands.reduce((a, c) => a + c.moved_runs, 0);
-  const failures = commands.reduce((a, c) => a + c.failures, 0);
+  const moved = totals?.moved_runs ?? 0;
+  const failures = totals?.failures ?? 0;
 
   return (
     <div className="space-y-6">

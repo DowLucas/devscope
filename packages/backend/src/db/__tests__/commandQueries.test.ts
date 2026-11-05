@@ -208,6 +208,11 @@ d("command_runs — ingestion, background settling, reads", () => {
       expect(by["bun run dev"]!.background_runs).toBe(1);
       expect(s.totals.prev_runs).toBe(1);
       expect(s.totals.runs).toBe(s.commands.reduce((a, c) => a + c.runs, 0));
+      // Totals cover every command, also those cut off by `limit`.
+      const cut = await getCommandSummary(sql, scope(), "signature", 1);
+      expect(cut.commands.length).toBe(1);
+      expect([cut.totals.runs, cut.totals.failures, cut.totals.moved_runs])
+        .toEqual([s.totals.runs, s.commands.reduce((a, c) => a + c.failures, 0), 1]);
     });
 
     test("the teammate sees their own signature", async () => {

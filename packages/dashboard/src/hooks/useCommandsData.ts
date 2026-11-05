@@ -26,7 +26,9 @@ export function useCommandsData<T>(
         setLoadedUrl(url);
       })
       .catch(() => {
-        if (!cancelled) setLoadedUrl(url);
+        if (cancelled) return;
+        setData(null); // never show the previous filter's results as this one's
+        setLoadedUrl(url);
       });
     return () => {
       cancelled = true;

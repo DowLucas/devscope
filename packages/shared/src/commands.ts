@@ -34,7 +34,8 @@ export interface CommandSummary {
   scope: CommandScope;
   group: CommandGroup;
   project: string | null;
-  totals: { runs: number; wait_ms: number; prev_runs: number; prev_wait_ms: number };
+  /** Over every command, not only the `limit` returned. */
+  totals: { runs: number; wait_ms: number; failures: number; moved_runs: number; prev_runs: number; prev_wait_ms: number };
   commands: CommandSummaryRow[];
 }
 

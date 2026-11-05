@@ -169,7 +169,7 @@ export async function getCommandSummary(
     days: scope.days,
     group,
     project: scope.project,
-    totals: { runs: 0, wait_ms: 0, prev_runs: 0, prev_wait_ms: 0 },
+    totals: { runs: 0, wait_ms: 0, failures: 0, moved_runs: 0, prev_runs: 0, prev_wait_ms: 0 },
     commands: [] as CommandSummaryRow[],
   };
   if (scope.devIds.length === 0) return empty;
@@ -201,10 +201,13 @@ export async function getCommandSummary(
     ORDER BY wait_ms DESC, runs DESC, command
   `) as CommandSummaryRow[];
 
-  const totals = { runs: 0, wait_ms: 0, prev_runs: 0, prev_wait_ms: 0 };
+  // Summed over every command before the list is cut to `limit`.
+  const totals = { runs: 0, wait_ms: 0, failures: 0, moved_runs: 0, prev_runs: 0, prev_wait_ms: 0 };
   for (const r of rows) {
     totals.runs += r.runs;
     totals.wait_ms += r.wait_ms;
+    totals.failures += r.failures;
+    totals.moved_runs += r.moved_runs;
   }
   // Previous-period totals include commands that did not run this period.
   const [prev] = (await sql`
