@@ -231,10 +231,11 @@ How long the Bash commands Claude runs take, per project and over time (`command
   0.38.0+), else `event:<event id>` with `legacy_timing` set. `wait_ms` is the event's `duration` (Claude
   Code's `duration_ms` since plugin 0.38.0; before that the plugin's own timer, which mixed up parallel
   calls); the start is the event timestamp minus it.
-- **Signature, never the command.** The plugin sends `commandSignature` (`_ds_command_signature`: program +
-  up to two plain words, the third only after a group word like `run`/`compose`/`pr`; private mode the
-  program only). `cleanSignature` re-checks the shape and falls back to the program, and private sessions
-  store the program whatever was sent. Older plugins only have `toolSubcommand` (the first word).
+- **Signature, never the command.** The plugin sends `commandSignature` (`_ds_command_signature`: quotes and
+  heredocs removed; program + up to two plain words only for programs that take subcommands, the third only
+  after a group word like `run`/`compose`/`pr`; any other program alone; private mode the program only).
+  `cleanSignature` re-checks the shape and the same subcommand list (`MULTI`, keep in sync with the
+  plugin's `multi`) and falls back to the program, and private sessions store the program whatever was sent. Older plugins only have `toolSubcommand` (the first word).
 - **Background commands.** PostToolUse fires when a command is backgrounded (`run_in_background` →
   `background`; a timeout or the user → `moved`), so the row starts as `running` with `duration_ms` NULL. The
   plugin finds the settling in the transcript (`queue-operation` enqueue of a `<task-notification>`) at Stop

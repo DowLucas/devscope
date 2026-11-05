@@ -22,15 +22,31 @@ const MAX_MS = 2_147_483_647;
 const SIGNATURE = /^[a-z0-9._+-]{1,40}( [a-z][a-z0-9_:-]{0,23}){0,2}$/;
 
 /**
- * The stored signature: what the plugin sent when it has the expected shape,
- * else its first word reduced to program characters. Defence in depth: the
- * column must never hold command text, whatever a plugin sends.
+ * Programs whose next word names what they do (a subcommand, script, target or
+ * tool), the only ones whose signature may have more than one word. The same
+ * list as `multi` in the plugin's `_ds_command_signature`: change both.
+ */
+const MULTI = new Set([
+  "git", "gh", "glab", "docker", "podman", "kubectl", "helm", "terraform", "tofu",
+  "npm", "pnpm", "yarn", "bun", "bunx", "npx", "deno", "cargo", "rustup",
+  "go", "uv", "uvx", "pip", "pip3", "poetry", "pdm", "hatch", "conda",
+  "brew", "apt", "apt-get", "dnf", "systemctl", "journalctl", "make", "just", "task",
+  "claude", "gcloud", "aws", "az", "fly", "flyctl", "vercel", "wrangler", "supabase",
+  "firebase", "dotnet", "mvn", "gradle", "gradlew", "mix", "rails", "bundle", "rake",
+  "composer", "swift", "xcodebuild", "zig", "nix",
+]);
+
+/**
+ * The stored signature: what the plugin sent when it has the expected shape
+ * (more than one word only for a program in MULTI), else its first word
+ * reduced to program characters. Defence in depth: the column must never hold
+ * command text, whatever a plugin sends.
  */
 export function cleanSignature(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const s = raw.trim().toLowerCase().replace(/\s+/g, " ");
-  if (SIGNATURE.test(s)) return s;
   const program = (s.split(" ")[0] ?? "").replace(/[^a-z0-9._+-]/g, "").slice(0, 40);
+  if (SIGNATURE.test(s) && (!s.includes(" ") || MULTI.has(program))) return s;
   return program || null;
 }
 

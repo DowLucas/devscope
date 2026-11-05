@@ -31,6 +31,9 @@ describe("cleanSignature", () => {
     expect(cleanSignature("rm -rf /home/someone/secret")).toBe("rm");
     expect(cleanSignature("git commit -m hello world")).toBe("git");
     expect(cleanSignature("a b c d")).toBe("a");
+    // Words after a program without subcommands are operands.
+    expect(cleanSignature("cat confidential")).toBe("cat");
+    expect(cleanSignature("ssh prod-db")).toBe("ssh");
     expect(cleanSignature("/usr/bin/env")).toBe("usrbinenv");
     expect(cleanSignature("   ")).toBeNull();
     expect(cleanSignature(42)).toBeNull();
